@@ -1,0 +1,33 @@
+# === SECRETS — NEVER COMMIT ===
+.env
+*.key
+*.pem
+ 
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+.pytest_cache/
+htmlcov/
+.coverage
+ 
+# === Virtual Environment ===
+venv/
+.venv/
+env/
+ 
+# === Database ===
+*.db
+*.sqlite3
+ 
+# === OS Files ===
+.DS_Store
+Thumbs.db
+ 
+# === VS Code ===
+.vscode/settings.json
+ 
+# === Logs ===
+*.log
+logs/
