@@ -1,16 +1,33 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import stocks
+from app.database import engine
+from app import models  # Import models so SQLAlchemy knows about them
 
-# ── Create the FastAPI application instance ──────────────────────────
+
+# ── Lifespan context manager ──────────────────────────────────────────
+# This runs code at server startup and shutdown
+# Modern FastAPI uses this instead of the older @app.on_event("startup")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # === STARTUP ===
+    print("Starting up...")
+    # Create all database tables (safe to run multiple times)
+    models.Base.metadata.create_all(bind=engine)
+    print("Database tables created/verified.")
+    yield  # Server runs here
+    # === SHUTDOWN ===
+    print("Shutting down...")
+
+
 app = FastAPI(
     title="Stock Portfolio Dashboard",
-    description="AI-powered dashboard for managing and analyzing stock portfolios",
-    version="0.2.0",
+    description="AI-powered personal portfolio tracker",
+    version="0.3.0",
+    lifespan=lifespan,  # ← Connect the lifespan handler
 )
 
-# ── CORS Middleware ───────────────────────────────────────────────────
-# requests to our Python backend. Without this, the browser blocks it.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,26 +35,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Routes ────────────────────────────────────────────────────────────
 app.include_router(stocks.router)
-
 
 
 @app.get("/")
 async def root():
-    return {
-        "message": "Welcome to the Stock Portfolio Dashboard API!",
-        "version": "0.1.0",
-        "endpoints": {
-            "all_prices": "/api/stocks/prices",
-            "single_price": "/api/stocks/price/{ticker}",
-            "history": "/api/stocks/history/{ticker}?period=1mo",
-            "docs": "/docs",
-        },
-    }
+    return {"message": "Stock Portfolio Dashboard API", "version": "0.3.0"}
 
 
-# ── Health Check ──────────────────────────────────────────────────
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "message": "API is healthy and running."}
+    return {"status": "healthy"}
