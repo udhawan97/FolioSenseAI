@@ -28,7 +28,7 @@ async def get_price(ticker: str):
 @router.get("/history/{ticker}")
 async def get_price_history(
     ticker: str,
-    period: str = Query("1mo", regex="^(1d|5d|1mo|3mo|6mo|1y|2y|5y|10y|ytd)$"),
+    period: str = Query("1mo", pattern="^(1d|5d|1mo|3mo|6mo|1y|2y|5y|10y|ytd)$"),
 ):
     history = get_historical_prices(ticker.upper(), period)
     return {"ticker": ticker.upper(), "period": period, "data": history}
