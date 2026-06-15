@@ -31,20 +31,6 @@ async def get_price(ticker: str):
     return quote
 
 
-@router.get("/history/{ticker}")
-async def get_price_history(
-    ticker: str,
-    # Query parameter with a strict list of allowed values; defaults to 1 month
-    period: str = Query("1mo", pattern="^(1d|5d|1mo|3mo|6mo|1y|2y|5y|10y|ytd)$"),
-):
-    """
-    Return OHLCV (open/high/low/close/volume) price history for a ticker.
-    Example: GET /api/stocks/history/VOO?period=3mo
-    """
-    history = get_historical_prices(ticker.upper(), period)
-    return {"ticker": ticker.upper(), "period": period, "data": history}
-
-
 @router.get("/history/batch")
 async def get_batch_history(
     tickers: str = "NOW,QTUM,VOO,CGDV,IBIT,VT,ITA,IEMG,SETM,WSML",
@@ -62,3 +48,16 @@ async def get_batch_history(
         result[ticker] = get_historical_prices(ticker, period)
     return {"period": period, "data": result}
 
+
+@router.get("/history/{ticker}")
+async def get_price_history(
+    ticker: str,
+    # Query parameter with a strict list of allowed values; defaults to 1 month
+    period: str = Query("1mo", pattern="^(1d|5d|1mo|3mo|6mo|1y|2y|5y|10y|ytd)$"),
+):
+    """
+    Return OHLCV (open/high/low/close/volume) price history for a ticker.
+    Example: GET /api/stocks/history/VOO?period=3mo
+    """
+    history = get_historical_prices(ticker.upper(), period)
+    return {"ticker": ticker.upper(), "period": period, "data": history}
