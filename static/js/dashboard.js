@@ -138,82 +138,30 @@ async function loadTrendData(tickers) {
 }
 
 
-let historyData = {};  // Cache for sparkline data
- 
-async function loadSparklineData() {
-    try {
-        const res = await fetch("/api/stocks/history/batch?period=5d");
-        const data = await res.json();
-        historyData = data.data;
-    } catch (e) {
-        console.warn("Could not load sparkline data:", e);
-    }
-}
- 
-function drawSparkline(canvasId, prices) {
-    const ctx = document.getElementById(canvasId);
-    if (!ctx || prices.length === 0) return;
- 
-    const isUp = prices[prices.length-1] >= prices[0];
-    new Chart(ctx, {
-        type: "line",
-        data: {
-            labels: prices.map((_, i) => i),
-            datasets: [{
-                data: prices,
-                borderColor: isUp ? "#3fb950" : "#f85149",
-                borderWidth: 1.5,
-                fill: false,
-                pointRadius: 0,
-                tension: 0.4,
-            }]
-        },
-        options: {
-            animation: false,
-            responsive: false,
-            plugins: { legend: { display: false }, tooltip: { enabled: false } },
-            scales: { x: { display: false }, y: { display: false } },
-        }
-    });
-}
- 
-function updateHoldingsTable(holdings) {
+function updateHoldingsTable(holdings, trendData = {}) {
     const tbody = document.getElementById("holdings-table");
     tbody.innerHTML = "";
-    holdings.forEach((h, idx) => {
-        const canvasId = `spark-${h.ticker}`;
+    holdings.forEach(h => {
         const row = tbody.insertRow();
         row.innerHTML = `
             <td class="fw-bold">${h.ticker}</td>
-            <td class="text-secondary small d-none d-md-table-cell">${h.name.substring(0,25)}</td>
+            <td class="d-none d-md-table-cell text-secondary small">${h.name.substring(0, 28)}</td>
             <td class="text-end">${formatCurrency(h.current_price)}</td>
             <td class="text-end ${colorClass(h.day_change_pct)}">
                 ${formatPct(h.day_change_pct)}</td>
             <td class="text-end d-none d-md-table-cell">${formatCurrency(h.current_value)}</td>
-            <td class="text-end d-none d-lg-table-cell">${h.allocation_pct}%</td>
-            <td class="text-center d-none d-xl-table-cell">
-                <canvas id="${canvasId}" width="80" height="30"></canvas>
-            </td>
+            <td class="text-end">${formatAllocationPct(h.allocation_pct)}</td>
+            <td class="text-center d-none d-xl-table-cell trend-cell"></td>
         `;
- 
-        // Draw sparkline after DOM update
-        setTimeout(() => {
-            const prices = (historyData[h.ticker] || []).map(d => d.close);
-            drawSparkline(canvasId, prices);
-        }, 100);
+        const canvas = document.createElement("canvas");
+        canvas.className = "trend-sparkline";
+        canvas.width = 120;
+        canvas.height = 32;
+        canvas.setAttribute("aria-label", `${h.ticker} ${TREND_DAYS}-day trend`);
+        row.querySelector(".trend-cell").appendChild(canvas);
+        drawTrend(canvas, trendData[h.ticker]);
     });
 }
- 
-// Load sparklines then portfolio value
-async function initDashboard() {
-    await loadSparklineData();
-    await loadPortfolioValue();
-}
- 
-document.addEventListener("DOMContentLoaded", initDashboard);
-setInterval(loadPortfolioValue, 300000);
-
-
 
 function drawTrend(canvas, history = []) {
     const ctx = canvas.getContext("2d");
