@@ -4,9 +4,17 @@
  * Runs automatically when the page loads.
  */
  
+const toNumber = (n, fallback = 0) => {
+    const value = Number(n);
+    return Number.isFinite(value) ? value : fallback;
+};
 const formatCurrency = (n) =>
-    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
-const formatPct = (n) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
+    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(toNumber(n));
+const formatPct = (n) => {
+    const value = toNumber(n);
+    return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
+};
+const formatAllocationPct = (n) => `${toNumber(n).toFixed(1)}%`;
 const colorClass = (v) => v >= 0 ? "text-success" : "text-danger";
  
 // Chart.js color palette
@@ -42,7 +50,7 @@ async function loadPortfolioValue() {
                     ${h.ticker}</td>
                 <td>${h.shares}</td>
                 <td class="text-end">${formatCurrency(h.current_value)}</td>
-                <td class="text-end">${h.allocation_pct}%</td>
+                <td class="text-end">${formatAllocationPct(h.allocation_pct)}</td>
             `;
         });
  
@@ -116,11 +124,12 @@ function updateHoldingsTable(holdings) {
         const row = tbody.insertRow();
         row.innerHTML = `
             <td class="fw-bold">${h.ticker}</td>
-            <td class="text-secondary small">${h.name.substring(0, 28)}</td>
+            <td class="d-none d-md-table-cell text-secondary small">${h.name.substring(0, 28)}</td>
             <td class="text-end">${formatCurrency(h.current_price)}</td>
             <td class="text-end ${colorClass(h.day_change_pct)}">
                 ${formatPct(h.day_change_pct)}</td>
-            <td class="text-end">${h.allocation_pct}%</td>
+            <td class="text-end d-none d-md-table-cell">${formatCurrency(h.current_value)}</td>
+            <td class="text-end">${formatAllocationPct(h.allocation_pct)}</td>
         `;
     });
 }
