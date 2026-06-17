@@ -214,3 +214,45 @@ document.addEventListener("DOMContentLoaded", loadPortfolioValue);
 setInterval(loadPortfolioValue, 300000);
  
 function refreshData() { loadPortfolioValue(); }
+
+
+async function updateMarketStatus() {
+    try {
+        const res = await fetch("/api/stocks/market-status");
+        const data = await res.json();
+        const el = document.getElementById("market-status");
+        if (el) {
+            el.textContent = data.status;
+            el.className = data.is_open
+                ? "fs-4 fw-bold text-success"
+                : "fs-4 fw-bold text-secondary";
+        }
+    } catch(e) {}
+}
+ 
+// Countdown timer
+function startCountdown() {
+    refreshCountdown = 300;
+    const interval = setInterval(() => {
+        refreshCountdown--;
+        const el = document.getElementById("countdown");
+        if (el) el.textContent = `Next refresh in ${refreshCountdown}s`;
+        if (refreshCountdown <= 0) {
+            clearInterval(interval);
+            loadPortfolioValue().then(startCountdown);
+        }
+    }, 1000);
+}
+ 
+// Keyboard shortcut: R to refresh
+document.addEventListener("keydown", (e) => {
+    if (e.key === "r" || e.key === "R") refreshData();
+});
+ 
+// Update the initDashboard function:
+async function initDashboard() {
+    await loadSparklineData();
+    await loadPortfolioValue();
+    await updateMarketStatus();
+    startCountdown();
+}
