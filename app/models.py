@@ -80,3 +80,40 @@ class AISummary(Base):
     price_when_generated = Column(Float, nullable=True)     # Stock price at generation time
     generated_at = Column(DateTime, default=func.now())
     model_used = Column(String(50), default="claude-3-haiku-20240307")
+
+
+class RealizedTrade(Base):
+    """
+    A realized gain/loss event, recorded whenever a holding's share count is
+    reduced (a sell). The sale price is the live market price at update time.
+    Summing realized_gain across all rows gives cumulative realized P&L.
+    """
+    __tablename__ = "realized_trades"
+
+    id = Column(Integer, primary_key=True, index=True)
+    portfolio_id = Column(Integer, ForeignKey("portfolios.id"), nullable=False)
+    ticker = Column(String(10), nullable=False, index=True)
+    shares_sold = Column(Float, nullable=False)
+    sale_price = Column(Float, nullable=False)      # Live price at the time of the reduction
+    avg_cost = Column(Float, nullable=False)        # Cost basis per share at the time
+    realized_gain = Column(Float, nullable=False)   # (sale_price - avg_cost) * shares_sold
+    created_at = Column(DateTime, default=func.now())
+
+
+class PortfolioSnapshot(Base):
+    """
+    A point-in-time snapshot of portfolio totals, used to chart cumulative
+    gain/loss over time. One row per calendar day (upserted), so repeated
+    updates on the same day refresh that day's figures rather than duplicating.
+    """
+    __tablename__ = "portfolio_snapshots"
+
+    id = Column(Integer, primary_key=True, index=True)
+    portfolio_id = Column(Integer, ForeignKey("portfolios.id"), nullable=False)
+    snapshot_date = Column(String(10), nullable=False, index=True)  # "YYYY-MM-DD"
+    total_value = Column(Float, nullable=False)
+    total_cost_basis = Column(Float, nullable=False)
+    unrealized_gain = Column(Float, nullable=False)
+    realized_gain = Column(Float, nullable=False)   # Cumulative realized as of this snapshot
+    total_return = Column(Float, nullable=False)     # unrealized + cumulative realized
+    created_at = Column(DateTime, default=func.now())
