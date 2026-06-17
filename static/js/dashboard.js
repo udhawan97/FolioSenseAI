@@ -28,7 +28,25 @@ const chartColor = (i) => CHART_COLORS[i % CHART_COLORS.length];
  
 let allocationChart = null;  // Keep chart instance for updates
 let latestHoldings = [];     // Most recent holdings, for re-sorting without a refetch
+let latestTrendData = {};    // Cached sparkline data, so the Holdings table re-sorts without a refetch
 let allocSortDir = "desc";   // Allocation sort direction: "desc" | "asc"
+
+// Single source of truth for allocation ordering, shared by both tables and the chart.
+function sortedByAllocation(holdings) {
+    const dir = allocSortDir === "asc" ? 1 : -1;
+    return [...holdings].sort(
+        (a, b) => dir * (toNumber(a.allocation_pct) - toNumber(b.allocation_pct))
+    );
+}
+
+// Keep every "sort by allocation" caret pointing the same way.
+function updateSortCarets() {
+    const cls = `bi small ${allocSortDir === "asc" ? "bi-caret-up-fill" : "bi-caret-down-fill"}`;
+    ["alloc-sort-caret", "holdings-alloc-caret"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.className = cls;
+    });
+}
  
  
 async function loadPortfolioValue() {
@@ -65,9 +83,9 @@ async function loadPortfolioValue() {
                 `${largest.ticker} ${formatCurrency(largest.current_value)}`;
         }
 
-        // Also update the basic prices table
-        const trendData = await loadTrendData(data.holdings.map(h => h.ticker));
-        updateHoldingsTable(data.holdings, trendData);
+        // Also update the basic prices table (same allocation order as the chart)
+        latestTrendData = await loadTrendData(data.holdings.map(h => h.ticker));
+        renderHoldings();
         document.getElementById("last-updated").textContent =
             `Updated: ${new Date().toLocaleTimeString()}`;
  
@@ -80,10 +98,7 @@ async function loadPortfolioValue() {
 // Render the allocation breakdown table and the doughnut chart in the same
 // (allocation-sorted) order, so the pie slices line up with the table rows.
 function renderAllocation() {
-    const dir = allocSortDir === "asc" ? 1 : -1;
-    const sorted = [...latestHoldings].sort(
-        (a, b) => dir * (toNumber(a.allocation_pct) - toNumber(b.allocation_pct))
-    );
+    const sorted = sortedByAllocation(latestHoldings);
 
     // Table
     const allocTable = document.getElementById("allocation-table");
@@ -99,11 +114,7 @@ function renderAllocation() {
         `;
     });
 
-    // Sort-direction indicator on the Allocation header
-    const caret = document.getElementById("alloc-sort-caret");
-    if (caret) {
-        caret.className = `bi small ${allocSortDir === "asc" ? "bi-caret-up-fill" : "bi-caret-down-fill"}`;
-    }
+    updateSortCarets();
 
     // Doughnut chart, using the same sorted order
     const labels = sorted.map(h => h.ticker);
@@ -144,10 +155,18 @@ function renderAllocation() {
     }
 }
 
-// Clicking the Allocation header toggles sort direction and re-renders.
+// Render the Holdings table in the current allocation order.
+function renderHoldings() {
+    updateHoldingsTable(sortedByAllocation(latestHoldings), latestTrendData);
+    updateSortCarets();
+}
+
+// Clicking either allocation header toggles sort direction and re-renders
+// the breakdown table, the Holdings table, and the chart together.
 function toggleAllocationSort() {
     allocSortDir = allocSortDir === "asc" ? "desc" : "asc";
     renderAllocation();
+    renderHoldings();
 }
 
 
