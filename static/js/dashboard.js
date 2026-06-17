@@ -18,10 +18,18 @@ const formatAllocationPct = (n) => `${toNumber(n).toFixed(1)}%`;
 const colorClass = (v) => v >= 0 ? "text-success" : "text-danger";
 const TREND_DAYS = 7;
  
-// Chart.js color palette
+// Apple system colors (dark) — vibrant but restrained, matches the UI accents.
 const CHART_COLORS = [
-    "#4299e1","#48bb78","#ed8936","#9f7aea","#f56565",
-    "#38b2ac","#ecc94b","#ed64a6","#667eea","#81e6d9"
+    "#0a84ff", // blue
+    "#30d158", // green
+    "#5e5ce6", // indigo
+    "#ff9f0a", // orange
+    "#ff375f", // pink
+    "#64d2ff", // cyan
+    "#bf5af2", // purple
+    "#ffd60a", // yellow
+    "#66d4cf", // mint
+    "#ff453a", // red
 ];
 // Wrap around the palette so portfolios with >10 holdings still get colors.
 const chartColor = (i) => CHART_COLORS[i % CHART_COLORS.length];
@@ -30,6 +38,7 @@ let allocationChart = null;  // Keep chart instance for updates
 let latestHoldings = [];     // Most recent holdings, for re-sorting without a refetch
 let latestTrendData = {};    // Cached sparkline data, so the Holdings table re-sorts without a refetch
 let allocSortDir = "desc";   // Allocation sort direction: "desc" | "asc"
+let allocationTotal = 0;     // Portfolio total, drawn in the doughnut's center
 
 // Single source of truth for allocation ordering, shared by both tables and the chart.
 function sortedByAllocation(holdings) {
@@ -121,6 +130,8 @@ function renderAllocation() {
     const values = sorted.map(h => h.current_value);
     const colors = sorted.map((_, i) => chartColor(i));
 
+    allocationTotal = values.reduce((sum, v) => sum + toNumber(v), 0);
+
     if (allocationChart) {
         allocationChart.data.labels = labels;
         allocationChart.data.datasets[0].data = values;
@@ -135,25 +146,79 @@ function renderAllocation() {
                 datasets: [{
                     data: values,
                     backgroundColor: colors,
-                    borderColor: "#1a1a2e",
-                    borderWidth: 2,
+                    // Transparent border + spacing gives crisp, separated segments.
+                    borderColor: "transparent",
+                    borderWidth: 0,
+                    borderRadius: 6,
+                    spacing: 3,
+                    hoverOffset: 10,
+                    hoverBorderColor: "rgba(255,255,255,0.18)",
+                    hoverBorderWidth: 2,
                 }]
             },
             options: {
                 responsive: true,
+                cutout: "72%",            // thin, modern ring
+                layout: { padding: 6 },
+                animation: { animateRotate: true, animateScale: true, duration: 900,
+                             easing: "easeOutQuart" },
                 plugins: {
                     legend: { display: false },
                     tooltip: {
+                        backgroundColor: "rgba(28,28,34,0.92)",
+                        titleColor: "#f5f5f7",
+                        bodyColor: "rgba(235,235,245,0.85)",
+                        borderColor: "rgba(255,255,255,0.12)",
+                        borderWidth: 1,
+                        cornerRadius: 12,
+                        padding: 12,
+                        boxPadding: 6,
+                        usePointStyle: true,
+                        titleFont: { family: "-apple-system, SF Pro Display, sans-serif",
+                                     weight: "600", size: 13 },
+                        bodyFont: { family: "-apple-system, SF Pro Text, sans-serif", size: 12 },
                         callbacks: {
-                            label: (ctx) =>
-                                ` ${ctx.label}: ${formatCurrency(ctx.raw)}`
+                            title: (items) => items[0]?.label ?? "",
+                            label: (item) => {
+                                const sum = allocationTotal || 1;
+                                const pct = (toNumber(item.raw) / sum) * 100;
+                                return `${formatCurrency(item.raw)}  ·  ${pct.toFixed(1)}%`;
+                            },
+                            labelPointStyle: () => ({ pointStyle: "circle" }),
                         }
                     }
                 }
-            }
+            },
+            plugins: [centerTotalPlugin],
         });
     }
 }
+
+// Draws "Total" + the portfolio value in the doughnut's hole, Apple-style.
+const centerTotalPlugin = {
+    id: "centerTotal",
+    afterDraw(chart) {
+        if (chart.config.type !== "doughnut") return;
+        const meta = chart.getDatasetMeta(0);
+        const arc = meta?.data?.[0];
+        if (!arc) return;
+        const { x, y } = arc;
+        const { ctx } = chart;
+
+        ctx.save();
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+
+        ctx.fillStyle = "rgba(235,235,245,0.45)";
+        ctx.font = "600 11px -apple-system, 'SF Pro Text', sans-serif";
+        ctx.fillText("TOTAL", x, y - 14);
+
+        ctx.fillStyle = "#f5f5f7";
+        ctx.font = "600 20px -apple-system, 'SF Pro Display', sans-serif";
+        ctx.fillText(formatCurrency(allocationTotal), x, y + 6);
+        ctx.restore();
+    },
+};
 
 // Render the Holdings table in the current allocation order.
 function renderHoldings() {
