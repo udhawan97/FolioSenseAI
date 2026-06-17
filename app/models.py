@@ -2,7 +2,6 @@ from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, 
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
-from datetime import datetime
 
 
 # Each class below maps to one table in the SQLite database.
@@ -24,7 +23,7 @@ class Portfolio(Base):
     holdings = relationship("Holding", back_populates="portfolio", cascade="all, delete-orphan")
 
     def __repr__(self):
-        return f"<Portfolio (self.name)>"
+        return f"<Portfolio {self.name}>"
 
 
 class Holding(Base):
@@ -41,15 +40,17 @@ class Holding(Base):
     shares = Column(Float, nullable=False, default=0.0)
     avg_cost = Column(Float, nullable=False, default=0.0)   # Average purchase price per share
     is_active = Column(Boolean, default=True)               # False means soft-deleted
-    notes= Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)
     added_at = Column(DateTime, default=func.now())
 
     portfolio = relationship("Portfolio", back_populates="holdings")
     # A holding can have many price snapshots recorded over time
-    price_history = relationship("PriceSnapcshot", back_populates="holding", cascade="all, delete-orphan")
+    price_history = relationship(
+        "PriceSnapshot", back_populates="holding", cascade="all, delete-orphan"
+    )
 
 
-class PriceSnapcshot(Base):
+class PriceSnapshot(Base):
     """
     A point-in-time price record for a holding.
     Used to track how the stock price changes over time.

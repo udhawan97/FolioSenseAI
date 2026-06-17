@@ -1,0 +1,29 @@
+[MAIN]
+# Files/dirs pylint should not analyse.
+ignore=.venv,venv,migrations
+
+[MESSAGES CONTROL]
+# Disabled checks fall into two buckets:
+#   1. Stylistic/opinionated rules this project intentionally doesn't follow.
+#   2. Known false positives for the libraries we use (SQLAlchemy, FastAPI).
+disable=
+    missing-module-docstring,
+    missing-class-docstring,
+    missing-function-docstring,
+    too-few-public-methods,
+    too-many-locals,
+    too-many-arguments,
+    broad-exception-caught,
+    logging-fstring-interpolation,
+    import-outside-toplevel,
+    # SQLAlchemy's `func.now` is dynamically generated; pylint can't see it's callable.
+    not-callable
+
+[FORMAT]
+max-line-length=100
+
+[BASIC]
+good-names=db,id,e,q,h,i,x,n
+
+[DESIGN]
+max-args=8

@@ -6,12 +6,12 @@ from fastapi.responses import FileResponse    # ← NEW
 from app.routers import stocks, portfolio
 from app.database import engine
 from app import models
-import os
+
 
 # lifespan runs once when the server starts up.
 # We use it to create all database tables before the app begins accepting requests.
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     models.Base.metadata.create_all(bind=engine)
     yield  # The app runs while we're "inside" this yield
 

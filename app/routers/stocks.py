@@ -5,7 +5,6 @@ from app.services.stock_service import (
     get_stock_data,
     get_all_quotes,
     get_historical_prices,
-    DEFAULT_HOLDINGS,
 )
 
 # All routes in this file are grouped under the /api/stocks prefix
@@ -69,11 +68,11 @@ async def get_market_status():
     """Check if US markets are currently open."""
     eastern = pytz.timezone("America/New_York")
     now = datetime.now(eastern)
- 
+
     is_weekday = now.weekday() < 5  # Monday=0, Friday=4
     market_open  = now.replace(hour=9,  minute=30, second=0, microsecond=0)
     market_close = now.replace(hour=16, minute=0,  second=0, microsecond=0)
- 
+
     is_open = is_weekday and market_open <= now <= market_close
     return {
         "is_open": is_open,
@@ -82,4 +81,3 @@ async def get_market_status():
         "next_open": "Mon 9:30 AM ET" if now.weekday() >= 4 else "9:30 AM ET tomorrow"
         if not is_open else None,
     }
-

@@ -1,6 +1,6 @@
-import yfinance as yf
 import logging
 from typing import Optional
+import yfinance as yf
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +128,7 @@ def get_historical_prices(ticker: str, period: str = "1mo") -> list[dict]:
 
 
 def save_price_snapshot(
-    ticker: str, price: float, day_change_pct: float, holding_id: int, db
+    _ticker: str, price: float, day_change_pct: float, holding_id: int, db
 ) -> None:
     """
     Save a price snapshot to the database for historical tracking.

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Portfolio, Holding
-from app.schemas import HoldingCreate, HoldingUpdate, HoldingResponse, PortfolioCreate
+from app.schemas import HoldingCreate, HoldingUpdate, PortfolioCreate
 from app.config import settings
 from app.services.stock_service import get_all_quotes
 
@@ -41,7 +41,7 @@ async def get_holdings(portfolio_id: int = 1, db: Session = Depends(get_db)):
     """Return all active holdings for a portfolio (defaults to portfolio 1)."""
     holdings = (
         db.query(Holding)
-        .filter(Holding.portfolio_id == portfolio_id, Holding.is_active == True)
+        .filter(Holding.portfolio_id == portfolio_id, Holding.is_active.is_(True))
         .all()
     )
     return {
@@ -71,7 +71,7 @@ async def add_holding(
         .filter(
             Holding.portfolio_id == portfolio_id,
             Holding.ticker == data.ticker,
-            Holding.is_active == True,
+            Holding.is_active.is_(True),
         )
         .first()
     )
@@ -181,7 +181,7 @@ async def get_portfolio_value(portfolio_id: int = 1, db: Session = Depends(get_d
     # Get holdings from database
     holdings = (
         db.query(Holding)
-        .filter(Holding.portfolio_id == portfolio_id, Holding.is_active == True)
+        .filter(Holding.portfolio_id == portfolio_id, Holding.is_active.is_(True))
         .all()
     )
 
@@ -189,8 +189,6 @@ async def get_portfolio_value(portfolio_id: int = 1, db: Session = Depends(get_d
     shares_map = {h.ticker: h.shares for h in holdings}
 
     # Fetch live prices
-    from app.services.stock_service import get_all_quotes
-
     quotes = get_all_quotes(tickers)
 
     result = []
@@ -208,13 +206,13 @@ async def get_portfolio_value(portfolio_id: int = 1, db: Session = Depends(get_d
         total_value += current_value
         total_daily_change += daily_value_change
 
-        
+
         cost_basis = (shares * q.get("avg_cost", 0)) if q.get("avg_cost") else 0
         unrealized_gain = (current_value - cost_basis) if cost_basis > 0 else 0
         unrealized_gain_pct = (
             ((current_value - cost_basis) / cost_basis * 100) if cost_basis > 0 else 0
         )
-        
+
         result.append({
             "ticker": ticker,
             "name": q["name"],

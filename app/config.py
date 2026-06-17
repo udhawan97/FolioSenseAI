@@ -1,5 +1,5 @@
-from dotenv import load_dotenv
 import os
+from dotenv import load_dotenv
 
 # Load variables from the .env file into the process environment.
 # This must run before we call os.getenv() below.

@@ -1,6 +1,6 @@
-from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from datetime import datetime
+from pydantic import BaseModel, Field, field_validator
 
 
 # Pydantic schemas define the shape of data coming IN (requests) and going OUT (responses).

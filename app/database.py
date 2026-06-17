@@ -1,7 +1,7 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 from app.config import settings
-import os
 
 # Create the database directory if it doesn't already exist
 os.makedirs("database", exist_ok=True)
