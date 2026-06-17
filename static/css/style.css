@@ -1,65 +1,309 @@
-/* style.css — Custom styles on top of Bootstrap */
- 
-body {
-    background-color: #0d1117;  /* GitHub dark — easier on eyes than pure black */
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
-}
- 
-.card {
-    border-radius: 8px;
-    transition: box-shadow 0.2s;
-}
- 
-.card:hover {
-    box-shadow: 0 4px 20px rgba(0, 255, 100, 0.08);
-}
- 
-table tbody tr:hover {
-    background-color: rgba(255,255,255,0.04) !important;
-}
- 
-.text-success { color: #3fb950 !important; }  /* GitHub green */
-.text-danger  { color: #f85149 !important; }  /* GitHub red */
- 
-.spinner-border { width: 1rem; height: 1rem; }
+/* ============================================================================
+   style.css — Portfolio Dashboard
+   A refined, Apple-inspired dark "materials" design system layered on Bootstrap.
+   Pure CSS: no markup changes required.
+   ========================================================================== */
 
+/* ── Design tokens ───────────────────────────────────────────────────────── */
+:root {
+    /* Surfaces */
+    --bg-base:        #0a0a0f;
+    --surface:        rgba(255, 255, 255, 0.045);
+    --surface-strong: rgba(255, 255, 255, 0.07);
+    --hairline:       rgba(255, 255, 255, 0.08);
+    --hairline-soft:  rgba(255, 255, 255, 0.05);
+
+    /* Text — mirrors Apple's label hierarchy */
+    --text-primary:   #f5f5f7;
+    --text-secondary: rgba(235, 235, 245, 0.62);
+    --text-tertiary:  rgba(235, 235, 245, 0.42);
+
+    /* Apple system colors (dark) */
+    --accent-blue:    #0a84ff;
+    --accent-green:   #30d158;
+    --accent-red:     #ff453a;
+    --accent-cyan:    #64d2ff;
+    --accent-yellow:  #ffd60a;
+
+    /* Motion */
+    --ease:   cubic-bezier(0.4, 0, 0.2, 1);
+    --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ── Base ────────────────────────────────────────────────────────────────── */
+body {
+    min-height: 100vh;
+    /* Layered ambient depth — soft blue + green glows over a near-black base. */
+    background:
+        radial-gradient(1200px 620px at 12% -8%,  rgba(10, 132, 255, 0.12), transparent 58%),
+        radial-gradient(1000px 520px at 112% 6%,  rgba(48, 209, 88, 0.07),  transparent 55%),
+        var(--bg-base);
+    background-attachment: fixed;
+    color: var(--text-primary);
+    font-family: -apple-system, "SF Pro Display", "SF Pro Text", BlinkMacSystemFont,
+                 "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    letter-spacing: -0.01em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+::selection { background: rgba(10, 132, 255, 0.32); color: #fff; }
+
+/* Numbers should never jitter — tabular figures everywhere financial. */
+.fs-4, .table, #total-value, #daily-pnl, #market-status,
+#best-performer, #worst-performer, #largest-holding, #countdown, #last-updated {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "cv01" 1;
+}
+
+/* ── Navbar — frosted, hairline-bottomed ─────────────────────────────────── */
+.navbar { position: sticky; top: 0; z-index: 1030; }
+
+.navbar.bg-dark {
+    background: rgba(12, 12, 18, 0.62) !important;
+    backdrop-filter: saturate(180%) blur(22px);
+    -webkit-backdrop-filter: saturate(180%) blur(22px);
+    border-bottom: 1px solid var(--hairline) !important;
+    padding-top: 0.65rem;
+    padding-bottom: 0.65rem;
+}
+
+.navbar-brand.fw-bold {
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+}
+
+.navbar .text-secondary { color: var(--text-tertiary) !important; }
+
+/* ── Cards — glass material ──────────────────────────────────────────────── */
+.card {
+    border-radius: 18px;
+    animation: cardIn 0.55s var(--ease) both;
+    transition: transform 0.35s var(--ease), box-shadow 0.35s var(--ease),
+                border-color 0.35s var(--ease);
+}
+
+.card.bg-dark,
+.card {
+    background: var(--surface) !important;
+    backdrop-filter: saturate(160%) blur(24px);
+    -webkit-backdrop-filter: saturate(160%) blur(24px);
+    border: 1px solid var(--hairline) !important;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.06),
+        0 10px 30px -14px rgba(0, 0, 0, 0.7);
+}
+
+.card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(255, 255, 255, 0.14) !important;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.09),
+        0 22px 48px -18px rgba(0, 0, 0, 0.78);
+}
+
+.card-header {
+    background: transparent !important;
+    border-bottom: 1px solid var(--hairline-soft) !important;
+    color: var(--text-primary);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    padding: 0.95rem 1.15rem;
+}
+
+/* ── Metric cards — premium micro-label + hero numbers ───────────────────── */
+.card .text-secondary.small,
+.card .small.text-secondary {
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--text-tertiary) !important;
+}
+
+.card-body .fs-4.fw-bold {
+    font-size: 1.65rem;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    line-height: 1.15;
+    margin-top: 0.15rem;
+}
+
+/* ── Tables ──────────────────────────────────────────────────────────────── */
+.table {
+    --bs-table-bg: transparent;
+    --bs-table-color: var(--text-primary);
+    margin: 0;
+    color: var(--text-primary);
+}
+
+.table-dark { --bs-table-bg: transparent; --bs-table-border-color: var(--hairline-soft); }
+
+.table thead th {
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--text-tertiary) !important;
+    border-bottom: 1px solid var(--hairline) !important;
+    padding: 0.85rem 1rem;
+}
+
+.table tbody td {
+    border-color: var(--hairline-soft) !important;
+    padding: 0.78rem 1rem;
+    vertical-align: middle;
+}
+
+.table tbody tr {
+    transition: background-color 0.18s var(--ease);
+    cursor: pointer;
+}
+
+.table tbody tr:hover,
+table tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+.table tbody tr:last-child td { border-bottom: 0 !important; }
+
+/* Allocation legend swatches → tidy color dots */
+#allocation-table .badge {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    padding: 0;
+    border-radius: 50%;
+    margin-right: 9px;
+    vertical-align: middle;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.05);
+}
+
+/* ── Status colors — Apple system palette ────────────────────────────────── */
+.text-success { color: var(--accent-green) !important; }
+.text-danger  { color: var(--accent-red)   !important; }
+.text-info    { color: var(--accent-cyan)  !important; }
+.text-warning { color: var(--accent-yellow)!important; }
+
+/* ── Buttons — pill-shaped, gentle spring on press ───────────────────────── */
+.btn {
+    border-radius: 980px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    transition: transform 0.18s var(--spring), background-color 0.2s var(--ease),
+                border-color 0.2s var(--ease), box-shadow 0.2s var(--ease), color 0.2s var(--ease);
+}
+.btn:active { transform: scale(0.96); }
+
+.btn-success {
+    background: var(--accent-green);
+    border-color: var(--accent-green);
+    color: #04210d;
+}
+.btn-success:hover {
+    background: #28b84c;
+    border-color: #28b84c;
+    box-shadow: 0 6px 18px -6px rgba(48, 209, 88, 0.5);
+}
+
+.btn-outline-secondary,
+.btn-outline-primary,
+.btn-outline-success,
+.btn-outline-danger {
+    border-color: var(--hairline);
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.03);
+}
+.btn-outline-secondary:hover { background: rgba(255, 255, 255, 0.1);  color: var(--text-primary); border-color: transparent; }
+.btn-outline-primary:hover   { background: var(--accent-blue);  color: #fff; border-color: transparent; }
+.btn-outline-success:hover   { background: var(--accent-green); color: #04210d; border-color: transparent; }
+.btn-outline-danger:hover    { background: var(--accent-red);   color: #fff; border-color: transparent; }
+
+/* ── Forms (management modal) ────────────────────────────────────────────── */
+.form-control {
+    background: var(--surface-strong) !important;
+    border: 1px solid var(--hairline) !important;
+    border-radius: 11px !important;
+    color: var(--text-primary) !important;
+    transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease), background-color 0.2s var(--ease);
+}
+.form-control:focus {
+    background: rgba(255, 255, 255, 0.09) !important;
+    border-color: var(--accent-blue) !important;
+    box-shadow: 0 0 0 3.5px rgba(10, 132, 255, 0.28) !important;
+    color: #fff !important;
+}
+.form-control::placeholder { color: var(--text-tertiary) !important; }
+
+/* ── Modal — deep frosted sheet ──────────────────────────────────────────── */
+.modal-content.bg-dark {
+    background: rgba(22, 22, 28, 0.82) !important;
+    backdrop-filter: saturate(180%) blur(40px);
+    -webkit-backdrop-filter: saturate(180%) blur(40px);
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 22px !important;
+    box-shadow: 0 40px 90px -24px rgba(0, 0, 0, 0.82);
+}
+.modal-header.border-secondary { border-bottom: 1px solid var(--hairline) !important; }
+.modal-title { font-weight: 600; letter-spacing: -0.02em; }
+
+/* ── Sparkline ───────────────────────────────────────────────────────────── */
 .trend-sparkline {
     display: block;
     height: 32px;
-    margin: 0 auto;
     width: 120px;
+    margin: 0 auto;
 }
 
-/* Sticky navbar — stays at top when scrolling */
-.navbar { position: sticky; top: 0; z-index: 1030; }
- 
-/* Smooth row highlighting */
-tbody tr {
-    transition: background-color 0.15s ease;
-    cursor: pointer;
-}
- 
-/* Pulsing animation for loading spinner */
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-}
-.loading-pulse { animation: pulse 1.5s ease-in-out infinite; }
- 
-/* Card entrance animation */
-.card {
-    animation: fadeIn 0.3s ease;
-}
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(4px); }
-    to   { opacity: 1; transform: translateY(0); }
-}
-
-/* Sortable allocation headers */
+/* ── Sortable allocation headers ─────────────────────────────────────────── */
 #alloc-sort, #holdings-alloc-sort {
     cursor: pointer;
     user-select: none;
     white-space: nowrap;
+    transition: color 0.18s var(--ease);
 }
-#alloc-sort:hover, #holdings-alloc-sort:hover { color: #fff; }
-#alloc-sort-caret, #holdings-alloc-caret { opacity: 0.7; }
+#alloc-sort:hover, #holdings-alloc-sort:hover { color: var(--text-primary) !important; }
+#alloc-sort-caret, #holdings-alloc-caret { opacity: 0.65; transition: opacity 0.18s var(--ease); }
+#alloc-sort:hover #alloc-sort-caret,
+#holdings-alloc-sort:hover #holdings-alloc-caret { opacity: 1; }
+
+/* ── Spinner ─────────────────────────────────────────────────────────────── */
+.spinner-border { width: 1rem; height: 1rem; }
+.spinner-border-sm { width: 0.85rem; height: 0.85rem; border-width: 0.15em; }
+
+/* ── Custom scrollbar ────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.14);
+    border: 3px solid transparent;
+    border-radius: 10px;
+    background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.24);
+    background-clip: content-box;
+}
+
+/* ── Motion ──────────────────────────────────────────────────────────────── */
+@keyframes cardIn {
+    from { opacity: 0; transform: translateY(10px) scale(0.99); }
+    to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.4; }
+}
+.loading-pulse { animation: pulse 1.5s ease-in-out infinite; }
+
+/* Respect users who prefer reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+    }
+    .card:hover { transform: none; }
+}

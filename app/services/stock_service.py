@@ -134,14 +134,14 @@ def save_price_snapshot(
     Save a price snapshot to the database for historical tracking.
     Called after every price fetch to build historical data.
     """
+    from datetime import datetime, timezone
     from app.models import PriceSnapshot
-    from datetime import datetime
 
     snapshot = PriceSnapshot(
         holding_id=holding_id,
         price=price,
         day_change_pct=day_change_pct,
-        recorded_at=datetime.utcnow(),
+        recorded_at=datetime.now(timezone.utc),
     )
     db.add(snapshot)
     db.commit()
