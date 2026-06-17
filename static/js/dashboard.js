@@ -71,7 +71,10 @@ async function loadPortfolioValue() {
             `<span class="${colorClass(data.total_daily_change)}">
              ${formatCurrency(data.total_daily_change)}
              (${formatPct(data.total_daily_change_pct)})</span>`;
- 
+
+        // Cumulative profit/loss summary (realized + unrealized)
+        renderTotalReturn(data);
+
         // Render the allocation breakdown table and matching doughnut chart
         latestHoldings = data.holdings;
         renderAllocation();
@@ -235,6 +238,144 @@ function toggleAllocationSort() {
 }
 
 
+// A signed currency string, e.g. "+$1,234.56" / "-$78.90".
+const formatSignedCurrency = (n) =>
+    `${toNumber(n) >= 0 ? "+" : "-"}${formatCurrency(Math.abs(toNumber(n)))}`;
+
+// Total Return card: cumulative realized + unrealized P&L from /value.
+function renderTotalReturn(data) {
+    const tr = toNumber(data.total_return);
+    const cls = colorClass(tr);
+
+    const set = (id, html) => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = html;
+    };
+    set("total-return", `<span class="${cls}">${formatSignedCurrency(tr)}</span>`);
+    set("total-return-pct", `<span class="${cls}">${formatPct(data.total_return_pct)} all-time</span>`);
+    set("unrealized-gain",
+        `<span class="${colorClass(data.total_unrealized_gain)}">${formatSignedCurrency(data.total_unrealized_gain)}</span>`);
+    set("realized-gain",
+        `<span class="${colorClass(data.realized_gain)}">${formatSignedCurrency(data.realized_gain)}</span>`);
+}
+
+
+let pnlChart = null;  // Chart instance for the performance-history line
+
+// Fetch the P&L ledger + snapshot history and render the chart and trades table.
+async function loadPnl() {
+    try {
+        const res = await fetch("/api/portfolio/pnl");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        renderPnlChart(data.history || []);
+        renderRealizedTable(data.trades || []);
+    } catch (err) {
+        console.warn("Unable to load P&L:", err);
+    }
+}
+
+function renderPnlChart(history) {
+    const canvas = document.getElementById("pnl-chart");
+    if (!canvas) return;
+
+    const labels = history.map(h => h.date);
+    const values = history.map(h => toNumber(h.total_return));
+    const up = values.length < 2 || values[values.length - 1] >= values[0];
+    const line = up ? "#30d158" : "#ff453a";
+
+    // Soft vertical gradient fill under the line.
+    const ctx = canvas.getContext("2d");
+    const fill = ctx.createLinearGradient(0, 0, 0, canvas.height || 150);
+    fill.addColorStop(0, up ? "rgba(48,209,88,0.28)" : "rgba(255,69,58,0.28)");
+    fill.addColorStop(1, "rgba(0,0,0,0)");
+
+    if (pnlChart) {
+        pnlChart.data.labels = labels;
+        pnlChart.data.datasets[0].data = values;
+        pnlChart.data.datasets[0].borderColor = line;
+        pnlChart.data.datasets[0].backgroundColor = fill;
+        pnlChart.update();
+        return;
+    }
+
+    pnlChart = new Chart(ctx, {
+        type: "line",
+        data: {
+            labels,
+            datasets: [{
+                data: values,
+                borderColor: line,
+                backgroundColor: fill,
+                borderWidth: 2,
+                fill: true,
+                tension: 0.35,
+                pointRadius: 0,
+                pointHoverRadius: 4,
+                pointHoverBackgroundColor: line,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: "rgba(28,28,34,0.92)",
+                    titleColor: "#f5f5f7",
+                    bodyColor: "rgba(235,235,245,0.85)",
+                    borderColor: "rgba(255,255,255,0.12)",
+                    borderWidth: 1,
+                    cornerRadius: 12,
+                    padding: 12,
+                    callbacks: {
+                        label: (item) => `Total return: ${formatSignedCurrency(item.raw)}`,
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { color: "rgba(235,235,245,0.42)", maxRotation: 0, autoSkip: true,
+                             maxTicksLimit: 6, font: { size: 10 } },
+                },
+                y: {
+                    grid: { color: "rgba(255,255,255,0.06)" },
+                    ticks: { color: "rgba(235,235,245,0.42)", font: { size: 10 },
+                             callback: (v) => formatSignedCurrency(v) },
+                }
+            }
+        }
+    });
+}
+
+function renderRealizedTable(trades) {
+    const tbody = document.getElementById("realized-table");
+    if (!tbody) return;
+    tbody.innerHTML = "";
+
+    if (!trades.length) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-secondary py-4">
+            No realized trades yet — they appear here when you reduce a holding.</td></tr>`;
+        return;
+    }
+
+    trades.forEach(t => {
+        const row = tbody.insertRow();
+        const day = t.date ? new Date(t.date).toLocaleDateString() : "--";
+        row.innerHTML = `
+            <td class="text-secondary small">${day}</td>
+            <td class="fw-bold">${t.ticker}</td>
+            <td class="text-end">${toNumber(t.shares_sold).toFixed(3)}</td>
+            <td class="text-end">${formatCurrency(t.sale_price)}</td>
+            <td class="text-end">${formatCurrency(t.avg_cost)}</td>
+            <td class="text-end ${colorClass(t.realized_gain)}">${formatSignedCurrency(t.realized_gain)}</td>
+        `;
+    });
+}
+
+
 async function loadTrendData(tickers) {
     if (!tickers.length) return {};
 
@@ -368,6 +509,7 @@ document.addEventListener("keydown", (e) => {
  
 async function initDashboard() {
     await loadPortfolioValue();
+    await loadPnl();
     await updateMarketStatus();
     startCountdown();
 }
@@ -426,6 +568,8 @@ async function updateHolding(holdingId) {
     });
     if (res.ok) {
         showToast("Holding updated!", "success");
+        loadPortfolioValue();  // Refresh totals (and any realized P&L from a reduction)
+        loadPnl();             // Refresh the ledger + performance chart
     } else {
         showToast("Update failed", "danger");
     }
@@ -442,6 +586,7 @@ async function removeHolding(holdingId, ticker) {
         showToast(`${ticker} removed`, "warning");
         loadManageHoldings();  // Refresh the modal list
         loadPortfolioValue();  // Refresh the main dashboard
+        loadPnl();             // The full-position sale lands in the ledger
     }
 }
  
@@ -465,6 +610,7 @@ document.getElementById("add-holding-form")?.addEventListener("submit", async (e
         e.target.reset();
         loadManageHoldings();
         loadPortfolioValue();
+        loadPnl();
     } else {
         const err = await res.json();
         msg.className = "ms-2 small text-danger";
