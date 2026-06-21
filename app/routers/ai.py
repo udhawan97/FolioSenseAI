@@ -20,6 +20,10 @@ from app.services.holding_intelligence import (
     get_holding_intelligence,
     intelligence_to_dict,
 )
+from app.services.analyst_recommendation import (
+    get_analyst_recommendation,
+    rec_to_dict,
+)
 from app.services.stock_service import DEFAULT_HOLDINGS, get_all_quotes, get_stock_data
 
 logger = logging.getLogger(__name__)
@@ -315,3 +319,43 @@ async def get_all_intelligence():
                 "data_sources": [],
             }
     return {"intelligence": results, "count": len(results)}
+
+
+# ── Analyst Recommendation endpoints ─────────────────────────────────────────
+
+@router.get("/analyst-recommendation/{ticker}")
+async def get_analyst_recommendation_single(ticker: str):
+    """
+    Return analyst consensus for a single ticker.
+    ETFs and crypto funds return action=not-rated with subtext "Consensus unavailable".
+    """
+    ticker = ticker.upper()
+    rec = get_analyst_recommendation(ticker)
+    return rec_to_dict(rec)
+
+
+@router.get("/analyst-recommendations/all")
+async def get_all_analyst_recommendations():
+    """
+    Return analyst consensus for all portfolio holdings.
+    Iterates DEFAULT_HOLDINGS; ETFs resolve to not-rated without external calls.
+    """
+    results: dict[str, dict] = {}
+    for ticker in DEFAULT_HOLDINGS:
+        try:
+            rec = get_analyst_recommendation(ticker)
+            results[ticker] = rec_to_dict(rec)
+        except Exception as e:
+            logger.error("Analyst rec failed for %s: %s", ticker, e)
+            results[ticker] = {
+                "ticker": ticker,
+                "action": "not-rated",
+                "label": "Not rated",
+                "analyst_count": None,
+                "recommendation_mean": None,
+                "target_price": None,
+                "target_upside_pct": None,
+                "subtext": "Consensus unavailable",
+                "source": "yfinance",
+            }
+    return {"recommendations": results, "count": len(results)}

@@ -829,6 +829,45 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
 .data-quality-tag.static { color: var(--text-tertiary); }
 .data-quality-tag.partial { color: #ff9f0a; }
 
+/* ── Analyst Consensus column ────────────────────────────────────────────── */
+.analyst-rec-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    /* Fixed height prevents layout shift while the cell loads */
+    min-height: 38px;
+}
+
+.analyst-rec-main {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1;
+}
+
+.analyst-rec-icon {
+    font-size: 0.8rem;
+}
+
+.analyst-rec-subtext {
+    font-size: 0.6rem;
+    color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+}
+
+/* Action-specific color palette */
+.analyst-rec-buy   { color: var(--accent-green); }
+.analyst-rec-hold  { color: var(--accent-yellow); }
+.analyst-rec-sell  { color: var(--accent-red); }
+.analyst-rec-not-rated { color: var(--text-tertiary); }
+
 /* ── Compact attribution badge inside the holdings table "Today" cell ────── */
 .move-badge {
     display: inline-block;

@@ -80,6 +80,9 @@ let cachedExplanations = {};   // ticker → explanation object (move data)
 let intelligenceLoaded = false;
 let intelligenceLoading = false;
 
+// Analyst Consensus state
+let cachedRecommendations = {};  // ticker → rec object from /api/ai/analyst-recommendations/all
+
 // Single source of truth for allocation ordering, shared by both tables and the chart.
 function sortedByAllocation(holdings) {
     const dir = allocSortDir === "asc" ? 1 : -1;
@@ -434,6 +437,7 @@ function updateHoldingsTable(holdings, trendData = {}) {
             ? `<div class="move-badge ${exp.attribution_type}" title="${exp.confidence} confidence">${ATTRIBUTION_SHORT[exp.attribution_type] || "?"}</div>`
             : `<div class="move-badge" id="move-badge-${h.ticker}"></div>`;
 
+        const rec = cachedRecommendations[h.ticker];
         row.innerHTML = `
             <td class="fw-bold">
                 <span class="ticker-dot" style="background:${chartColor(i)}"></span>${h.ticker}<i class="bi bi-chevron-right row-chevron"></i>
@@ -450,6 +454,7 @@ function updateHoldingsTable(holdings, trendData = {}) {
             </td>
             <td class="text-end d-none d-md-table-cell">${formatCurrency(h.current_value)}</td>
             <td class="text-end">${formatAllocationPct(h.allocation_pct)}</td>
+            <td class="text-center d-none d-lg-table-cell" id="rec-cell-${h.ticker}">${renderAnalystRecCell(rec)}</td>
             <td class="text-center d-none d-xl-table-cell trend-cell"></td>
         `;
         row.addEventListener("click", () => toggleSummaryRow(row));
@@ -746,7 +751,7 @@ function injectSummaryRows(tbody) {
             expandRow = document.createElement("tr");
             expandRow.className = "summary-expand-row";
             const td = document.createElement("td");
-            td.colSpan = 7;
+            td.colSpan = 8;
             td.innerHTML = `<div class="summary-body"><div class="intel-grid">
                 <div class="intel-coverage-section"></div>
                 <div class="intel-move-section"></div>
@@ -823,6 +828,48 @@ function drawTrend(canvas, history = []) {
 }
 
 
+// ── Analyst Consensus ──────────────────────────────────────────────────────
+
+const REC_ICONS = {
+    "buy":       "bi-arrow-up-circle-fill",
+    "hold":      "bi-dash-circle-fill",
+    "sell":      "bi-arrow-down-circle-fill",
+    "not-rated": "bi-question-circle",
+};
+
+function renderAnalystRecCell(rec) {
+    if (!rec) {
+        return `<div class="analyst-rec-wrap">
+            <div class="shimmer-line" style="width:52px;height:14px;border-radius:4px;margin:0 auto .25rem"></div>
+            <div class="shimmer-line" style="width:64px;height:9px;border-radius:4px;margin:0 auto"></div>
+        </div>`;
+    }
+    const action = rec.action || "not-rated";
+    const icon = REC_ICONS[action] || "bi-question-circle";
+    return `<div class="analyst-rec-wrap">
+        <div class="analyst-rec-main analyst-rec-${escapeHtml(action)}">
+            <i class="bi ${escapeHtml(icon)} analyst-rec-icon"></i>
+            <span class="analyst-rec-label">${escapeHtml(rec.label || "Not rated")}</span>
+        </div>
+        <div class="analyst-rec-subtext">${escapeHtml(rec.subtext || "")}</div>
+    </div>`;
+}
+
+async function loadAnalystRecommendations() {
+    try {
+        const res = await fetch("/api/ai/analyst-recommendations/all");
+        if (!res.ok) return;
+        const data = await res.json();
+        Object.entries(data.recommendations || {}).forEach(([ticker, rec]) => {
+            cachedRecommendations[ticker] = rec;
+            const cell = document.getElementById(`rec-cell-${ticker}`);
+            if (cell) cell.innerHTML = renderAnalystRecCell(rec);
+        });
+    } catch (err) {
+        console.warn("Analyst recommendations unavailable:", err);
+    }
+}
+
 document.addEventListener("DOMContentLoaded", initDashboard);
 
 function refreshData() {
@@ -879,6 +926,8 @@ async function initDashboard() {
     await loadPortfolioValue();
     await loadPnl();
     await updateMarketStatus();
+    // Fire without blocking — prices and P&L are already visible
+    loadAnalystRecommendations();
     startCountdown();
 }
 
