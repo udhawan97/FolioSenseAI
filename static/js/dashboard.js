@@ -456,6 +456,29 @@ function toggleSummaryRow(mainRow) {
     mainRow.classList.toggle("summary-open", isOpen);
 }
 
+function escapeHtml(str) {
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function parseBullets(text) {
+    if (!text) return [];
+    const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+    // Accept •, -, * as bullet markers
+    const bulletLines = lines.filter(l => /^[•\-*]/.test(l));
+    if (bulletLines.length >= 2) {
+        return bulletLines.map(l => l.replace(/^[•\-*]+\s*/, "").trim()).filter(Boolean);
+    }
+    // Fallback: strip markdown headers and bold markers, use all non-empty lines
+    return lines
+        .map(l => l.replace(/^#+\s*/, "").replace(/\*\*/g, "").trim())
+        .filter(Boolean);
+}
+
 function renderSummaryInner(inner, text, isLoading) {
     if (isLoading) {
         inner.innerHTML = `
@@ -465,23 +488,13 @@ function renderSummaryInner(inner, text, isLoading) {
         `;
         return;
     }
-    if (!text) {
-        inner.innerHTML = `<span style="font-size:.75rem;color:var(--text-tertiary)">Summary unavailable</span>`;
-        return;
-    }
-    const bullets = text.split("\n").map(l => l.trim()).filter(l => l.startsWith("•")).map(l => l.replace(/^•\s*/, ""));
+    const bullets = parseBullets(text).slice(0, 3);
     if (bullets.length) {
         inner.innerHTML = bullets.map(b =>
-            `<div class="summary-bullet"><span class="summary-dot"></span><span>${b}</span></div>`
+            `<div class="summary-bullet"><span class="summary-dot"></span><span>${escapeHtml(b)}</span></div>`
         ).join("");
     } else {
-        // Fallback: strip markdown and render as plain paragraphs
-        const lines = text.split("\n")
-            .map(l => l.replace(/^#+\s*/, "").replace(/\*\*/g, "").trim())
-            .filter(l => l.length > 0);
-        inner.innerHTML = lines.slice(0, 3).map(l =>
-            `<div class="summary-bullet"><span class="summary-dot"></span><span>${l}</span></div>`
-        ).join("");
+        inner.innerHTML = `<span style="font-size:.75rem;color:var(--text-tertiary)">Summary unavailable</span>`;
     }
 }
 

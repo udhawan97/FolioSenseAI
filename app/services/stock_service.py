@@ -67,7 +67,8 @@ def get_stock_data(ticker: str) -> dict:
             "pe_ratio": round(info.get("trailingPE") or 0, 2),
             "dividend_yield": round(info.get("dividendYield") or 0, 4),
             "currency": info.get("currency") or "USD",
-            "sector": info.get("sector") or "N/A",
+            "sector": info.get("sector") or info.get("categoryName") or "N/A",
+            "quote_type": info.get("quoteType") or "EQUITY",
             "error": None,
         }
 
