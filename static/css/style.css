@@ -307,3 +307,73 @@ table tbody tr:hover {
     }
     .card:hover { transform: none; }
 }
+
+/* ── Stat icon circles ───────────────────────────────────────────────────── */
+.stat-icon {
+    flex-shrink: 0;
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    transition: transform 0.22s var(--spring);
+}
+.card:hover .stat-icon { transform: scale(1.07); }
+
+/* ── Metric label + value ────────────────────────────────────────────────── */
+.stat-label {
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    margin-bottom: 0.1rem;
+}
+
+.stat-value {
+    font-size: 1.35rem;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ── Market status — pulsing dot when open ──────────────────────────────── */
+.market-open i { animation: marketPulse 2.4s ease-in-out infinite; }
+
+@keyframes marketPulse {
+    0%, 100% { opacity: 1;   transform: scale(1);   }
+    50%       { opacity: 0.5; transform: scale(0.7); }
+}
+
+/* ── Ticker dot (colored circle in holdings table) ──────────────────────── */
+.ticker-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    margin-right: 7px;
+    vertical-align: middle;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.06);
+}
+
+/* ── AI Summary item cards ───────────────────────────────────────────────── */
+.ai-summary-item {
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--hairline-soft);
+    transition: background-color 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+.ai-summary-item:hover {
+    background: rgba(255, 255, 255, 0.055);
+    border-color: var(--hairline);
+}
+
+/* ── Card header icon alignment ─────────────────────────────────────────── */
+.card-header i { vertical-align: -0.05em; }

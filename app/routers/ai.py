@@ -5,7 +5,7 @@ AI-powered summary endpoints using Claude.
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.services.ai_service import generate_stock_summary, generate_portfolio_insight
+from app.services.ai_service import generate_stock_summary
 from app.services.stock_service import get_stock_data, get_all_quotes, DEFAULT_HOLDINGS
 from app.models import AISummary
 from datetime import datetime

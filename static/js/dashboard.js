@@ -10,6 +10,17 @@ const toNumber = (n, fallback = 0) => {
 };
 const formatCurrency = (n) =>
     new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(toNumber(n));
+
+// Abbreviated for tight spaces: $1.2K, $1.4M, $2.1B
+const formatCompact = (n) => {
+    const v = toNumber(n);
+    const abs = Math.abs(v);
+    const sign = v < 0 ? "-" : "";
+    if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(1)}B`;
+    if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(1)}M`;
+    if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(1)}K`;
+    return formatCurrency(v);
+};
 const formatPct = (n) => {
     const value = toNumber(n);
     return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
@@ -66,13 +77,14 @@ async function loadPortfolioValue() {
  
         // Update summary cards
         document.getElementById("total-value").textContent =
-            formatCurrency(data.total_value);
+            formatCompact(data.total_value);
         document.getElementById("holding-count").textContent =
             data.holdings.length;
         document.getElementById("daily-pnl").innerHTML =
             `<span class="${colorClass(data.total_daily_change)}">
-             ${formatCurrency(data.total_daily_change)}
-             (${formatPct(data.total_daily_change_pct)})</span>`;
+             ${formatCompact(data.total_daily_change)}
+             <span style="font-size:.85em;opacity:.8">(${formatPct(data.total_daily_change_pct)})</span>
+             </span>`;
 
         // Cumulative profit/loss summary (realized + unrealized)
         renderTotalReturn(data);
@@ -83,18 +95,18 @@ async function loadPortfolioValue() {
 
         // Update best/worst/largest cards
         if (data.best_performer) {
-            document.getElementById("best-performer").textContent =
-                `${data.best_performer.ticker} ${formatPct(data.best_performer.day_change_pct)}`;
+            document.getElementById("best-performer").innerHTML =
+                `${data.best_performer.ticker} <span style="font-size:.85em;opacity:.8">${formatPct(data.best_performer.day_change_pct)}</span>`;
         }
         if (data.worst_performer) {
-            document.getElementById("worst-performer").textContent =
-                `${data.worst_performer.ticker} ${formatPct(data.worst_performer.day_change_pct)}`;
+            document.getElementById("worst-performer").innerHTML =
+                `${data.worst_performer.ticker} <span style="font-size:.85em;opacity:.8">${formatPct(data.worst_performer.day_change_pct)}</span>`;
         }
         if (data.holdings.length) {
             const largest = data.holdings.reduce((a, b) =>
                 a.current_value > b.current_value ? a : b);
-            document.getElementById("largest-holding").textContent =
-                `${largest.ticker} ${formatCurrency(largest.current_value)}`;
+            document.getElementById("largest-holding").innerHTML =
+                `${largest.ticker} <span style="font-size:.85em;opacity:.8">${formatCompact(largest.current_value)}</span>`;
         }
 
         // Also update the basic prices table (same allocation order as the chart)
@@ -400,14 +412,20 @@ async function loadTrendData(tickers) {
 function updateHoldingsTable(holdings, trendData = {}) {
     const tbody = document.getElementById("holdings-table");
     tbody.innerHTML = "";
-    holdings.forEach(h => {
+    holdings.forEach((h, i) => {
         const row = tbody.insertRow();
+        const up = h.day_change_pct >= 0;
         row.innerHTML = `
-            <td class="fw-bold">${h.ticker}</td>
+            <td class="fw-bold">
+                <span class="ticker-dot" style="background:${chartColor(i)}"></span>${h.ticker}
+            </td>
             <td class="d-none d-md-table-cell text-secondary small">${h.name.substring(0, 28)}</td>
             <td class="text-end">${formatCurrency(h.current_price)}</td>
             <td class="text-end ${colorClass(h.day_change_pct)}">
-                ${formatPct(h.day_change_pct)}</td>
+                <i class="bi ${up ? "bi-caret-up-fill" : "bi-caret-down-fill"}"
+                   style="font-size:.65rem;vertical-align:middle;opacity:.75"></i>
+                ${formatPct(h.day_change_pct)}
+            </td>
             <td class="text-end d-none d-md-table-cell">${formatCurrency(h.current_value)}</td>
             <td class="text-end">${formatAllocationPct(h.allocation_pct)}</td>
             <td class="text-center d-none d-xl-table-cell trend-cell"></td>
@@ -486,9 +504,15 @@ async function updateMarketStatus() {
         const el = document.getElementById("market-status");
         if (el) {
             el.textContent = data.status;
-            el.className = data.is_open
-                ? "fs-4 fw-bold text-success"
-                : "fs-4 fw-bold text-secondary";
+            el.className = data.is_open ? "stat-value text-success" : "stat-value text-secondary";
+        }
+        const icon = document.getElementById("market-icon");
+        if (icon) {
+            icon.style.background = data.is_open
+                ? "rgba(48,209,88,.13)"
+                : "rgba(235,235,245,.06)";
+            icon.style.color = data.is_open ? "#30d158" : "var(--text-tertiary)";
+            icon.classList.toggle("market-open", !!data.is_open);
         }
     } catch(e) {}
 }
@@ -635,9 +659,9 @@ async function generateAllSummaries() {
     const list  = document.getElementById("ai-summaries-list");
     panel.style.display = "block";
     list.innerHTML = `
-        <div class="text-center text-secondary py-3">
-            <div class="spinner-border spinner-border-sm me-2"></div>
-            Generating AI summaries... (takes 30–60 seconds for all 10 holdings)
+        <div class="text-center py-4" style="color:var(--text-tertiary)">
+            <div class="spinner-border spinner-border-sm me-2" style="color:#64d2ff"></div>
+            <span class="small">Generating AI summaries — up to 60 seconds for all holdings</span>
         </div>`;
 
     try {
@@ -647,15 +671,15 @@ async function generateAllSummaries() {
 
         Object.entries(data.summaries).forEach(([ticker, info]) => {
             const div = document.createElement("div");
-            div.className = "mb-2 p-3 rounded border border-secondary bg-dark d-flex align-items-start";
+            div.className = "ai-summary-item mb-2 p-3";
             div.innerHTML = `
-                <span class="badge bg-secondary me-3 mt-1" style="min-width:50px">${ticker}</span>
-                <div>
-                    <span class="text-light small">${info.summary}</span>
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <span class="fw-bold" style="font-size:.82rem;letter-spacing:.01em;color:var(--text-primary)">${ticker}</span>
                     ${info.from_cache
-                        ? '<span class="badge bg-dark border border-secondary ms-2 small">cached</span>'
-                        : '<span class="badge bg-info bg-opacity-25 ms-2 small">fresh</span>'}
+                        ? '<span class="badge rounded-pill" style="background:rgba(255,255,255,.08);color:var(--text-tertiary);font-size:.6rem;font-weight:500">cached</span>'
+                        : '<span class="badge rounded-pill" style="background:rgba(100,210,255,.18);color:#64d2ff;font-size:.6rem;font-weight:500">fresh</span>'}
                 </div>
+                <p class="mb-0" style="font-size:.82rem;color:var(--text-secondary);line-height:1.6">${info.summary}</p>
             `;
             list.appendChild(div);
         });
