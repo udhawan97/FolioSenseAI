@@ -16,6 +16,10 @@ from app.services.move_explainer import (
     explain_move,
     get_benchmark_data,
 )
+from app.services.holding_intelligence import (
+    get_holding_intelligence,
+    intelligence_to_dict,
+)
 from app.services.stock_service import DEFAULT_HOLDINGS, get_all_quotes, get_stock_data
 
 logger = logging.getLogger(__name__)
@@ -182,6 +186,11 @@ def _summary_to_dict(s: HoldingMoveSummary) -> dict:
                 "qqq_change_pct": s.macro_context.qqq_change_pct,
                 "sector_etf": s.macro_context.sector_etf,
                 "sector_etf_change_pct": s.macro_context.sector_etf_change_pct,
+                "primary_benchmark": s.macro_context.primary_benchmark,
+                "primary_benchmark_label": s.macro_context.primary_benchmark_label,
+                "primary_benchmark_chg": s.macro_context.primary_benchmark_chg,
+                "suppress_spy": s.macro_context.suppress_spy,
+                "suppress_qqq": s.macro_context.suppress_qqq,
             }
             if s.macro_context
             else None
@@ -226,10 +235,11 @@ async def get_all_move_explanations():
     """
     Explain today's move for all portfolio holdings.
     Fetches SPY/QQQ benchmark data once, then processes each holding in turn.
-    Slower than a single summary (news + earnings checked per stock) but all
-    explanations are grounded in real retrieved data.
+    Per-holding primary benchmarks (BTC, EEM, XAR…) are fetched lazily and
+    cached in a shared dict to avoid duplicate API calls.
     """
     benchmarks = get_benchmark_data()
+    benchmark_cache: dict = {}  # shared cache for per-holding primary benchmarks
     quotes = {q["ticker"]: q for q in get_all_quotes()}
     results: dict[str, dict] = {}
 
@@ -238,10 +248,68 @@ async def get_all_move_explanations():
             results[ticker] = {**_UNCLEAR_RESULT, "ticker": ticker}
             continue
         try:
-            summary = explain_move(stock_data, shared_benchmarks=benchmarks)
+            summary = explain_move(
+                stock_data,
+                shared_benchmarks=benchmarks,
+                _benchmark_cache=benchmark_cache,
+            )
             results[ticker] = _summary_to_dict(summary)
         except Exception as e:
             logger.error("Move explanation failed for %s: %s", ticker, e)
             results[ticker] = {**_UNCLEAR_RESULT, "ticker": ticker}
 
     return {"explanations": results, "count": len(results)}
+
+
+# ── Holding Intelligence endpoints ────────────────────────────────────────────
+
+@router.get("/intelligence/{ticker}")
+async def get_holding_intelligence_single(ticker: str):
+    """
+    Return structured intelligence for a single holding:
+    what it covers (sectors, countries, top holdings, strategy, benchmarks).
+    """
+    ticker = ticker.upper()
+    stock_data = get_stock_data(ticker)
+    if stock_data.get("error"):
+        raise HTTPException(status_code=404, detail=f"Cannot fetch data for {ticker}")
+    intel = get_holding_intelligence(ticker, stock_data)
+    return intelligence_to_dict(intel)
+
+
+@router.get("/intelligence/all/batch")
+async def get_all_intelligence():
+    """
+    Return holding intelligence for all portfolio holdings.
+    Combines structured coverage data (sectors, countries, benchmarks) for every holding.
+    """
+    quotes = {q["ticker"]: q for q in get_all_quotes()}
+    results: dict[str, dict] = {}
+    for ticker, stock_data in quotes.items():
+        try:
+            intel = get_holding_intelligence(ticker, stock_data if not stock_data.get("error") else None)
+            results[ticker] = intelligence_to_dict(intel)
+        except Exception as e:
+            logger.error("Intelligence fetch failed for %s: %s", ticker, e)
+            results[ticker] = {
+                "ticker": ticker,
+                "coverage_type": "equity",
+                "coverage_label": "Unknown",
+                "strategy": "Data unavailable",
+                "asset_class": "equities",
+                "theme": None,
+                "sectors": [],
+                "countries": [],
+                "top_holdings": [],
+                "benchmark_tickers": ["SPY"],
+                "benchmark_labels": {"SPY": "S&P 500"},
+                "peer_tickers": [],
+                "key_drivers": [],
+                "concentration_level": "medium",
+                "concentration_label": "",
+                "expense_ratio": None,
+                "expense_ratio_bps": None,
+                "data_quality": "static",
+                "data_sources": [],
+            }
+    return {"intelligence": results, "count": len(results)}
