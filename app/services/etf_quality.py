@@ -85,13 +85,16 @@ def _first_text(data: Mapping[str, Any], *keys: str) -> str:
 
 
 def _cost_label(expense_ratio: float | None) -> str:
+    """Expense ratio must be in decimal form (e.g. 0.0003 = 0.03%, 0.0075 = 0.75%)."""
     if expense_ratio is None:
         return "Unknown"
-    if expense_ratio <= 0.0015:
+    if expense_ratio <= 0.0010:   # ≤ 0.10%  — Vanguard / iShares index tier
+        return "Ultra-Low"
+    if expense_ratio <= 0.0020:   # 0.11–0.20% — still cheap passive
         return "Low"
-    if expense_ratio <= 0.006:
+    if expense_ratio <= 0.0060:   # 0.21–0.60% — average active/factor
         return "Medium"
-    return "High"
+    return "High"                 # > 0.60%
 
 
 def _liquidity_label(avg_volume: float | None, aum: float | None, spread: float | None) -> str:
@@ -183,7 +186,9 @@ def _quality_score_and_label(  # pylint: disable=too-many-positional-arguments
 ) -> tuple[int, str]:
     score = 40
     if expense_ratio is not None:
-        score += 20 if expense_ratio <= 0.0015 else 14 if expense_ratio <= 0.006 else 6
+        score += (20 if expense_ratio <= 0.0010 else
+                  16 if expense_ratio <= 0.0020 else
+                  10 if expense_ratio <= 0.0060 else 4)
     if aum is not None:
         score += 15 if aum >= 10_000_000_000 else 10 if aum >= 1_000_000_000 else 4
     if spread is not None:

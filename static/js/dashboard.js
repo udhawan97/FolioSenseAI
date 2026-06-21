@@ -1191,14 +1191,26 @@ function renderTargetCell(rec) {
         return `<div class="shimmer-line" style="width:56px;height:12px;border-radius:4px;margin:0 auto .25rem"></div>
                 <div class="shimmer-line" style="width:38px;height:9px;border-radius:4px;margin:0 auto"></div>`;
     }
-    if (!rec.target_price) {
-        return `<span style="color:var(--text-tertiary);font-size:.72rem">—</span>`;
+    // Stocks with analyst consensus price target
+    if (rec.target_price) {
+        const upside = rec.target_upside_pct;
+        const sign = upside >= 0 ? "+" : "";
+        const color = upside >= 0 ? "var(--accent-green)" : "var(--accent-red)";
+        return `<div class="target-price-value">${formatCurrency(rec.target_price)}</div>
+                <div class="target-upside" style="color:${color}">${sign}${upside.toFixed(1)}%</div>`;
     }
-    const upside = rec.target_upside_pct;
-    const sign = upside >= 0 ? "+" : "";
-    const color = upside >= 0 ? "var(--accent-green)" : "var(--accent-red)";
-    return `<div class="target-price-value">${formatCurrency(rec.target_price)}</div>
-            <div class="target-upside" style="color:${color}">${sign}${upside.toFixed(1)}%</div>`;
+    // ETFs and stocks without analyst coverage — show Free Cash Flow Yield
+    if (rec.fcf_yield != null) {
+        const color = rec.fcf_yield >= 4
+            ? "var(--accent-green)"
+            : rec.fcf_yield >= 0
+                ? "var(--text-secondary)"
+                : "var(--accent-red)";
+        const sign = rec.fcf_yield >= 0 ? "+" : "";
+        return `<div class="target-price-value" style="color:${color}">${sign}${rec.fcf_yield.toFixed(1)}%</div>
+                <div class="target-upside" style="color:var(--text-tertiary)">FCF Yield</div>`;
+    }
+    return `<span style="color:var(--text-tertiary);font-size:.72rem">—</span>`;
 }
 
 function renderAnalystRecCell(rec) {
@@ -1314,6 +1326,10 @@ async function initDashboard() {
     initSpotlightEffect();
     initTips();
     initKeyboardHelp();
+    // Bootstrap tooltips (used for column header hints)
+    document.querySelectorAll("[data-bs-toggle='tooltip']").forEach(el => {
+        new bootstrap.Tooltip(el, { trigger: "hover focus" });
+    });
 }
 
 // ── World Markets ─────────────────────────────────────────────────────────────
