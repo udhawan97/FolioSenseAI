@@ -92,10 +92,19 @@ function applyTheme(theme, persist = false) {
             isDark ? "theme-toggle-thumb-icon-dark" : "theme-toggle-thumb-icon-light",
         ].join(" ");
     }
+    if (persist) animateToggle(toggle);
     if (persist) {
         try { localStorage.setItem(THEME_KEY, resolved); } catch (_) {}
     }
     refreshThemeAwareVisuals();
+}
+
+function animateToggle(toggle) {
+    if (!toggle) return;
+    toggle.classList.remove("is-animating");
+    void toggle.offsetWidth;
+    toggle.classList.add("is-animating");
+    window.setTimeout(() => toggle.classList.remove("is-animating"), 420);
 }
 
 function initThemeToggle() {
@@ -143,6 +152,7 @@ function applyTextSize(size, persist = false) {
         toggle.setAttribute("aria-label", `Switch to ${comfortable ? "standard" : "comfortable"} text size`);
         toggle.title = `Switch to ${comfortable ? "standard" : "comfortable"} text size`;
     }
+    if (persist) animateToggle(toggle);
     if (persist) {
         try { localStorage.setItem(TEXT_SIZE_KEY, resolved); } catch (_) {}
     }
@@ -1404,10 +1414,7 @@ async function updateMarketStatus() {
         }
         const icon = document.getElementById("market-icon");
         if (icon) {
-            icon.style.background = data.is_open
-                ? "rgba(48,209,88,.13)"
-                : "var(--control-bg)";
-            icon.style.color = data.is_open ? "#30d158" : "var(--text-tertiary)";
+            icon.style.color = data.is_open ? "var(--accent-green)" : "";
             icon.classList.toggle("market-open", !!data.is_open);
         }
     } catch(e) {}
