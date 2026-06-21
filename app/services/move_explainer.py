@@ -2,6 +2,7 @@
 app/services/move_explainer.py
 Explains why a holding moved today using market data, volume, and recent news.
 Every explanation is grounded in retrieved data — no invented reasons.
+Benchmarks are chosen per-holding, not defaulted to SPY/QQQ for everything.
 """
 import logging
 from dataclasses import dataclass, field
@@ -28,6 +29,23 @@ SECTOR_ETF_MAP: dict[str, str] = {
     "Real Estate": "XLRE",
     "Communication Services": "XLC",
     "Telecommunications": "XLC",
+}
+
+# Per-ticker benchmark configuration.
+# "primary": the most relevant benchmark (fetched and shown prominently).
+# "suppress_spy": hide SPY from pills/explanation when not relevant.
+# "suppress_qqq": hide QQQ when the holding has no Nasdaq exposure.
+_TICKER_BENCHMARKS: dict[str, dict] = {
+    "IBIT":  {"primary": "BTC-USD", "label": "Bitcoin",                  "suppress_spy": True,  "suppress_qqq": True},
+    "VT":    {"primary": "ACWI",    "label": "Global Equities (ACWI)",   "suppress_qqq": True},
+    "IEMG":  {"primary": "EEM",     "label": "Emerging Markets (EEM)",   "suppress_qqq": True,  "suppress_spy": True},
+    "ITA":   {"primary": "XAR",     "label": "Aerospace/Defense (XAR)",  "suppress_qqq": True},
+    "QTUM":  {"primary": "QQQ",     "label": "Nasdaq 100 (QQQ)",         "suppress_spy": True},
+    "VOO":   {"primary": "SPY",     "label": "S&P 500 (SPY)",            "suppress_qqq": True},
+    "NOW":   {"primary": "IGV",     "label": "Software Sector (IGV)"},
+    "CGDV":  {"primary": "SCHD",    "label": "Dividend Value (SCHD)",    "suppress_qqq": True},
+    "SETM":  {"primary": "LIT",     "label": "Lithium/Battery (LIT)",    "suppress_spy": True,  "suppress_qqq": True},
+    "WSML":  {"primary": "IWM",     "label": "Global Small Cap (IWM)",   "suppress_qqq": True},
 }
 
 DRIVER_ICONS: dict[str, str] = {
@@ -74,6 +92,12 @@ class MacroContext:
     qqq_change_pct: float
     sector_etf: Optional[str]
     sector_etf_change_pct: Optional[float]
+    # Per-holding primary benchmark (overrides SPY/QQQ when relevant)
+    primary_benchmark: Optional[str] = None
+    primary_benchmark_label: Optional[str] = None
+    primary_benchmark_chg: Optional[float] = None
+    suppress_spy: bool = False
+    suppress_qqq: bool = False
 
 
 @dataclass
@@ -115,6 +139,21 @@ def get_benchmark_data() -> dict[str, float]:
         "SPY": _day_change_pct("SPY"),
         "QQQ": _day_change_pct("QQQ"),
     }
+
+
+def _primary_benchmark_chg(ticker: str, cache: dict[str, float]) -> tuple[Optional[str], Optional[str], Optional[float]]:
+    """
+    Return (benchmark_ticker, label, change_pct) for a ticker's primary benchmark.
+    Uses cache to avoid redundant API calls across holdings.
+    """
+    cfg = _TICKER_BENCHMARKS.get(ticker)
+    if not cfg:
+        return None, None, None
+    bm = cfg["primary"]
+    label = cfg["label"]
+    if bm not in cache:
+        cache[bm] = _day_change_pct(bm)
+    return bm, label, cache[bm]
 
 
 def _sector_etf_change(sector: str) -> tuple[Optional[str], Optional[float]]:
@@ -220,12 +259,16 @@ def _attribute(
 
 
 def explain_move(
-    stock_data: dict, shared_benchmarks: Optional[dict] = None
+    stock_data: dict,
+    shared_benchmarks: Optional[dict] = None,
+    _benchmark_cache: Optional[dict] = None,
 ) -> HoldingMoveSummary:
     """
     Explain why this holding moved today.
-    Pass shared_benchmarks={SPY: pct, QQQ: pct} from get_benchmark_data() when
-    processing multiple holdings to avoid redundant API calls.
+
+    Pass shared_benchmarks={SPY: pct, QQQ: pct} from get_benchmark_data() to
+    avoid refetching those across multiple holdings.  _benchmark_cache is a
+    mutable dict shared across calls to cache per-ticker primary benchmarks.
     """
     ticker = str(stock_data.get("ticker", "UNKNOWN")).upper()
     day_chg_pct = float(stock_data.get("day_change_pct") or 0)
@@ -238,6 +281,19 @@ def explain_move(
     spy_chg = float(bm.get("SPY", 0))
     qqq_chg = float(bm.get("QQQ", 0))
 
+    # Per-holding benchmark config
+    cfg = _TICKER_BENCHMARKS.get(ticker, {})
+    suppress_spy = bool(cfg.get("suppress_spy", False))
+    suppress_qqq = bool(cfg.get("suppress_qqq", False))
+
+    # Fetch the primary benchmark for this holding (may be BTC, EEM, XAR, etc.)
+    cache = _benchmark_cache if _benchmark_cache is not None else {}
+    prim_bm, prim_label, prim_chg = _primary_benchmark_chg(ticker, cache)
+    # Promote primary benchmark into the shared bm dict so callers can cache it
+    if prim_bm and prim_bm not in bm:
+        bm[prim_bm] = prim_chg or 0.0
+
+    # Sector ETF for individual stocks only
     sector_etf, sector_chg = (None, None) if is_etf else _sector_etf_change(sector)
 
     macro = MacroContext(
@@ -245,9 +301,13 @@ def explain_move(
         qqq_change_pct=qqq_chg,
         sector_etf=sector_etf,
         sector_etf_change_pct=sector_chg,
+        primary_benchmark=prim_bm,
+        primary_benchmark_label=prim_label,
+        primary_benchmark_chg=prim_chg,
+        suppress_spy=suppress_spy,
+        suppress_qqq=suppress_qqq,
     )
 
-    # Volume ratio comes from pre-fetched stock_data — no extra API call needed
     vol = float(stock_data.get("volume") or 0)
     avg_vol = float(stock_data.get("average_volume") or 0)
     vol_ratio = round(vol / avg_vol, 2) if vol > 0 and avg_vol > 0 else None
@@ -257,85 +317,230 @@ def explain_move(
     near_earnings = False
     earnings_date_str: Optional[str] = None
 
-    if not is_etf:
+    # Fetch news for individual stocks and thematic/sector ETFs (not broad-market)
+    fetch_news = (not is_etf) or ticker in ("ITA", "QTUM", "SETM", "IBIT")
+    if fetch_news:
         try:
             yf_stock = yf.Ticker(ticker)
             news = _extract_news(yf_stock)
-            near_earnings, earnings_date_str = _earnings_near(yf_stock)
+            if not is_etf:
+                near_earnings, earnings_date_str = _earnings_near(yf_stock)
         except Exception as e:
             logger.debug("Extra data fetch failed for %s: %s", ticker, e)
 
     has_news = len(news) > 0
     drivers: list[MoveDriver] = []
+    attribution_type = "unclear"
+    confidence = "Low"
+    explanation = ""
 
-    market_mag = "strong" if abs(spy_chg) > 1.0 else "moderate" if abs(spy_chg) > 0.3 else "weak"
-    drivers.append(MoveDriver(
-        driver_type="market",
-        description=f"Broad market (S&P 500) moved {spy_chg:+.2f}% today",
-        magnitude=market_mag,
-        icon=DRIVER_ICONS["market"],
-    ))
+    # ── Crypto ETF (IBIT) ─────────────────────────────────────────────────────
+    if is_etf and prim_bm == "BTC-USD":
+        # Pure Bitcoin ETF — all moves trace back to BTC
+        btc_chg = prim_chg or 0.0
+        btc_mag = "strong" if abs(btc_chg) > 2.0 else "moderate" if abs(btc_chg) > 0.5 else "weak"
+        drivers.append(MoveDriver(
+            driver_type="market",
+            description=f"Bitcoin moved {btc_chg:+.2f}% — IBIT tracks BTC spot price directly",
+            magnitude=btc_mag,
+            icon=DRIVER_ICONS["market"],
+        ))
+        alpha_btc = day_chg_pct - btc_chg
+        if abs(alpha_btc) < 0.3:
+            attribution_type, confidence = "market-driven", "High"
+            drivers.append(MoveDriver(
+                driver_type="etf-index",
+                description="Tracking Bitcoin spot price closely — difference reflects intraday ETF premium/discount",
+                magnitude="weak",
+                icon=DRIVER_ICONS["etf-index"],
+            ))
+        else:
+            attribution_type, confidence = "mixed", "Medium"
+            word = "outperformed" if alpha_btc > 0 else "underperformed"
+            drivers.append(MoveDriver(
+                driver_type="etf-index",
+                description=f"ETF {word} BTC by {abs(alpha_btc):.2f}% — likely premium/discount to NAV",
+                magnitude="moderate",
+                icon=DRIVER_ICONS["etf-index"],
+            ))
+        if high_vol:
+            drivers.append(MoveDriver(
+                driver_type="volume",
+                description=f"Trading volume {vol_ratio:.1f}× average — elevated ETF flows",
+                magnitude="strong",
+                icon=DRIVER_ICONS["volume"],
+            ))
+        if has_news:
+            drivers.append(MoveDriver(
+                driver_type="news",
+                description=f"{len(news)} crypto news item{'s' if len(news) > 1 else ''} — see below",
+                magnitude="moderate",
+                icon=DRIVER_ICONS["news"],
+            ))
+        direction = "rose" if btc_chg >= 0 else "fell"
+        explanation = (
+            f"Bitcoin {direction} {btc_chg:+.2f}% today, and IBIT followed ({day_chg_pct:+.2f}%). "
+            "IBIT holds physical BTC — it tracks the Bitcoin spot price directly, not the stock market. "
+            "S&P 500 and Nasdaq moves are not relevant to IBIT's daily performance."
+        )
 
-    if is_etf:
-        alpha = day_chg_pct - spy_chg
-        if abs(alpha) < 0.5:
+    # ── Broad market ETF (VOO, VT) ────────────────────────────────────────────
+    elif is_etf and prim_bm in ("SPY", "ACWI"):
+        ref_chg = prim_chg if prim_chg is not None else spy_chg
+        ref_label = prim_label or "S&P 500"
+        alpha = day_chg_pct - ref_chg
+        ref_mag = "strong" if abs(ref_chg) > 1.0 else "moderate" if abs(ref_chg) > 0.3 else "weak"
+        drivers.append(MoveDriver(
+            driver_type="market",
+            description=f"{ref_label} moved {ref_chg:+.2f}% — {ticker} tracks this index",
+            magnitude=ref_mag,
+            icon=DRIVER_ICONS["market"],
+        ))
+        if abs(alpha) < 0.3:
+            attribution_type, confidence = "market-driven", "High"
+            drivers.append(MoveDriver(
+                driver_type="etf-index",
+                description=f"Tracking the index very closely — {abs(alpha):.2f}% difference is within normal tracking error",
+                magnitude="weak",
+                icon=DRIVER_ICONS["etf-index"],
+            ))
+            explanation = (
+                f"{ticker} moved {day_chg_pct:+.2f}% today, closely tracking {ref_label} ({ref_chg:+.2f}%). "
+                "As an index fund, moves reflect the aggregate performance of its underlying holdings."
+            )
+        else:
+            attribution_type, confidence = "sector-driven", "Medium"
+            word = "outperformed" if alpha > 0 else "underperformed"
+            drivers.append(MoveDriver(
+                driver_type="etf-index",
+                description=f"{word.capitalize()} the index by {abs(alpha):.2f}% — sector composition or FX effects",
+                magnitude="moderate",
+                icon=DRIVER_ICONS["etf-index"],
+            ))
+            explanation = (
+                f"{ticker} {word} {ref_label} by {abs(alpha):.2f}% today (total: {day_chg_pct:+.2f}%). "
+                "The gap reflects differences in sector weights or, for global funds, currency movements."
+            )
+        if high_vol:
+            drivers.append(MoveDriver(
+                driver_type="volume",
+                description=f"Volume {vol_ratio:.1f}× average — possibly index rebalancing or large inflows/outflows",
+                magnitude="strong",
+                icon=DRIVER_ICONS["volume"],
+            ))
+
+    # ── Sector / thematic / international ETF ────────────────────────────────
+    elif is_etf:
+        ref_chg = prim_chg if prim_chg is not None else spy_chg
+        ref_label = prim_label or "its primary benchmark"
+        alpha_ref = day_chg_pct - ref_chg
+        alpha_spy = day_chg_pct - spy_chg
+
+        ref_mag = "strong" if abs(ref_chg) > 1.0 else "moderate" if abs(ref_chg) > 0.3 else "weak"
+        if prim_bm and prim_bm != "SPY":
+            drivers.append(MoveDriver(
+                driver_type="sector",
+                description=f"{ref_label} moved {ref_chg:+.2f}% — {ticker}'s closest benchmark",
+                magnitude=ref_mag,
+                icon=DRIVER_ICONS["sector"],
+            ))
+        else:
+            spy_mag = "strong" if abs(spy_chg) > 1.0 else "moderate" if abs(spy_chg) > 0.3 else "weak"
+            drivers.append(MoveDriver(
+                driver_type="market",
+                description=f"S&P 500 moved {spy_chg:+.2f}% today",
+                magnitude=spy_mag,
+                icon=DRIVER_ICONS["market"],
+            ))
+
+        if abs(alpha_ref) < 0.5:
             attribution_type, confidence = "market-driven", "Medium"
             drivers.append(MoveDriver(
                 driver_type="etf-index",
-                description="Closely tracking the broad market — this ETF's holdings moved with the overall market",
+                description=f"Tracking {ref_label} closely — move is benchmark-driven",
                 magnitude="moderate",
                 icon=DRIVER_ICONS["etf-index"],
             ))
         else:
             attribution_type, confidence = "sector-driven", "Medium"
-            word = "more" if alpha > 0 else "less"
+            word = "outperformed" if alpha_ref > 0 else "underperformed"
             drivers.append(MoveDriver(
                 driver_type="etf-index",
-                description=f"Moved {alpha:+.2f}% {word} than the S&P 500 — driven by its specific sector or index holdings",
+                description=f"{word.capitalize()} its benchmark by {abs(alpha_ref):.2f}% — fund-specific holdings drove the gap",
                 magnitude="moderate",
                 icon=DRIVER_ICONS["etf-index"],
             ))
 
-        if abs(qqq_chg) > 0.1:
-            qqq_mag = "moderate" if abs(qqq_chg) > 0.5 else "weak"
-            direction = "rising" if qqq_chg > 0 else "falling"
+        if not suppress_spy and abs(alpha_spy) > 0.3 and prim_bm != "SPY":
+            spy_word = "outperformed" if alpha_spy > 0 else "underperformed"
             drivers.append(MoveDriver(
                 driver_type="macro",
-                description=f"NASDAQ also moved {qqq_chg:+.2f}% — tech and growth stocks broadly {direction} today",
-                magnitude=qqq_mag,
+                description=f"{spy_word.capitalize()} S&P 500 by {abs(alpha_spy):.2f}% — theme or region diverged from broad market",
+                magnitude="moderate",
                 icon=DRIVER_ICONS["macro"],
             ))
 
         if high_vol:
             drivers.append(MoveDriver(
                 driver_type="volume",
-                description=f"Volume is {vol_ratio:.1f}× the average — elevated activity, possibly from index rebalancing or sector flows",
+                description=f"Volume {vol_ratio:.1f}× average — elevated sector or thematic flows",
                 magnitude="strong",
                 icon=DRIVER_ICONS["volume"],
             ))
+        if has_news:
+            drivers.append(MoveDriver(
+                driver_type="news",
+                description=f"{len(news)} relevant news items — see below",
+                magnitude="moderate",
+                icon=DRIVER_ICONS["news"],
+            ))
 
-        alpha = day_chg_pct - spy_chg
-        if abs(alpha) < 0.3:
-            explanation = (
-                f"{ticker} moved {day_chg_pct:+.2f}% today, closely tracking the broad market "
-                f"({spy_chg:+.2f}%). As an ETF, its price reflects the collective movement of its underlying holdings."
-            )
+        if ref_label and ref_chg is not None:
+            if abs(alpha_ref) < 0.3:
+                explanation = (
+                    f"{ticker} moved {day_chg_pct:+.2f}% today, closely tracking {ref_label} ({ref_chg:+.2f}%). "
+                    f"The move is driven by the fund's underlying holdings, not broad S&P 500 moves."
+                )
+            else:
+                word = "outperformed" if alpha_ref > 0 else "underperformed"
+                explanation = (
+                    f"{ticker} {word} {ref_label} by {abs(alpha_ref):.2f}% today (total: {day_chg_pct:+.2f}%). "
+                    f"{ref_label} itself moved {ref_chg:+.2f}%. The gap reflects the fund's specific holdings or country/FX effects."
+                )
         else:
-            d = "outperformed" if alpha > 0 else "underperformed"
             explanation = (
-                f"{ticker} {d} the broad market by {abs(alpha):.1f}% today (total: {day_chg_pct:+.2f}%). "
-                "This is driven by the specific sector or securities this ETF holds, not any single company event."
+                f"{ticker} moved {day_chg_pct:+.2f}% today, driven by the performance of its underlying holdings."
             )
+
+    # ── Individual stock ──────────────────────────────────────────────────────
     else:
         attribution_type, confidence = _attribute(
             day_chg_pct, spy_chg, sector_chg, has_news, high_vol, near_earnings
         )
 
+        # Primary benchmark (e.g. IGV for NOW software stock)
+        if prim_bm and prim_chg is not None and prim_bm not in ("SPY", "QQQ"):
+            prim_mag = "strong" if abs(prim_chg) > 1.0 else "moderate" if abs(prim_chg) > 0.3 else "weak"
+            drivers.append(MoveDriver(
+                driver_type="sector",
+                description=f"{prim_label} moved {prim_chg:+.2f}% — most comparable sector benchmark",
+                magnitude=prim_mag,
+                icon=DRIVER_ICONS["sector"],
+            ))
+        elif not suppress_spy:
+            spy_mag = "strong" if abs(spy_chg) > 1.0 else "moderate" if abs(spy_chg) > 0.3 else "weak"
+            drivers.append(MoveDriver(
+                driver_type="market",
+                description=f"S&P 500 moved {spy_chg:+.2f}% today",
+                magnitude=spy_mag,
+                icon=DRIVER_ICONS["market"],
+            ))
+
         if sector_chg is not None:
             sect_mag = "strong" if abs(sector_chg) > 1.0 else "moderate" if abs(sector_chg) > 0.3 else "weak"
             drivers.append(MoveDriver(
                 driver_type="sector",
-                description=f"Its sector ETF ({sector_etf}) moved {sector_chg:+.2f}% today",
+                description=f"Sector ETF ({sector_etf}) moved {sector_chg:+.2f}% today",
                 magnitude=sect_mag,
                 icon=DRIVER_ICONS["sector"],
             ))
@@ -343,7 +548,7 @@ def explain_move(
         if high_vol:
             drivers.append(MoveDriver(
                 driver_type="volume",
-                description=f"Volume is {vol_ratio:.1f}× the 30-day average — unusually high trading activity today",
+                description=f"Volume {vol_ratio:.1f}× the 30-day average — unusually high trading activity",
                 magnitude="strong",
                 icon=DRIVER_ICONS["volume"],
             ))
@@ -352,7 +557,7 @@ def explain_move(
             date_label = f" (around {earnings_date_str})" if earnings_date_str else ""
             drivers.append(MoveDriver(
                 driver_type="earnings",
-                description=f"Earnings report{date_label} — stock prices often swing before and after earnings announcements",
+                description=f"Earnings report{date_label} — prices often swing around earnings",
                 magnitude="strong",
                 icon=DRIVER_ICONS["earnings"],
             ))
@@ -360,46 +565,52 @@ def explain_move(
         if has_news:
             drivers.append(MoveDriver(
                 driver_type="news",
-                description=f"{len(news)} recent news article{'s' if len(news) > 1 else ''} found — see sources below",
+                description=f"{len(news)} recent news article{'s' if len(news) > 1 else ''} — see below",
                 magnitude="moderate",
                 icon=DRIVER_ICONS["news"],
             ))
 
-        alpha = day_chg_pct - spy_chg
+        # Reference benchmark for alpha calculation
+        ref_chg_for_alpha = prim_chg if (prim_chg is not None and prim_bm not in ("SPY", "QQQ")) else spy_chg
+        ref_name_for_alpha = prim_label if (prim_chg is not None and prim_bm not in ("SPY", "QQQ")) else "S&P 500"
+        alpha = day_chg_pct - ref_chg_for_alpha
+
         if attribution_type == "market-driven":
             explanation = (
-                f"{ticker} moved {day_chg_pct:+.2f}% today, closely tracking the broad market "
-                f"(S&P 500: {spy_chg:+.2f}%). No clear company-specific catalyst — this looks like normal market movement."
+                f"{ticker} moved {day_chg_pct:+.2f}% today, tracking the broad market "
+                f"(S&P 500: {spy_chg:+.2f}%). No clear company-specific catalyst found."
             )
         elif attribution_type == "sector-driven":
-            direction = "rising" if (sector_chg or 0) > 0 else "falling"
+            ref_used = sector_etf or ref_name_for_alpha
+            ref_val = sector_chg if sector_chg is not None else ref_chg_for_alpha
+            direction = "rising" if (ref_val or 0) > 0 else "falling"
             explanation = (
-                f"{ticker} moved {day_chg_pct:+.2f}% today alongside its sector ({sector_etf}: {sector_chg:+.2f}%). "
-                f"The whole sector is {direction} today, not just this stock."
+                f"{ticker} moved {day_chg_pct:+.2f}% alongside its sector ({ref_used}: {ref_val:+.2f}%). "
+                f"The whole sector is {direction} today."
             )
         elif attribution_type == "earnings-driven":
             date_label = f" around {earnings_date_str}" if earnings_date_str else ""
             explanation = (
                 f"{ticker} moved {day_chg_pct:+.2f}% with earnings{date_label}. "
-                "Stock prices often swing significantly before and after companies report quarterly results."
+                "Stocks often swing significantly before and after quarterly earnings."
             )
         elif attribution_type == "company-specific":
             word = "more" if alpha > 0 else "less"
             if has_news:
                 explanation = (
-                    f"{ticker} moved {day_chg_pct:+.2f}% today — {abs(alpha):.1f}% {word} than the broad market. "
-                    "Recent news may explain the move — see the sources below."
+                    f"{ticker} moved {day_chg_pct:+.2f}% today — {abs(alpha):.1f}% {word} than {ref_name_for_alpha}. "
+                    "Recent news appears to be the primary catalyst — see below."
                 )
             else:
                 explanation = (
-                    f"{ticker} moved {day_chg_pct:+.2f}% today — {abs(alpha):.1f}% {word} than the S&P 500. "
-                    "No obvious news catalyst found. This could be institutional trading or a delayed reaction to earlier news."
+                    f"{ticker} moved {day_chg_pct:+.2f}% today — {abs(alpha):.1f}% {word} than {ref_name_for_alpha}. "
+                    "No obvious public catalyst found — could be institutional activity or a delayed reaction."
                 )
         else:
             explanation = (
                 f"{ticker} moved {day_chg_pct:+.2f}% today. Multiple factors may be at play — "
-                f"market conditions ({spy_chg:+.2f}%)"
-                + (f", sector trends ({sector_chg:+.2f}%)" if sector_chg is not None else "")
+                f"{ref_name_for_alpha} ({ref_chg_for_alpha:+.2f}%)"
+                + (f", sector ({sector_chg:+.2f}%)" if sector_chg is not None else "")
                 + ", and possibly company-specific activity."
             )
 

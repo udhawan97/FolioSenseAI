@@ -583,6 +583,252 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
     white-space: nowrap;
 }
 
+/* ── Holding Intelligence — two-column expanded row ─────────────────────── */
+
+/* 2-col grid inside the expand row (stacks on mobile) */
+.intel-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+    background: linear-gradient(180deg, rgba(100,210,255,0.03) 0%, transparent 100%);
+    border-bottom: 1px solid var(--hairline-soft);
+}
+@media (max-width: 768px) {
+    .intel-grid { grid-template-columns: 1fr; }
+}
+
+.intel-coverage {
+    padding: 0.75rem 1rem 0.75rem 2.55rem;
+    border-right: 1px solid var(--hairline-soft);
+}
+@media (max-width: 768px) {
+    .intel-coverage { border-right: none; border-bottom: 1px solid var(--hairline-soft); }
+}
+.intel-move {
+    padding: 0.75rem 1rem 0.75rem 1.2rem;
+}
+
+/* Section labels inside the grid */
+.intel-label {
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--text-tertiary);
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+/* Coverage-type badge */
+.coverage-type-badge {
+    display: inline-block;
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 0.15rem 0.55rem;
+    border-radius: 20px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    margin-bottom: 0.38rem;
+}
+.coverage-type-badge.equity            { background: rgba(255,159,10,.15);  color: #ff9f0a; }
+.coverage-type-badge.etf-broad         { background: rgba(10,132,255,.15);  color: #0a84ff; }
+.coverage-type-badge.etf-sector        { background: rgba(94,92,230,.15);   color: #5e5ce6; }
+.coverage-type-badge.etf-thematic      { background: rgba(191,90,242,.15);  color: #bf5af2; }
+.coverage-type-badge.etf-international { background: rgba(100,210,255,.15); color: #64d2ff; }
+.coverage-type-badge.etf-crypto        { background: rgba(255,214,10,.15);  color: #e6c200; }
+
+/* Strategy text */
+.intel-strategy {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    line-height: 1.45;
+    margin-bottom: 0.55rem;
+}
+
+/* Sector bars */
+.sector-bars { margin-bottom: 0.5rem; }
+.sector-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.18rem;
+}
+.sector-bar-label {
+    font-size: 0.67rem;
+    color: var(--text-secondary);
+    width: 100px;
+    flex-shrink: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.sector-bar-track {
+    flex: 1;
+    height: 4px;
+    background: rgba(255,255,255,0.07);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.sector-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, var(--accent-blue), var(--accent-cyan));
+    transition: width 0.6s var(--ease);
+}
+.sector-bar-pct {
+    font-size: 0.63rem;
+    color: var(--text-tertiary);
+    width: 36px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+    flex-shrink: 0;
+}
+
+/* Country chips */
+.country-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.28rem;
+    margin-bottom: 0.5rem;
+}
+.country-chip {
+    font-size: 0.61rem;
+    font-weight: 600;
+    padding: 0.1rem 0.42rem;
+    border-radius: 20px;
+    background: rgba(255,255,255,.06);
+    color: var(--text-secondary);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+.country-chip.primary { background: rgba(100,210,255,.12); color: var(--accent-cyan); }
+
+/* Top holdings mini list */
+.top-holdings-list { margin-bottom: 0.5rem; }
+.holding-mini-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.1rem 0;
+}
+.holding-mini-ticker {
+    font-size: 0.67rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    width: 54px;
+    flex-shrink: 0;
+}
+.holding-mini-name {
+    font-size: 0.64rem;
+    color: var(--text-tertiary);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.holding-mini-bar-track {
+    width: 44px;
+    height: 3px;
+    background: rgba(255,255,255,0.07);
+    border-radius: 3px;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+.holding-mini-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: var(--accent-green);
+    opacity: 0.7;
+}
+.holding-mini-pct {
+    font-size: 0.63rem;
+    color: var(--text-tertiary);
+    width: 34px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+}
+
+/* Peer chips */
+.peer-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.28rem;
+    margin-bottom: 0.4rem;
+}
+.peer-chip {
+    font-size: 0.61rem;
+    font-weight: 700;
+    padding: 0.1rem 0.42rem;
+    border-radius: 20px;
+    background: rgba(255,255,255,.05);
+    color: var(--text-tertiary);
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+}
+
+/* Key drivers list */
+.key-drivers { margin-top: 0.35rem; }
+.key-driver-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.4rem;
+    padding: 0.1rem 0;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    line-height: 1.38;
+}
+.key-driver-dot {
+    flex-shrink: 0;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--accent-blue);
+    opacity: 0.6;
+    margin-top: 0.48em;
+}
+
+/* Expense ratio tag */
+.expense-tag {
+    display: inline-block;
+    font-size: 0.6rem;
+    font-weight: 600;
+    padding: 0.08rem 0.35rem;
+    border-radius: 10px;
+    background: rgba(255,255,255,.05);
+    color: var(--text-tertiary);
+    margin-right: 0.28rem;
+    letter-spacing: 0.02em;
+}
+
+/* Not-available state */
+.intel-na {
+    font-size: 0.68rem;
+    color: var(--text-tertiary);
+    font-style: italic;
+    padding: 0.2rem 0;
+}
+
+/* Data quality indicator */
+.data-quality-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    font-size: 0.57rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    margin-top: 0.3rem;
+}
+.data-quality-tag.live   { color: var(--accent-green); }
+.data-quality-tag.static { color: var(--text-tertiary); }
+.data-quality-tag.partial { color: #ff9f0a; }
+
 /* ── Compact attribution badge inside the holdings table "Today" cell ────── */
 .move-badge {
     display: inline-block;

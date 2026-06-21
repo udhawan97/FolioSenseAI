@@ -74,15 +74,11 @@ let latestTrendData = {};    // Cached sparkline data, so the Holdings table re-
 let allocSortDir = "desc";   // Allocation sort direction: "desc" | "asc"
 let allocationTotal = 0;     // Portfolio total, drawn in the doughnut's center
 
-// AI summary state
-let cachedSummaries = {};    // ticker → summary text
-let summariesLoaded = false;
-let summaryLoading = false;
-
-// Move explainer state
-let cachedExplanations = {}; // ticker → explanation object
-let explanationsLoaded = false;
-let explainerLoading = false;
+// Holding Intelligence state (covers "What it covers" + "Why it moved")
+let cachedIntelligence = {};   // ticker → intelligence object (coverage data)
+let cachedExplanations = {};   // ticker → explanation object (move data)
+let intelligenceLoaded = false;
+let intelligenceLoading = false;
 
 // Single source of truth for allocation ordering, shared by both tables and the chart.
 function sortedByAllocation(holdings) {
@@ -434,7 +430,7 @@ function updateHoldingsTable(holdings, trendData = {}) {
         row.dataset.ticker = h.ticker;
         const up = h.day_change_pct >= 0;
         const exp = cachedExplanations[h.ticker];
-        const badgeHtml = exp
+        const badgeHtml = (intelligenceLoaded && exp)
             ? `<div class="move-badge ${exp.attribution_type}" title="${exp.confidence} confidence">${ATTRIBUTION_SHORT[exp.attribution_type] || "?"}</div>`
             : `<div class="move-badge" id="move-badge-${h.ticker}"></div>`;
 
@@ -466,8 +462,7 @@ function updateHoldingsTable(holdings, trendData = {}) {
         drawTrend(canvas, trendData[h.ticker]);
     });
 
-    const hasContent = summariesLoaded || summaryLoading || explanationsLoaded || explainerLoading
-        || Object.keys(cachedSummaries).length > 0 || Object.keys(cachedExplanations).length > 0;
+    const hasContent = intelligenceLoaded || intelligenceLoading || Object.keys(cachedIntelligence).length > 0;
     if (hasContent) {
         injectSummaryRows(tbody);
     }
@@ -523,13 +518,26 @@ function renderSummaryInner(inner, text, isLoading) {
 
 // ── Move Explainer UI ──────────────────────────────────────────────────────
 
+function renderCoverageShimmer(section) {
+    section.innerHTML = `
+        <div class="intel-coverage">
+            <div class="intel-label"><i class="bi bi-layers"></i> What it covers</div>
+            <div class="shimmer-line" style="width:80px;height:18px;border-radius:20px;margin-bottom:.5rem"></div>
+            <div class="shimmer-line" style="width:95%;height:10px;margin-bottom:.25rem"></div>
+            <div class="shimmer-line" style="width:78%;height:10px;margin-bottom:.6rem"></div>
+            ${[80, 60, 45, 35, 25].map(w => `
+                <div class="sector-bar-row">
+                    <div class="shimmer-line" style="width:72px;height:9px;flex-shrink:0"></div>
+                    <div class="shimmer-line" style="width:${w}%;height:4px"></div>
+                    <div class="shimmer-line" style="width:26px;height:9px;flex-shrink:0"></div>
+                </div>`).join("")}
+        </div>`;
+}
+
 function renderMoveExplainerShimmer(section) {
     section.innerHTML = `
-        <div class="move-explainer">
-            <div class="expand-section-label">
-                <i class="bi bi-lightning-charge-fill" style="color:var(--accent-yellow)"></i>
-                Why it moved today
-            </div>
+        <div class="intel-move">
+            <div class="intel-label"><i class="bi bi-lightning-charge-fill" style="color:var(--accent-yellow)"></i> Why it moved</div>
             <div class="move-explainer-header" style="margin-bottom:.5rem">
                 <div class="shimmer-line" style="width:110px;height:20px;border-radius:10px"></div>
                 <div class="shimmer-line" style="width:80px;height:16px;border-radius:10px"></div>
@@ -550,24 +558,36 @@ function renderMoveExplainerShimmer(section) {
 function renderMoveExplainer(section, data) {
     if (!data) { section.innerHTML = ""; return; }
 
-    const attrType    = data.attribution_type || "unclear";
-    const confidence  = data.confidence || "Low";
-    const drivers     = data.drivers || [];
-    const news        = data.news || [];
-    const macro       = data.macro_context;
-    const isPos       = (data.day_change_pct || 0) >= 0;
-    const pctColor    = isPos ? "var(--accent-green)" : "var(--accent-red)";
+    const attrType   = data.attribution_type || "unclear";
+    const confidence = data.confidence || "Low";
+    const drivers    = data.drivers || [];
+    const news       = data.news || [];
+    const macro      = data.macro_context;
+    const isPos      = (data.day_change_pct || 0) >= 0;
+    const pctColor   = isPos ? "var(--accent-green)" : "var(--accent-red)";
 
-    // Macro context pills
+    // Build context pills — use holding-specific benchmark first, then SPY/QQQ if relevant
     const macroPills = [];
     if (macro) {
-        macroPills.push({ label: `SPY ${formatPct(macro.spy_change_pct)}`, pos: macro.spy_change_pct >= 0 });
-        macroPills.push({ label: `QQQ ${formatPct(macro.qqq_change_pct)}`, pos: macro.qqq_change_pct >= 0 });
-        if (macro.sector_etf && macro.sector_etf_change_pct !== null) {
+        // Primary benchmark (BTC for IBIT, EEM for IEMG, XAR for ITA, etc.)
+        if (macro.primary_benchmark && macro.primary_benchmark_chg !== null && macro.primary_benchmark_chg !== undefined) {
+            const label = macro.primary_benchmark_label || macro.primary_benchmark;
+            macroPills.push({ label: `${label} ${formatPct(macro.primary_benchmark_chg)}`, pos: macro.primary_benchmark_chg >= 0 });
+        }
+        // Sector ETF (individual stocks only)
+        if (macro.sector_etf && macro.sector_etf_change_pct !== null && macro.sector_etf_change_pct !== undefined) {
             macroPills.push({
                 label: `${macro.sector_etf} ${formatPct(macro.sector_etf_change_pct)}`,
                 pos: macro.sector_etf_change_pct >= 0,
             });
+        }
+        // SPY only when relevant (not suppressed)
+        if (!macro.suppress_spy && macro.primary_benchmark !== "SPY") {
+            macroPills.push({ label: `SPY ${formatPct(macro.spy_change_pct)}`, pos: macro.spy_change_pct >= 0 });
+        }
+        // QQQ only when relevant (not suppressed, not primary)
+        if (!macro.suppress_qqq && macro.primary_benchmark !== "QQQ" && Math.abs(macro.qqq_change_pct) > 0.05) {
+            macroPills.push({ label: `QQQ ${formatPct(macro.qqq_change_pct)}`, pos: macro.qqq_change_pct >= 0 });
         }
     }
     if (data.volume_vs_avg !== null && data.volume_vs_avg !== undefined) {
@@ -581,16 +601,14 @@ function renderMoveExplainer(section, data) {
         </div>`).join("");
 
     const macroPillsHtml = macroPills.length
-        ? `<div class="macro-pills">
-            ${macroPills.map(p =>
-                `<span class="macro-pill ${p.pos ? "positive" : "negative"}">${escapeHtml(p.label)}</span>`
-            ).join("")}
-           </div>`
+        ? `<div class="macro-pills">${macroPills.map(p =>
+            `<span class="macro-pill ${p.pos ? "positive" : "negative"}">${escapeHtml(p.label)}</span>`
+          ).join("")}</div>`
         : "";
 
     const newsHtml = news.length
         ? `<div class="evidence-section">
-            <div class="expand-section-label" style="margin-top:.1rem">
+            <div class="expand-section-label" style="margin-top:.3rem">
                 <i class="bi bi-newspaper"></i> Recent News
             </div>
             ${news.map(n => `
@@ -607,10 +625,10 @@ function renderMoveExplainer(section, data) {
         : "";
 
     section.innerHTML = `
-        <div class="move-explainer">
-            <div class="expand-section-label">
+        <div class="intel-move">
+            <div class="intel-label">
                 <i class="bi bi-lightning-charge-fill" style="color:var(--accent-yellow)"></i>
-                Why it moved today
+                Why it moved
             </div>
             <div class="move-explainer-header">
                 <span class="attribution-badge ${escapeHtml(attrType)}">${escapeHtml(ATTRIBUTION_LABELS[attrType] || attrType)}</span>
@@ -627,6 +645,97 @@ function renderMoveExplainer(section, data) {
         </div>`;
 }
 
+// ── Holding Coverage ("What it covers") ──────────────────────────────────────
+
+function renderHoldingCoverage(section, data) {
+    if (!data) {
+        section.innerHTML = `<div class="intel-coverage"><span class="intel-na">Coverage data not available</span></div>`;
+        return;
+    }
+
+    const coverageClass = (data.coverage_type || "equity").replace(/[^a-z-]/g, "");
+
+    // Sector bars (top 5)
+    const sectorBarsHtml = data.sectors && data.sectors.length
+        ? `<div class="intel-label" style="margin-top:.45rem"><i class="bi bi-diagram-3"></i> Sectors</div>
+           <div class="sector-bars">
+             ${data.sectors.slice(0, 5).map(s => `
+               <div class="sector-bar-row">
+                 <div class="sector-bar-label" title="${escapeHtml(s.name)}">${escapeHtml(s.name)}</div>
+                 <div class="sector-bar-track"><div class="sector-bar-fill" style="width:${Math.min(s.weight, 100)}%"></div></div>
+                 <div class="sector-bar-pct">${s.weight.toFixed(0)}%</div>
+               </div>`).join("")}
+           </div>`
+        : "";
+
+    // Country chips (top 6)
+    const countryChipsHtml = data.countries && data.countries.length
+        ? `<div class="intel-label"><i class="bi bi-globe2"></i> Countries / Regions</div>
+           <div class="country-chips">
+             ${data.countries.slice(0, 6).map((c, i) =>
+               `<span class="country-chip${i === 0 ? " primary" : ""}">${escapeHtml(c.name)} ${c.weight.toFixed(0)}%</span>`
+             ).join("")}
+           </div>`
+        : "";
+
+    // Top holdings mini list (for individual stock: show peers instead)
+    let topHoldingsHtml = "";
+    if (data.top_holdings && data.top_holdings.length && data.coverage_type !== "equity") {
+        const maxBarWeight = Math.max(...data.top_holdings.map(h => h.weight), 1);
+        topHoldingsHtml = `
+            <div class="intel-label"><i class="bi bi-list-task"></i> Top Holdings</div>
+            <div class="top-holdings-list">
+              ${data.top_holdings.slice(0, 5).map(h => `
+                <div class="holding-mini-row">
+                  <span class="holding-mini-ticker">${escapeHtml(h.ticker)}</span>
+                  <span class="holding-mini-name">${escapeHtml(h.name)}</span>
+                  <div class="holding-mini-bar-track">
+                    <div class="holding-mini-bar-fill" style="width:${(h.weight / maxBarWeight * 100).toFixed(0)}%"></div>
+                  </div>
+                  <span class="holding-mini-pct">${h.weight.toFixed(1)}%</span>
+                </div>`).join("")}
+            </div>`;
+    } else if (data.coverage_type === "equity" && data.peer_tickers && data.peer_tickers.length) {
+        topHoldingsHtml = `
+            <div class="intel-label"><i class="bi bi-people"></i> Peer Group</div>
+            <div class="peer-chips">
+              ${data.peer_tickers.slice(0, 6).map(p => `<span class="peer-chip">${escapeHtml(p)}</span>`).join("")}
+            </div>`;
+    }
+
+    // Key drivers
+    const keyDriversHtml = data.key_drivers && data.key_drivers.length
+        ? `<div class="intel-label" style="margin-top:.3rem"><i class="bi bi-bullseye"></i> Key Drivers</div>
+           <div class="key-drivers">
+             ${data.key_drivers.slice(0, 4).map(d =>
+               `<div class="key-driver-item"><span class="key-driver-dot"></span><span>${escapeHtml(d)}</span></div>`
+             ).join("")}
+           </div>`
+        : "";
+
+    // Metadata footer
+    const expRatio = data.expense_ratio_bps != null
+        ? `<span class="expense-tag">${data.expense_ratio_bps}bps/yr</span>` : "";
+    const dataQual = data.data_quality
+        ? `<span class="data-quality-tag ${escapeHtml(data.data_quality)}">
+             <i class="bi bi-${data.data_quality === 'live' ? 'circle-fill' : 'database'}"></i>
+             ${data.data_quality === 'live' ? 'Live data' : data.data_quality === 'partial' ? 'Partial live' : 'Reference data'}
+           </span>` : "";
+
+    section.innerHTML = `
+        <div class="intel-coverage">
+            <div class="intel-label"><i class="bi bi-layers"></i> What it covers</div>
+            <span class="coverage-type-badge ${escapeHtml(coverageClass)}">${escapeHtml(data.coverage_label || data.coverage_type)}</span>
+            ${data.theme ? `<div style="font-size:.65rem;color:var(--accent-cyan);opacity:.8;margin-bottom:.3rem;font-weight:600">${escapeHtml(data.theme)}</div>` : ""}
+            <div class="intel-strategy">${escapeHtml(data.strategy || "")}</div>
+            ${sectorBarsHtml}
+            ${countryChipsHtml}
+            ${topHoldingsHtml}
+            ${keyDriversHtml}
+            <div style="margin-top:.45rem">${expRatio}${dataQual}</div>
+        </div>`;
+}
+
 function injectSummaryRows(tbody) {
     Array.from(tbody.querySelectorAll("tr[data-ticker]")).forEach(mainRow => {
         const ticker = mainRow.dataset.ticker;
@@ -638,42 +747,29 @@ function injectSummaryRows(tbody) {
             expandRow.className = "summary-expand-row";
             const td = document.createElement("td");
             td.colSpan = 7;
-            td.innerHTML = `
-                <div class="summary-body">
-                    <div class="move-explainer-section"></div>
-                    <div class="summary-inner"></div>
-                </div>`;
+            td.innerHTML = `<div class="summary-body"><div class="intel-grid">
+                <div class="intel-coverage-section"></div>
+                <div class="intel-move-section"></div>
+            </div></div>`;
             expandRow.appendChild(td);
             mainRow.after(expandRow);
-        } else {
-            // Ensure the new section exists in rows created before this feature was added
-            if (!expandRow.querySelector(".move-explainer-section")) {
-                const body = expandRow.querySelector(".summary-body");
-                const explainerSection = document.createElement("div");
-                explainerSection.className = "move-explainer-section";
-                body.insertBefore(explainerSection, body.firstChild);
-            }
         }
 
-        const body             = expandRow.querySelector(".summary-body");
-        const explainerSection = expandRow.querySelector(".move-explainer-section");
-        const inner            = expandRow.querySelector(".summary-inner");
+        const body          = expandRow.querySelector(".summary-body");
+        const coverageSection = expandRow.querySelector(".intel-coverage-section");
+        const moveSection   = expandRow.querySelector(".intel-move-section");
 
-        // Render the move explainer section
-        if (explanationsLoaded && cachedExplanations[ticker]) {
-            renderMoveExplainer(explainerSection, cachedExplanations[ticker]);
-        } else if (explainerLoading) {
-            renderMoveExplainerShimmer(explainerSection);
-        } else {
-            explainerSection.innerHTML = "";
+        if (!coverageSection || !moveSection) return;
+
+        if (intelligenceLoading && !intelligenceLoaded) {
+            renderCoverageShimmer(coverageSection);
+            renderMoveExplainerShimmer(moveSection);
+        } else if (intelligenceLoaded) {
+            renderHoldingCoverage(coverageSection, cachedIntelligence[ticker]);
+            renderMoveExplainer(moveSection, cachedExplanations[ticker]);
         }
 
-        // Render the AI summary section
-        const showSummaryShimmer = summaryLoading && !summariesLoaded;
-        renderSummaryInner(inner, cachedSummaries[ticker], showSummaryShimmer);
-
-        // Auto-open when content is loading or loaded
-        if (explanationsLoaded || summariesLoaded || explainerLoading || summaryLoading) {
+        if (intelligenceLoaded || intelligenceLoading) {
             body.classList.add("open");
             mainRow.classList.add("summary-open");
         }
@@ -787,13 +883,14 @@ async function initDashboard() {
 }
 
 
-// ── AI Summaries ────────────────────────────────────────────────────────────
+// ── Holding Intelligence ────────────────────────────────────────────────────
 
-async function generateAllSummaries() {
+async function loadHoldingIntelligence() {
     const tbody = document.getElementById("holdings-table");
-    const btn = document.querySelector('[onclick="generateAllSummaries()"]');
+    const btn = document.querySelector('[onclick="loadHoldingIntelligence()"]');
 
-    if (summariesLoaded) {
+    if (intelligenceLoaded) {
+        // Toggle expand rows open/closed on repeated click
         const allBodies = tbody.querySelectorAll(".summary-body");
         const anyOpen = Array.from(allBodies).some(b => b.classList.contains("open"));
         allBodies.forEach(b => b.classList.toggle("open", !anyOpen));
@@ -801,72 +898,49 @@ async function generateAllSummaries() {
         return;
     }
 
-    summaryLoading = true;
+    intelligenceLoading = true;
     injectSummaryRows(tbody);
-    if (btn) { btn.innerHTML = '<div class="spinner-border spinner-border-sm me-1" style="color:#64d2ff"></div> Thinking…'; btn.disabled = true; }
+    if (btn) {
+        btn.innerHTML = '<div class="spinner-border spinner-border-sm me-1" style="color:#64d2ff"></div> Analyzing…';
+        btn.disabled = true;
+    }
 
     try {
-        const res = await fetch("/api/ai/summaries/all");
-        const data = await res.json();
-        Object.entries(data.summaries).forEach(([ticker, info]) => {
-            cachedSummaries[ticker] = info.summary;
-        });
-        summariesLoaded = true;
+        // Fetch both data sources in parallel
+        const [intelRes, moveRes] = await Promise.all([
+            fetch("/api/ai/intelligence/all/batch"),
+            fetch("/api/ai/move-explanations/all"),
+        ]);
+
+        if (intelRes.ok) {
+            const intelData = await intelRes.json();
+            Object.entries(intelData.intelligence || {}).forEach(([ticker, intel]) => {
+                cachedIntelligence[ticker] = intel;
+            });
+        }
+
+        if (moveRes.ok) {
+            const moveData = await moveRes.json();
+            Object.entries(moveData.explanations || {}).forEach(([ticker, exp]) => {
+                cachedExplanations[ticker] = exp;
+            });
+        }
+
+        intelligenceLoaded = true;
+        intelligenceLoading = false;
+
+        // Render all expanded rows
         Array.from(tbody.querySelectorAll("tr[data-ticker]")).forEach(mainRow => {
             const ticker = mainRow.dataset.ticker;
             const expandRow = mainRow.nextElementSibling;
             if (!expandRow || !expandRow.classList.contains("summary-expand-row")) return;
-            renderSummaryInner(expandRow.querySelector(".summary-inner"), cachedSummaries[ticker], false);
-        });
-    } catch (err) {
-        summariesLoaded = true;
-        Array.from(tbody.querySelectorAll(".summary-inner")).forEach(inner => {
-            inner.innerHTML = `<span style="font-size:.75rem;color:var(--accent-red)">Could not load summary</span>`;
-        });
-    } finally {
-        summaryLoading = false;
-        if (btn) { btn.innerHTML = '<i class="bi bi-stars"></i> AI Summaries'; btn.disabled = false; }
-    }
-}
-
-
-// ── Move Explainer ──────────────────────────────────────────────────────────
-
-async function generateAllExplanations() {
-    const tbody = document.getElementById("holdings-table");
-    const btn = document.querySelector('[onclick="generateAllExplanations()"]');
-
-    if (explanationsLoaded) {
-        const allBodies = tbody.querySelectorAll(".summary-body");
-        const anyOpen = Array.from(allBodies).some(b => b.classList.contains("open"));
-        allBodies.forEach(b => b.classList.toggle("open", !anyOpen));
-        tbody.querySelectorAll("tr[data-ticker]").forEach(r => r.classList.toggle("summary-open", !anyOpen));
-        return;
-    }
-
-    explainerLoading = true;
-    injectSummaryRows(tbody);
-    if (btn) { btn.innerHTML = '<div class="spinner-border spinner-border-sm me-1" style="color:#ffd60a"></div> Analyzing…'; btn.disabled = true; }
-
-    try {
-        const res = await fetch("/api/ai/move-explanations/all");
-        const data = await res.json();
-        Object.entries(data.explanations || {}).forEach(([ticker, exp]) => {
-            cachedExplanations[ticker] = exp;
-        });
-        explanationsLoaded = true;
-        explainerLoading = false;
-
-        // Update explainer sections in expand rows
-        Array.from(tbody.querySelectorAll("tr[data-ticker]")).forEach(mainRow => {
-            const ticker = mainRow.dataset.ticker;
-            const expandRow = mainRow.nextElementSibling;
-            if (!expandRow || !expandRow.classList.contains("summary-expand-row")) return;
-            const section = expandRow.querySelector(".move-explainer-section");
-            if (section) renderMoveExplainer(section, cachedExplanations[ticker]);
+            const coverageSection = expandRow.querySelector(".intel-coverage-section");
+            const moveSection     = expandRow.querySelector(".intel-move-section");
+            if (coverageSection) renderHoldingCoverage(coverageSection, cachedIntelligence[ticker]);
+            if (moveSection)     renderMoveExplainer(moveSection, cachedExplanations[ticker]);
         });
 
-        // Populate the compact badges in the holdings table
+        // Update compact badges in the holdings table
         Object.entries(cachedExplanations).forEach(([ticker, exp]) => {
             const badge = document.getElementById(`move-badge-${ticker}`);
             if (!badge) return;
@@ -876,13 +950,16 @@ async function generateAllExplanations() {
         });
 
     } catch (err) {
-        explainerLoading = false;
-        explanationsLoaded = true;
-        Array.from(tbody.querySelectorAll(".move-explainer-section")).forEach(section => {
-            section.innerHTML = `<div class="move-explainer"><span style="font-size:.75rem;color:var(--accent-red)">Could not load move analysis</span></div>`;
+        intelligenceLoading = false;
+        intelligenceLoaded = true;
+        Array.from(tbody.querySelectorAll(".intel-coverage-section")).forEach(s => {
+            s.innerHTML = `<div class="intel-coverage"><span style="font-size:.75rem;color:var(--accent-red)">Could not load coverage data</span></div>`;
         });
     } finally {
-        if (btn) { btn.innerHTML = '<i class="bi bi-lightning-charge-fill"></i> Why Moved?'; btn.disabled = false; }
+        if (btn) {
+            btn.innerHTML = '<i class="bi bi-layers"></i> Holding Intel';
+            btn.disabled = false;
+        }
     }
 }
 
