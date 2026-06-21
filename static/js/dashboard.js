@@ -599,6 +599,10 @@ async function loadTrendData(tickers) {
 function updateHoldingsTable(holdings, trendData = {}) {
     const tbody = document.getElementById("holdings-table");
     tbody.innerHTML = "";
+
+    const missingCostBasis = holdings.some(h => !h.avg_cost || h.avg_cost === 0);
+    _updateHoldingsCostCallout(missingCostBasis);
+
     holdings.forEach((h, i) => {
         const row = tbody.insertRow();
         row.dataset.ticker = h.ticker;
@@ -609,6 +613,14 @@ function updateHoldingsTable(holdings, trendData = {}) {
             : `<div class="move-badge" id="move-badge-${h.ticker}"></div>`;
 
         const rec = cachedRecommendations[h.ticker];
+        const noCostBasis = !h.avg_cost || h.avg_cost === 0;
+        const totalPctCell = noCostBasis
+            ? `<td class="text-end" title="No cost basis — showing today's change">
+                   <span class="${colorClass(h.day_change_pct)}">${formatPct(h.day_change_pct)}</span>
+                   <span style="font-size:.6rem;color:var(--text-tertiary);margin-left:.2rem">today</span>
+               </td>`
+            : `<td class="text-end ${valueClass(h.total_return_pct)}">${formatOptionalPct(h.total_return_pct)}</td>`;
+
         row.innerHTML = `
             <td class="fw-bold">
                 <span class="ticker-dot" style="background:${chartColor(i)}"></span>${h.ticker}<i class="bi bi-chevron-right row-chevron"></i>
@@ -625,7 +637,7 @@ function updateHoldingsTable(holdings, trendData = {}) {
             </td>
             <td class="text-end d-none d-md-table-cell">${formatCurrency(h.current_value)}</td>
             <td class="text-end">${formatAllocationPct(h.allocation_pct)}</td>
-            <td class="text-end ${valueClass(h.total_return_pct)}">${formatOptionalPct(h.total_return_pct)}</td>
+            ${totalPctCell}
             <td class="text-center d-none d-lg-table-cell" id="rec-cell-${h.ticker}">${renderAnalystRecCell(rec)}</td>
             <td class="text-center d-none d-xl-table-cell trend-cell"></td>
         `;
@@ -643,6 +655,37 @@ function updateHoldingsTable(holdings, trendData = {}) {
     if (hasContent) {
         injectSummaryRows(tbody);
     }
+}
+
+function _updateHoldingsCostCallout(show) {
+    const card = document.getElementById("holdings-card");
+    if (!card) return;
+    const cardBody = card.querySelector(".card-body");
+    if (!cardBody) return;
+
+    let callout = document.getElementById("holdings-cost-callout");
+    if (!show) {
+        if (callout) callout.style.display = "none";
+        return;
+    }
+    if (!callout) {
+        callout = document.createElement("div");
+        callout.id = "holdings-cost-callout";
+        callout.className = "perf-callout";
+        callout.style.margin = "0.75rem 0.75rem 0";
+        callout.innerHTML = `
+            <i class="bi bi-pencil-square perf-callout-icon"></i>
+            <div class="perf-callout-text">
+                <div class="perf-callout-title">Cost basis missing</div>
+                <div class="perf-callout-body">Enter your average purchase price to track total return. Showing today's change as an estimate.</div>
+            </div>
+            <button class="btn perf-callout-btn" data-bs-toggle="modal"
+                    data-bs-target="#portfolioModal" onclick="loadManageHoldings()">
+                Update holdings
+            </button>`;
+        cardBody.insertBefore(callout, cardBody.firstChild);
+    }
+    callout.style.display = "";
 }
 
 function toggleSummaryRow(mainRow) {
@@ -739,12 +782,9 @@ function renderMoveExplainerFallback(section) {
                 <i class="bi bi-lightning-charge-fill" style="color:var(--accent-yellow)"></i>
                 Why it moved
             </div>
-            <div class="move-explainer-header">
-                <span class="attribution-badge unclear">Market Trends</span>
-                <span class="confidence-badge Low">Unavailable</span>
-            </div>
-            <p class="move-explanation-text">
-                Market trend details are temporarily unavailable for this holding.
+            <p class="move-explanation-text" style="color:var(--text-tertiary);font-size:.75rem;margin-top:.2rem">
+                <i class="bi bi-wifi-off" style="opacity:.5;margin-right:.3rem"></i>
+                Move analysis couldn't be loaded. Click <strong style="color:var(--text-secondary)">Holding Intel</strong> to try again.
             </p>
         </div>`;
 }
