@@ -36,8 +36,8 @@ html[data-text-size="comfortable"] {
 
     /* Surfaces */
     --bg-base:        #0a0a0f;
-    --surface:        rgba(255, 255, 255, 0.068);
-    --surface-strong: rgba(255, 255, 255, 0.10);
+    --surface:        rgba(255, 255, 255, 0.09);
+    --surface-strong: rgba(255, 255, 255, 0.13);
     --surface-hover:  rgba(255, 255, 255, 0.06);
     --hairline:       rgba(255, 255, 255, 0.08);
     --hairline-soft:  rgba(255, 255, 255, 0.05);
@@ -53,8 +53,8 @@ html[data-text-size="comfortable"] {
     --shadow-card:    0 10px 30px -14px rgba(0, 0, 0, 0.7);
     --shadow-card-hover: 0 22px 48px -18px rgba(0, 0, 0, 0.78);
     --shadow-float:   0 28px 64px -12px rgba(0, 0, 0, 0.78);
-    --bg-ambient-1:   radial-gradient(1200px 620px at 12% -8%, rgba(10, 132, 255, 0.12), transparent 58%);
-    --bg-ambient-2:   radial-gradient(1000px 520px at 112% 6%, rgba(48, 209, 88, 0.07), transparent 55%);
+    --bg-ambient-1:   radial-gradient(1200px 620px at 12% -8%, rgba(10, 132, 255, 0.30), transparent 58%);
+    --bg-ambient-2:   radial-gradient(1000px 520px at 112% 6%, rgba(48, 209, 88, 0.18), transparent 55%);
 
     /* Text — mirrors Apple's label hierarchy */
     --text-primary:   #f5f5f7;
@@ -71,8 +71,8 @@ html[data-text-size="comfortable"] {
 
     /* Apple system grays — warm neutral, never cold blue-white */
     --bg-base:        #F2F2F7;          /* iOS secondarySystemBackground */
-    --surface:        rgba(255, 255, 255, 0.66);
-    --surface-strong: rgba(255, 255, 255, 0.86);
+    --surface:        rgba(255, 255, 255, 0.54);
+    --surface-strong: rgba(255, 255, 255, 0.82);
     --surface-hover:  rgba(0, 0, 0, 0.04);
     --hairline:       rgba(0, 0, 0, 0.08);    /* Apple standard separator */
     --hairline-soft:  rgba(0, 0, 0, 0.055);
@@ -92,8 +92,8 @@ html[data-text-size="comfortable"] {
     --shadow-float:   0 2px 6px rgba(0, 0, 0, 0.06), 0 18px 44px -12px rgba(0, 0, 0, 0.16);
 
     /* Ambient: barely perceptible — warmth, not clinical blue */
-    --bg-ambient-1:   radial-gradient(1100px 560px at 8% -12%, rgba(10, 132, 255, 0.05), transparent 55%);
-    --bg-ambient-2:   radial-gradient(900px 480px at 112% 0%, rgba(255, 180, 100, 0.06), transparent 56%);
+    --bg-ambient-1:   radial-gradient(1100px 560px at 8% -12%, rgba(10, 132, 255, 0.14), transparent 55%);
+    --bg-ambient-2:   radial-gradient(900px 480px at 112% 0%, rgba(255, 180, 100, 0.14), transparent 56%);
 
     /* Apple label hierarchy — warm near-black, not cold navy */
     --text-primary:   #1C1C1E;          /* iOS/macOS primary label */
@@ -423,6 +423,17 @@ body {
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.06),
         var(--shadow-card);
+}
+
+/* Dark-mode cards: inner radial highlight at the top so they read as           */
+/* luminous glass panels rather than blending into the background.              */
+[data-bs-theme="dark"] .card.bg-dark,
+[data-bs-theme="dark"] .card {
+    background:
+        radial-gradient(ellipse 100% 55% at 50% 0%,
+            rgba(100, 210, 255, 0.09) 0%,
+            transparent 100%),
+        var(--surface) !important;
 }
 
 .card:hover {
@@ -1888,6 +1899,15 @@ body.holdings-spotlight #holdings-card {
 }
 
 /* ── Allocation doughnut — glass depth treatment ─────────────────────────── */
+.allocation-chart-shell {
+    width: min(100%, 326px);
+    aspect-ratio: 1;
+}
+.allocation-chart-shell canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
 /* drop-shadow applies to rendered canvas content (the chart), not the box.   */
 #allocation-chart {
     filter: drop-shadow(0 2px 18px rgba(0, 0, 0, 0.22));
@@ -1934,6 +1954,39 @@ body.holdings-spotlight #holdings-card {
     font-variant-numeric: tabular-nums;
     margin-top: 0.06rem;
     line-height: 1;
+}
+.target-kind {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.22rem;
+    margin-top: 0.22rem;
+    padding: 0.04rem 0.32rem;
+    border-radius: 999px;
+    font-size: 0.52rem;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-tertiary);
+}
+.target-kind i {
+    font-size: 0.58rem;
+    line-height: 1;
+}
+.target-kind-stock {
+    background: rgba(10, 132, 255, 0.13);
+    color: var(--accent-blue);
+}
+.target-kind-etf {
+    background: rgba(100, 210, 255, 0.13);
+    color: var(--accent-cyan);
+}
+.target-kind-fallback {
+    background: rgba(255, 159, 10, 0.13);
+    color: #ff9f0a;
 }
 .price-zone-bargain { color: var(--accent-green); }
 .price-zone-fair { color: var(--accent-cyan); }
@@ -2151,9 +2204,10 @@ body.holdings-spotlight #holdings-card {
     color: var(--text-primary) !important;
 }
 
-/* ── Allocation chart card — slow breathing glow ─────────────────────────── */
-/* Cycles through a soft cyan halo that breathes in and out every 8s.         */
-/* Pauses cleanly on hover so the standard hover shadow takes over.           */
+/* ── Allocation chart card — breathing glow ──────────────────────────────── */
+/* Uses animation-play-state: paused on hover (NOT animation: none) so that   */
+/* the cardIn fill-mode is preserved and no blink occurs on mouse-enter.      */
+/* !important on hover box-shadow overrides the frozen animation value.       */
 @keyframes allocGlow {
     0%, 100% {
         box-shadow:
@@ -2162,9 +2216,9 @@ body.holdings-spotlight #holdings-card {
     }
     50% {
         box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.13),
-            0 0 0 1.5px rgba(100, 210, 255, 0.16),
-            0 0 44px -10px rgba(100, 210, 255, 0.32),
+            inset 0 1px 0 rgba(255, 255, 255, 0.16),
+            0 0 0 2px rgba(100, 210, 255, 0.28),
+            0 0 60px -8px rgba(100, 210, 255, 0.50),
             var(--shadow-card-hover);
     }
 }
@@ -2172,32 +2226,36 @@ body.holdings-spotlight #holdings-card {
 @keyframes allocGlowLight {
     0%, 100% {
         box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.70),
+            inset 0 1px 0 rgba(255, 255, 255, 0.72),
             var(--shadow-card);
     }
     50% {
         box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.82),
-            0 0 0 1.5px rgba(10, 132, 255, 0.11),
-            0 0 36px -12px rgba(10, 132, 255, 0.20),
+            inset 0 1px 0 rgba(255, 255, 255, 0.88),
+            0 0 0 2px rgba(10, 132, 255, 0.18),
+            0 0 48px -10px rgba(10, 132, 255, 0.32),
             var(--shadow-card-hover);
     }
 }
 
 .card:has(#allocation-chart) {
-    animation: cardIn 0.55s var(--ease) both, allocGlow 8s ease-in-out 0.6s infinite;
+    animation: cardIn 0.55s var(--ease) both, allocGlow 5s ease-in-out 0.6s infinite;
 }
 
 [data-bs-theme="light"] .card:has(#allocation-chart) {
-    animation: cardIn 0.55s var(--ease) both, allocGlowLight 8s ease-in-out 0.6s infinite;
+    animation: cardIn 0.55s var(--ease) both, allocGlowLight 5s ease-in-out 0.6s infinite;
 }
 
-/* Pause the glow when hovering so the standard card hover shadow wins cleanly */
+/* Pause only the glow (index 1); keep cardIn (index 0) in its filled state. */
+/* !important lets the hover box-shadow beat the frozen animation value.       */
 .card:has(#allocation-chart):hover {
-    animation: none;
+    animation-play-state: running, paused;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.09),
+        var(--shadow-card-hover) !important;
 }
 
-/* ── Light-mode card: bump up the inset highlight for frosted contrast ─────── */
+/* ── Light-mode card: inset specular highlight for frosted contrast ──────── */
 [data-bs-theme="light"] .card.bg-dark,
 [data-bs-theme="light"] .card {
     box-shadow:

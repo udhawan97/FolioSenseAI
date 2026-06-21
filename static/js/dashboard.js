@@ -142,10 +142,6 @@ function updateChartChrome(chart) {
     const scale = uiScale();
     if (chart.options.scales?.x?.ticks?.font) chart.options.scales.x.ticks.font.size = 10 * scale;
     if (chart.options.scales?.y?.ticks?.font) chart.options.scales.y.ticks.font.size = 10 * scale;
-    // Sync allocation doughnut border to the current theme background on theme switch.
-    if (chart === allocationChart && chart.data?.datasets?.[0]) {
-        chart.data.datasets[0].borderColor = allocBorderColor();
-    }
     chart.update("none");
 }
 
@@ -179,21 +175,27 @@ function initTextSizeToggle() {
     });
 }
 
-// Apple system colors at 0.88 opacity — semi-transparent for a glass/material depth effect.
+// Apple-inspired futuristic palette: clean system hues with a luminous edge.
+// Badges use these at near-full opacity; the doughnut gets a softer glass version below.
 const CHART_COLORS = [
-    "rgba(10, 132, 255, 0.88)",   // blue
-    "rgba(48, 209, 88, 0.88)",    // green
-    "rgba(94, 92, 230, 0.88)",    // indigo
-    "rgba(255, 159, 10, 0.88)",   // orange
-    "rgba(255, 55, 95, 0.88)",    // pink
-    "rgba(100, 210, 255, 0.88)",  // cyan
-    "rgba(191, 90, 242, 0.88)",   // purple
-    "rgba(255, 214, 10, 0.88)",   // yellow
-    "rgba(102, 212, 207, 0.88)",  // mint
-    "rgba(255, 69, 58, 0.88)",    // red
+    "rgba(10, 132, 255, 0.96)",   // system blue
+    "rgba(100, 210, 255, 0.96)",  // electric cyan
+    "rgba(48, 209, 88, 0.96)",    // system green
+    "rgba(102, 212, 207, 0.96)",  // mint glass
+    "rgba(94, 92, 230, 0.96)",    // system indigo
+    "rgba(191, 90, 242, 0.96)",   // system purple
+    "rgba(255, 55, 95, 0.96)",    // system pink
+    "rgba(255, 159, 10, 0.96)",   // system orange
+    "rgba(255, 214, 10, 0.96)",   // system yellow
+    "rgba(50, 173, 230, 0.96)",   // vision blue
 ];
 // Wrap around the palette so portfolios with >10 holdings still get colors.
 const chartColor = (i) => CHART_COLORS[i % CHART_COLORS.length];
+
+// Glass-opacity version for doughnut segments; badges use chartColor (full opacity).
+// 0.86 keeps the palette vivid while preserving a little material depth.
+const allocColor = (i) => chartColor(i).replace(/[\d.]+\)$/, "0.86)");
+const withAlpha = (rgba, alpha) => rgba.replace(/[\d.]+\)$/, `${alpha})`);
 
 // Background-matching border for clean segment separation — works in both themes.
 const allocBorderColor = () =>
@@ -414,7 +416,8 @@ function renderAllocation() {
 
     const labels = sorted.map(h => h.ticker);
     const values = sorted.map(h => h.current_value);
-    const colors = sorted.map((_, i) => chartColor(i));
+    const colors = sorted.map((_, i) => allocColor(i));
+    const glowBorders = colors.map(c => c.replace(/[\d.]+\)$/, "0.90)"));
 
     allocationTotal = values.reduce((sum, v) => sum + toNumber(v), 0);
 
@@ -422,7 +425,8 @@ function renderAllocation() {
         allocationChart.data.labels = labels;
         allocationChart.data.datasets[0].data = values;
         allocationChart.data.datasets[0].backgroundColor = colors;
-        allocationChart.data.datasets[0].borderColor = allocBorderColor();
+        allocationChart.data.datasets[0].hoverBorderColor = glowBorders;
+        allocationChart.data.datasets[0].borderColor = "rgba(255,255,255,0.14)";
         allocationChart.update();
     } else {
         const ctx = document.getElementById("allocation-chart").getContext("2d");
@@ -433,21 +437,24 @@ function renderAllocation() {
                 datasets: [{
                     data: values,
                     backgroundColor: colors,
-                    borderColor: allocBorderColor(),
-                    borderWidth: 1.5,
-                    borderRadius: 4,
-                    spacing: 2,
-                    hoverOffset: 6,
-                    hoverBorderColor: "rgba(255,255,255,0.30)",
-                    hoverBorderWidth: 2,
+                    borderColor: "rgba(255,255,255,0.22)",
+                    borderWidth: 2,
+                    borderRadius: 6,
+                    spacing: 3,
+                    hoverOffset: 18,
+                    hoverBorderColor: glowBorders,
+                    hoverBorderWidth: 2.5,
                 }]
             },
             options: {
                 responsive: true,
-                cutout: "72%",
-                layout: { padding: 6 },
+                cutout: "70%",
+                layout: { padding: 4 },
                 animation: { animateRotate: true, animateScale: true, duration: 900,
                              easing: "easeOutQuart" },
+                transitions: {
+                    active: { animation: { duration: 300, easing: "easeOutBack" } }
+                },
                 onHover: (event, elements) => {
                     if (elements.length > 0) {
                         const idx = elements[0].index;
@@ -488,10 +495,88 @@ function renderAllocation() {
                     }
                 }
             },
-            plugins: [centerTotalPlugin],
+            plugins: [segmentGlowPlugin, centerHaloPlugin, centerTotalPlugin],
         });
     }
 }
+
+function allocationCenterColor(chart) {
+    const active = chart.getActiveElements()?.[0];
+    let idx = Number.isInteger(active?.index) ? active.index : -1;
+    if (idx < 0 && selectedAllocationTicker) {
+        idx = chart.data.labels.indexOf(selectedAllocationTicker);
+    }
+    return idx >= 0
+        ? chart.data.datasets[0].backgroundColor[idx]
+        : "rgba(100, 210, 255, 0.86)";
+}
+
+// Animated orbit around the center label, tinted by the active/selected holding.
+const centerHaloPlugin = {
+    id: "centerHalo",
+    afterInit(chart) {
+        if (chart.config.type !== "doughnut") return;
+        chart.$centerHaloStart = performance.now();
+
+        const tick = () => {
+            if (!chart.$centerHaloFrame) return;
+            if (document.visibilityState !== "hidden") chart.draw();
+            chart.$centerHaloFrame = requestAnimationFrame(tick);
+        };
+
+        chart.$centerHaloFrame = requestAnimationFrame(tick);
+    },
+    afterDestroy(chart) {
+        if (chart.$centerHaloFrame) cancelAnimationFrame(chart.$centerHaloFrame);
+        chart.$centerHaloFrame = null;
+    },
+    afterDraw(chart) {
+        if (chart.config.type !== "doughnut") return;
+        const meta = chart.getDatasetMeta(0);
+        const arc = meta?.data?.[0];
+        if (!arc) return;
+
+        const { ctx } = chart;
+        const { x, y, innerRadius } = arc;
+        const scale = uiScale();
+        const elapsed = ((performance.now() - (chart.$centerHaloStart || performance.now())) / 1000);
+        const pulse = (Math.sin(elapsed * 2.6) + 1) / 2;
+        const radius = Math.max(32 * scale, innerRadius * 0.54);
+        const color = allocationCenterColor(chart);
+        const angle = elapsed * 1.55;
+
+        ctx.save();
+        ctx.lineCap = "round";
+        ctx.shadowBlur = 10 + pulse * 12;
+        ctx.shadowColor = withAlpha(color, 0.58);
+        ctx.strokeStyle = withAlpha(color, 0.28 + pulse * 0.18);
+        ctx.lineWidth = 1.35 * scale;
+        ctx.beginPath();
+        ctx.arc(x, y, radius + pulse * 2.2 * scale, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.setLineDash([7 * scale, 11 * scale]);
+        ctx.lineDashOffset = -elapsed * 26 * scale;
+        ctx.strokeStyle = withAlpha(color, 0.66);
+        ctx.lineWidth = 1.6 * scale;
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.setLineDash([]);
+        ctx.fillStyle = withAlpha(color, 0.92);
+        ctx.beginPath();
+        ctx.arc(
+            x + Math.cos(angle) * radius,
+            y + Math.sin(angle) * radius,
+            2.4 * scale,
+            0,
+            Math.PI * 2
+        );
+        ctx.fill();
+        ctx.restore();
+    },
+};
 
 // Draws portfolio total (or hovered segment info) in the doughnut hole, Apple-style.
 const centerTotalPlugin = {
@@ -540,6 +625,31 @@ const centerTotalPlugin = {
             ctx.font = `700 ${20 * scale}px -apple-system, 'SF Pro Display', sans-serif`;
             ctx.fillText(formatCompact(allocationTotal), x, y + (5 * scale));
         }
+        ctx.restore();
+    },
+};
+
+// Draws a colored glow aura around the active (hovered) doughnut segment.
+// Double-draw trick: outer diffuse pass then a tighter inner pass for depth.
+const segmentGlowPlugin = {
+    id: "segmentGlow",
+    afterDraw(chart) {
+        if (chart.config.type !== "doughnut") return;
+        const active = chart.getActiveElements();
+        if (!active.length) return;
+        const { ctx } = chart;
+        const { datasetIndex, index } = active[0];
+        const meta = chart.getDatasetMeta(datasetIndex);
+        const arc = meta.data[index];
+        const raw = chart.data.datasets[datasetIndex].backgroundColor[index];
+        const glow = raw.replace(/[\d.]+\)$/, "0.80)");
+        ctx.save();
+        ctx.shadowBlur = 36;
+        ctx.shadowColor = glow;
+        arc.draw(ctx);
+        ctx.shadowBlur = 16;
+        ctx.shadowColor = glow;
+        arc.draw(ctx);
         ctx.restore();
     },
 };
@@ -1324,6 +1434,13 @@ const REC_ICONS = {
     "etf-quality": "bi-layers-fill",
 };
 
+function renderTargetKind(kind, icon, label) {
+    return `<div class="target-kind target-kind-${escapeHtml(kind)}">
+                <i class="bi ${escapeHtml(icon)}"></i>
+                <span>${escapeHtml(label)}</span>
+            </div>`;
+}
+
 function renderTargetCell(rec) {
     if (!rec) {
         return `<div class="shimmer-line" style="width:56px;height:12px;border-radius:4px;margin:0 auto .25rem"></div>
@@ -1340,7 +1457,8 @@ function renderTargetCell(rec) {
                 ? escapeHtml(signal.basis || "Price zone")
                 : `${trend >= 0 ? "+" : ""}${Number(trend).toFixed(1)}% vs 200D`;
             return `<div class="target-price-value price-zone-${escapeHtml(zoneClass)}">${escapeHtml(label)} · ${Number(signal.percentile).toFixed(0)}%</div>
-                    <div class="target-upside" style="color:var(--text-tertiary)">${escapeHtml(trendText)}</div>`;
+                    <div class="target-upside" style="color:var(--text-tertiary)">${escapeHtml(trendText)}</div>
+                    ${renderTargetKind("etf", "bi-activity", "ETF signal")}`;
         }
     }
     // Stocks with analyst consensus price target
@@ -1349,7 +1467,8 @@ function renderTargetCell(rec) {
         const sign = upside >= 0 ? "+" : "";
         const color = upside >= 0 ? "var(--accent-green)" : "var(--accent-red)";
         return `<div class="target-price-value">${formatCurrency(rec.target_price)}</div>
-                <div class="target-upside" style="color:${color}">${sign}${upside.toFixed(1)}%</div>`;
+                <div class="target-upside" style="color:${color}">${sign}${upside.toFixed(1)}%</div>
+                ${renderTargetKind("stock", "bi-bullseye", "Stock target")}`;
     }
     // ETFs and stocks without analyst coverage — show Free Cash Flow Yield
     if (rec.fcf_yield != null) {
@@ -1360,7 +1479,8 @@ function renderTargetCell(rec) {
                 : "var(--accent-red)";
         const sign = rec.fcf_yield >= 0 ? "+" : "";
         return `<div class="target-price-value" style="color:${color}">${sign}${rec.fcf_yield.toFixed(1)}%</div>
-                <div class="target-upside" style="color:var(--text-tertiary)">FCF Yield</div>`;
+                <div class="target-upside" style="color:var(--text-tertiary)">FCF Yield</div>
+                ${renderTargetKind("fallback", "bi-cash-coin", "Fallback")}`;
     }
     return `<span style="color:var(--text-tertiary);font-size:.72rem">—</span>`;
 }
