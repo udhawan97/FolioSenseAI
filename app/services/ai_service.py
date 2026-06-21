@@ -40,23 +40,18 @@ def generate_stock_summary(stock_data: dict) -> str:
         mktcap  = stock_data.get("market_cap", 0)
         mktcap_str = f"${mktcap/1e9:.1f}B" if mktcap >= 1e9 else (f"${mktcap/1e6:.0f}M" if mktcap else "N/A")
 
-        prompt = f"""Summarize this stock holding for someone who knows nothing about finance. Use plain, everyday language — no jargon.
+        prompt = f"""Write a 3-bullet newsletter blurb for this stock. Style: Morning Brew or The Hustle — punchy, specific, slightly opinionated. No filler, no hedging.
 
-Write exactly 3 bullet points. Each bullet must be SHORT (max 12 words). Start each line with "• ".
+Each bullet starts with "• " and is ONE tight sentence (max 15 words). Use the actual numbers.
 
-Cover these 3 things in order:
-1. What this company/fund does (one clear phrase)
-2. How it's positioned right now (use the 52-week range data to say if it's near highs, lows, or middle — keep it simple)
-3. One thing to watch out for or be aware of (a real risk, in plain terms)
-
-No finance speak. No hedging. No filler words. Be direct.
+Bullet 1: What the company does + one sharp descriptor of its market position.
+Bullet 2: Where it sits in its 52-week range and what that signals.
+Bullet 3: The one risk worth watching — name it directly, no softening.
 
 Stock: {stock_data.get("name", ticker)} ({ticker})
 Sector: {stock_data.get("sector", "N/A")}
-P/E Ratio: {pe if pe else "N/A"}
-Dividend: {f"{div_pct}%" if div_pct else "None"}
-Market Cap: {mktcap_str}
-52-Week Range: ${fwl:.2f} low — ${fwh:.2f} high | Now at ${price:.2f} ({f"{range_pct}% of range" if range_pct is not None else "N/A"})"""
+P/E: {pe if pe else "N/A"} | Dividend: {f"{div_pct}%" if div_pct else "none"} | Market Cap: {mktcap_str}
+52-Week Range: ${fwl:.2f}–${fwh:.2f} | Now: ${price:.2f}{f" ({range_pct}% of range)" if range_pct is not None else ""}"""
 
         message = client.messages.create(
             model=MODEL,

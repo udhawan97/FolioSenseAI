@@ -465,14 +465,24 @@ function renderSummaryInner(inner, text, isLoading) {
         `;
         return;
     }
-    const bullets = (text || "").split("\n").map(l => l.trim()).filter(l => l.startsWith("•")).map(l => l.replace(/^•\s*/, ""));
-    if (!bullets.length) {
+    if (!text) {
         inner.innerHTML = `<span style="font-size:.75rem;color:var(--text-tertiary)">Summary unavailable</span>`;
         return;
     }
-    inner.innerHTML = bullets.map(b =>
-        `<div class="summary-bullet"><span class="summary-dot"></span><span>${b}</span></div>`
-    ).join("");
+    const bullets = text.split("\n").map(l => l.trim()).filter(l => l.startsWith("•")).map(l => l.replace(/^•\s*/, ""));
+    if (bullets.length) {
+        inner.innerHTML = bullets.map(b =>
+            `<div class="summary-bullet"><span class="summary-dot"></span><span>${b}</span></div>`
+        ).join("");
+    } else {
+        // Fallback: strip markdown and render as plain paragraphs
+        const lines = text.split("\n")
+            .map(l => l.replace(/^#+\s*/, "").replace(/\*\*/g, "").trim())
+            .filter(l => l.length > 0);
+        inner.innerHTML = lines.slice(0, 3).map(l =>
+            `<div class="summary-bullet"><span class="summary-dot"></span><span>${l}</span></div>`
+        ).join("");
+    }
 }
 
 function injectSummaryRows(tbody) {
