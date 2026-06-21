@@ -436,3 +436,171 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
 
 /* ── Card header icon alignment ─────────────────────────────────────────── */
 .card-header i { vertical-align: -0.05em; }
+
+/* ── Expand row max-height: accommodate move explainer + AI summary ─────── */
+.summary-body.open {
+    max-height: 800px !important;
+    opacity: 1;
+}
+
+/* ── Move Explainer card ─────────────────────────────────────────────────── */
+.move-explainer {
+    padding: 0.7rem 1rem 0.65rem 2.55rem;
+    border-bottom: 1px solid var(--hairline-soft);
+    background: linear-gradient(180deg, rgba(255, 214, 10, 0.03) 0%, transparent 100%);
+}
+
+.expand-section-label {
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-tertiary);
+    margin-bottom: 0.4rem;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.move-explainer-header {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-bottom: 0.45rem;
+    flex-wrap: wrap;
+}
+
+/* Attribution type pill */
+.attribution-badge {
+    font-size: 0.66rem;
+    font-weight: 700;
+    padding: 0.18rem 0.6rem;
+    border-radius: 20px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+.attribution-badge.market-driven    { background: rgba(10, 132, 255, .18); color: #0a84ff; }
+.attribution-badge.sector-driven    { background: rgba(94, 92, 230, .18);  color: #5e5ce6; }
+.attribution-badge.company-specific { background: rgba(255, 159, 10, .18); color: #ff9f0a; }
+.attribution-badge.earnings-driven  { background: rgba(255, 214, 10, .18); color: #e6c200; }
+.attribution-badge.filing-driven    { background: rgba(100,210,255, .18);  color: #64d2ff; }
+.attribution-badge.mixed            { background: rgba(191, 90, 242, .18); color: #bf5af2; }
+.attribution-badge.unclear          { background: rgba(235,235,245, .08);  color: var(--text-tertiary); }
+.attribution-badge.etf-index        { background: rgba(48, 209, 88,  .18); color: #30d158; }
+
+/* Confidence level pill */
+.confidence-badge {
+    font-size: 0.63rem;
+    font-weight: 600;
+    padding: 0.14rem 0.45rem;
+    border-radius: 20px;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+.confidence-badge.High   { background: rgba(48, 209, 88,  .13); color: #30d158; }
+.confidence-badge.Medium { background: rgba(255, 159, 10, .13); color: #ff9f0a; }
+.confidence-badge.Low    { background: rgba(255, 69,  58,  .11); color: #ff6b63; }
+
+/* Explanation paragraph */
+.move-explanation-text {
+    font-size: 0.79rem;
+    color: var(--text-secondary);
+    line-height: 1.55;
+    margin-bottom: 0.5rem;
+}
+
+/* Driver list */
+.move-drivers {
+    display: flex;
+    flex-direction: column;
+    gap: 0.18rem;
+    margin-bottom: 0.5rem;
+}
+.driver-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.48rem;
+    font-size: 0.74rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+    padding: 0.1rem 0;
+}
+.driver-icon {
+    flex-shrink: 0;
+    font-size: 0.7rem;
+    margin-top: 0.2em;
+    color: var(--text-tertiary);
+    transition: color 0.18s var(--ease);
+}
+.driver-icon.strong   { color: var(--accent-blue); }
+.driver-icon.moderate { color: var(--accent-cyan); opacity: 0.75; }
+
+/* Macro context pills row */
+.macro-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-bottom: 0.45rem;
+}
+.macro-pill {
+    font-size: 0.63rem;
+    font-weight: 600;
+    padding: 0.1rem 0.42rem;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, .05);
+    color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+.macro-pill.positive { background: rgba(48, 209, 88, .12); color: #30d158; }
+.macro-pill.negative { background: rgba(255, 69,  58, .11); color: #ff6b63; }
+
+/* Evidence / news section */
+.evidence-section {
+    margin-top: 0.4rem;
+    padding-top: 0.35rem;
+    border-top: 1px solid var(--hairline-soft);
+}
+.news-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.4rem;
+    padding: 0.22rem 0;
+    font-size: 0.72rem;
+    line-height: 1.35;
+}
+.news-item a {
+    color: var(--accent-cyan);
+    text-decoration: none;
+}
+.news-item a:hover { text-decoration: underline; }
+.news-source {
+    font-size: 0.62rem;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+}
+
+/* ── Compact attribution badge inside the holdings table "Today" cell ────── */
+.move-badge {
+    display: inline-block;
+    font-size: 0.57rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 0.06rem 0.32rem;
+    border-radius: 10px;
+    margin-top: 0.15rem;
+    background: rgba(255, 255, 255, .06);
+    color: var(--text-tertiary);
+    vertical-align: middle;
+}
+.move-badge.market-driven    { background: rgba(10, 132, 255, .14); color: #0a84ff; }
+.move-badge.sector-driven    { background: rgba(94, 92, 230, .14);  color: #5e5ce6; }
+.move-badge.company-specific { background: rgba(255, 159, 10, .14); color: #ff9f0a; }
+.move-badge.earnings-driven  { background: rgba(255, 214, 10, .14); color: #e6c200; }
+.move-badge.filing-driven    { background: rgba(100,210,255, .14);  color: #64d2ff; }
+.move-badge.mixed            { background: rgba(191, 90, 242, .14); color: #bf5af2; }
+.move-badge.etf-index        { background: rgba(48, 209, 88,  .14); color: #30d158; }
