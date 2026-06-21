@@ -49,6 +49,7 @@ class AnalystRec:  # pylint: disable=too-many-instance-attributes
     recommendation_mean: Optional[float]
     target_price: Optional[float]
     target_upside_pct: Optional[float]
+    fcf_yield: Optional[float]       # freeCashflow / marketCap * 100
     subtext: str                     # e.g. "18 analysts · PT +12%"
     source: str
     security_type: str = "STOCK"
@@ -56,7 +57,33 @@ class AnalystRec:  # pylint: disable=too-many-instance-attributes
     etf_quality: Optional[dict] = None
 
 
-def _not_rated(ticker: str) -> AnalystRec:
+def _normalize_expense_ratio(value) -> Optional[float]:
+    """
+    Ensure expense ratio is in decimal form (0.0003 = 0.03%).
+    yfinance netExpenseRatio comes back in percent form (0.03 = 0.03%),
+    while static metadata and annualReportExpenseRatio use decimal form.
+    """
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _compute_fcf_yield(info: dict) -> Optional[float]:
+    """FCF yield = trailing free cash flow / market cap × 100. None if data unavailable."""
+    try:
+        fcf = info.get("freeCashflow")
+        cap = info.get("marketCap")
+        if fcf is not None and cap and float(cap) > 0:
+            return round(float(fcf) / float(cap) * 100, 2)
+    except (TypeError, ValueError, ZeroDivisionError):
+        pass
+    return None
+
+
+def _not_rated(ticker: str, info: Optional[dict] = None) -> AnalystRec:
     """Backward-compatible helper name for an unavailable analyst rating."""
     return AnalystRec(
         ticker=ticker,
@@ -66,6 +93,7 @@ def _not_rated(ticker: str) -> AnalystRec:
         recommendation_mean=None,
         target_price=None,
         target_upside_pct=None,
+        fcf_yield=_compute_fcf_yield(info) if info else None,
         subtext="Analyst rating unavailable",
         source="yfinance",
     )
@@ -77,10 +105,11 @@ def _etf_quality_rec(ticker: str, info: dict) -> AnalystRec:
         **static,
         **info,
         "ticker": ticker,
-        "expense_ratio": (
+        "expense_ratio": _normalize_expense_ratio(
             info.get("annualReportExpenseRatio")
             or info.get("expenseRatio")
-            or info.get("netExpenseRatio")
+            # netExpenseRatio comes back in percent form (0.03 = 0.03%); convert to decimal
+            or (info.get("netExpenseRatio") and info.get("netExpenseRatio") / 100)
             or static.get("expense_ratio")
         ),
         "aum": info.get("totalAssets") or info.get("netAssets"),
@@ -106,6 +135,7 @@ def _etf_quality_rec(ticker: str, info: dict) -> AnalystRec:
         recommendation_mean=None,
         target_price=None,
         target_upside_pct=None,
+        fcf_yield=_compute_fcf_yield(info),
         subtext=" · ".join(subparts) if subparts else "Insufficient ETF data",
         source="etf-quality",
         security_type="ETF",
@@ -149,7 +179,7 @@ def _fetch_from_yfinance(ticker: str) -> AnalystRec:
         SecurityType.CASH,
         SecurityType.UNKNOWN,
     }:
-        return _not_rated(ticker)
+        return _not_rated(ticker, info)
 
     # Determine action from recommendationKey (preferred) or mean score (fallback)
     rec_key = str(info.get("recommendationKey") or "").lower()
@@ -158,7 +188,7 @@ def _fetch_from_yfinance(ticker: str) -> AnalystRec:
     if not action:
         mean_raw = info.get("recommendationMean")
         if mean_raw is None:
-            return _not_rated(ticker)
+            return _not_rated(ticker, info)
         action = _action_from_mean(float(mean_raw))
 
     count = info.get("numberOfAnalystOpinions")
@@ -183,6 +213,7 @@ def _fetch_from_yfinance(ticker: str) -> AnalystRec:
         recommendation_mean=mean_val,
         target_price=target,
         target_upside_pct=upside_pct,
+        fcf_yield=_compute_fcf_yield(info),
         subtext=_build_subtext(count, upside_pct),
         source="yfinance",
     )
@@ -211,6 +242,7 @@ def rec_to_dict(rec: AnalystRec) -> dict:
         "recommendation_mean": rec.recommendation_mean,
         "target_price": rec.target_price,
         "target_upside_pct": rec.target_upside_pct,
+        "fcf_yield": rec.fcf_yield,
         "subtext": rec.subtext,
         "source": rec.source,
         "security_type": rec.security_type,
