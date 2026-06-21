@@ -20,13 +20,15 @@ disable=
     # torch/langchain/etc. just to lint), so external imports can't be resolved.
     import-error,
     # SQLAlchemy's `func.now` is dynamically generated; pylint can't see it's callable.
-    not-callable
+    not-callable,
+    # Small service helpers intentionally keep local parsing logic close to each scorer.
+    duplicate-code
 
 [FORMAT]
 max-line-length=100
 
 [BASIC]
-good-names=db,id,e,q,h,i,x,n
+good-names=db,id,e,q,h,i,x,n,SessionLocal
 
 [DESIGN]
 max-args=8
