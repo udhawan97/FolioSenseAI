@@ -1,7 +1,8 @@
 """
 app/routers/ai.py
-AI-powered summary endpoints using Claude.
+AI-powered summary endpoints using Claude, plus move-explanation endpoints.
 """
+import logging
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,8 +11,14 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import AISummary
 from app.services.ai_service import MODEL, generate_stock_summary
+from app.services.move_explainer import (
+    HoldingMoveSummary,
+    explain_move,
+    get_benchmark_data,
+)
 from app.services.stock_service import DEFAULT_HOLDINGS, get_all_quotes, get_stock_data
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
 CACHE_TTL = timedelta(hours=24)
@@ -126,3 +133,115 @@ async def get_all_summaries(db: Session = Depends(get_db)):
             results[ticker] = {"summary": summary_text, "from_cache": False}
 
     return {"summaries": results, "count": len(results)}
+
+
+# ── Move explanation helpers ───────────────────────────────────────────────
+
+def _summary_to_dict(s: HoldingMoveSummary) -> dict:
+    """Serialize HoldingMoveSummary dataclass to a JSON-safe dict."""
+    return {
+        "ticker": s.ticker,
+        "day_change_pct": s.day_change_pct,
+        "day_change_dollar": s.day_change_dollar,
+        "attribution_type": s.attribution_type,
+        "confidence": s.confidence,
+        "explanation_text": s.explanation_text,
+        "is_etf": s.is_etf,
+        "volume_vs_avg": s.volume_vs_avg,
+        "drivers": [
+            {
+                "driver_type": d.driver_type,
+                "description": d.description,
+                "magnitude": d.magnitude,
+                "icon": d.icon,
+                "evidence_url": d.evidence_url,
+            }
+            for d in s.drivers
+        ],
+        "news": [
+            {
+                "title": n.title,
+                "source": n.source,
+                "url": n.url,
+                "published_at": n.published_at,
+            }
+            for n in s.news
+        ],
+        "filings": [
+            {
+                "filing_type": f.filing_type,
+                "title": f.title,
+                "url": f.url,
+                "filed_at": f.filed_at,
+            }
+            for f in s.filings
+        ],
+        "macro_context": (
+            {
+                "spy_change_pct": s.macro_context.spy_change_pct,
+                "qqq_change_pct": s.macro_context.qqq_change_pct,
+                "sector_etf": s.macro_context.sector_etf,
+                "sector_etf_change_pct": s.macro_context.sector_etf_change_pct,
+            }
+            if s.macro_context
+            else None
+        ),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+_UNCLEAR_RESULT = {
+    "attribution_type": "unclear",
+    "confidence": "Low",
+    "explanation_text": "Move explanation temporarily unavailable.",
+    "drivers": [],
+    "news": [],
+    "filings": [],
+    "macro_context": None,
+    "volume_vs_avg": None,
+    "is_etf": False,
+}
+
+
+# ── Move explanation endpoints ─────────────────────────────────────────────
+
+@router.get("/move-explanation/{ticker}")
+async def get_move_explanation(ticker: str):
+    """
+    Explain why a ticker moved today.
+    Returns market context, attribution type, likely drivers, and recent news.
+    Not cached — prices and news change throughout the day.
+    """
+    ticker = ticker.upper()
+    stock_data = get_stock_data(ticker)
+    if stock_data.get("error"):
+        raise HTTPException(status_code=404, detail=f"Cannot fetch data for {ticker}")
+
+    summary = explain_move(stock_data)
+    return _summary_to_dict(summary)
+
+
+@router.get("/move-explanations/all")
+async def get_all_move_explanations():
+    """
+    Explain today's move for all portfolio holdings.
+    Fetches SPY/QQQ benchmark data once, then processes each holding in turn.
+    Slower than a single summary (news + earnings checked per stock) but all
+    explanations are grounded in real retrieved data.
+    """
+    benchmarks = get_benchmark_data()
+    quotes = {q["ticker"]: q for q in get_all_quotes()}
+    results: dict[str, dict] = {}
+
+    for ticker, stock_data in quotes.items():
+        if stock_data.get("error"):
+            results[ticker] = {**_UNCLEAR_RESULT, "ticker": ticker}
+            continue
+        try:
+            summary = explain_move(stock_data, shared_benchmarks=benchmarks)
+            results[ticker] = _summary_to_dict(summary)
+        except Exception as e:
+            logger.error("Move explanation failed for %s: %s", ticker, e)
+            results[ticker] = {**_UNCLEAR_RESULT, "ticker": ticker}
+
+    return {"explanations": results, "count": len(results)}

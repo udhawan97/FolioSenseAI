@@ -3,7 +3,7 @@
  * Fetches stock data from our FastAPI backend and updates the UI.
  * Runs automatically when the page loads.
  */
- 
+
 const toNumber = (n, fallback = 0) => {
     const value = Number(n);
     return Number.isFinite(value) ? value : fallback;
@@ -28,7 +28,7 @@ const formatPct = (n) => {
 const formatAllocationPct = (n) => `${toNumber(n).toFixed(1)}%`;
 const colorClass = (v) => v >= 0 ? "text-success" : "text-danger";
 const TREND_DAYS = 7;
- 
+
 // Apple system colors (dark) — vibrant but restrained, matches the UI accents.
 const CHART_COLORS = [
     "#0a84ff", // blue
@@ -44,14 +44,45 @@ const CHART_COLORS = [
 ];
 // Wrap around the palette so portfolios with >10 holdings still get colors.
 const chartColor = (i) => CHART_COLORS[i % CHART_COLORS.length];
- 
+
+// Human-readable labels for attribution types (badge text)
+const ATTRIBUTION_SHORT = {
+    "market-driven":    "Market",
+    "sector-driven":    "Sector",
+    "company-specific": "Company",
+    "earnings-driven":  "Earnings",
+    "filing-driven":    "Filing",
+    "mixed":            "Mixed",
+    "unclear":          "Unclear",
+    "etf-index":        "Index",
+};
+
+const ATTRIBUTION_LABELS = {
+    "market-driven":    "Market Driven",
+    "sector-driven":    "Sector Driven",
+    "company-specific": "Company Specific",
+    "earnings-driven":  "Earnings Driven",
+    "filing-driven":    "Filing Driven",
+    "mixed":            "Mixed Factors",
+    "unclear":          "Unclear",
+    "etf-index":        "Index / ETF",
+};
+
 let allocationChart = null;  // Keep chart instance for updates
 let latestHoldings = [];     // Most recent holdings, for re-sorting without a refetch
 let latestTrendData = {};    // Cached sparkline data, so the Holdings table re-sorts without a refetch
-let cachedSummaries = {};    // ticker → summary text, persists across table re-renders
-let summariesLoaded = false; // true once the first fetch completes
 let allocSortDir = "desc";   // Allocation sort direction: "desc" | "asc"
 let allocationTotal = 0;     // Portfolio total, drawn in the doughnut's center
+
+// AI summary state
+let cachedSummaries = {};    // ticker → summary text
+let summariesLoaded = false;
+let summaryLoading = false;
+
+// Move explainer state
+let cachedExplanations = {}; // ticker → explanation object
+let explanationsLoaded = false;
+let explainerLoading = false;
 
 // Single source of truth for allocation ordering, shared by both tables and the chart.
 function sortedByAllocation(holdings) {
@@ -69,14 +100,14 @@ function updateSortCarets() {
         if (el) el.className = cls;
     });
 }
- 
- 
+
+
 async function loadPortfolioValue() {
     try {
         const res = await fetch("/api/portfolio/value");
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
- 
+
         // Update summary cards
         document.getElementById("total-value").textContent =
             formatCompact(data.total_value);
@@ -88,14 +119,11 @@ async function loadPortfolioValue() {
              <span style="font-size:.85em;opacity:.8">(${formatPct(data.total_daily_change_pct)})</span>
              </span>`;
 
-        // Cumulative profit/loss summary (realized + unrealized)
         renderTotalReturn(data);
 
-        // Render the allocation breakdown table and matching doughnut chart
         latestHoldings = data.holdings;
         renderAllocation();
 
-        // Update best/worst/largest cards
         if (data.best_performer) {
             document.getElementById("best-performer").innerHTML =
                 `${data.best_performer.ticker} <span style="font-size:.85em;opacity:.8">${formatPct(data.best_performer.day_change_pct)}</span>`;
@@ -111,24 +139,20 @@ async function loadPortfolioValue() {
                 `${largest.ticker} <span style="font-size:.85em;opacity:.8">${formatCompact(largest.current_value)}</span>`;
         }
 
-        // Also update the basic prices table (same allocation order as the chart)
         latestTrendData = await loadTrendData(data.holdings.map(h => h.ticker));
         renderHoldings();
         document.getElementById("last-updated").textContent =
             `Updated: ${new Date().toLocaleTimeString()}`;
- 
+
     } catch (err) {
         console.error("Error loading portfolio value:", err);
     }
 }
 
 
-// Render the allocation breakdown table and the doughnut chart in the same
-// (allocation-sorted) order, so the pie slices line up with the table rows.
 function renderAllocation() {
     const sorted = sortedByAllocation(latestHoldings);
 
-    // Table
     const allocTable = document.getElementById("allocation-table");
     allocTable.innerHTML = "";
     sorted.forEach((h, i) => {
@@ -144,7 +168,6 @@ function renderAllocation() {
 
     updateSortCarets();
 
-    // Doughnut chart, using the same sorted order
     const labels = sorted.map(h => h.ticker);
     const values = sorted.map(h => h.current_value);
     const colors = sorted.map((_, i) => chartColor(i));
@@ -165,7 +188,6 @@ function renderAllocation() {
                 datasets: [{
                     data: values,
                     backgroundColor: colors,
-                    // Transparent border + spacing gives crisp, separated segments.
                     borderColor: "transparent",
                     borderWidth: 0,
                     borderRadius: 6,
@@ -177,7 +199,7 @@ function renderAllocation() {
             },
             options: {
                 responsive: true,
-                cutout: "72%",            // thin, modern ring
+                cutout: "72%",
                 layout: { padding: 6 },
                 animation: { animateRotate: true, animateScale: true, duration: 900,
                              easing: "easeOutQuart" },
@@ -239,14 +261,11 @@ const centerTotalPlugin = {
     },
 };
 
-// Render the Holdings table in the current allocation order.
 function renderHoldings() {
     updateHoldingsTable(sortedByAllocation(latestHoldings), latestTrendData);
     updateSortCarets();
 }
 
-// Clicking either allocation header toggles sort direction and re-renders
-// the breakdown table, the Holdings table, and the chart together.
 function toggleAllocationSort() {
     allocSortDir = allocSortDir === "asc" ? "desc" : "asc";
     renderAllocation();
@@ -254,11 +273,9 @@ function toggleAllocationSort() {
 }
 
 
-// A signed currency string, e.g. "+$1,234.56" / "-$78.90".
 const formatSignedCurrency = (n) =>
     `${toNumber(n) >= 0 ? "+" : "-"}${formatCurrency(Math.abs(toNumber(n)))}`;
 
-// Total Return card: cumulative realized + unrealized P&L from /value.
 function renderTotalReturn(data) {
     const tr = toNumber(data.total_return);
     const cls = colorClass(tr);
@@ -276,9 +293,8 @@ function renderTotalReturn(data) {
 }
 
 
-let pnlChart = null;  // Chart instance for the performance-history line
+let pnlChart = null;
 
-// Fetch the P&L ledger + snapshot history and render the chart and trades table.
 async function loadPnl() {
     try {
         const res = await fetch("/api/portfolio/pnl");
@@ -300,7 +316,6 @@ function renderPnlChart(history) {
     const up = values.length < 2 || values[values.length - 1] >= values[0];
     const line = up ? "#30d158" : "#ff453a";
 
-    // Soft vertical gradient fill under the line.
     const ctx = canvas.getContext("2d");
     const fill = ctx.createLinearGradient(0, 0, 0, canvas.height || 150);
     fill.addColorStop(0, up ? "rgba(48,209,88,0.28)" : "rgba(255,69,58,0.28)");
@@ -418,16 +433,24 @@ function updateHoldingsTable(holdings, trendData = {}) {
         const row = tbody.insertRow();
         row.dataset.ticker = h.ticker;
         const up = h.day_change_pct >= 0;
+        const exp = cachedExplanations[h.ticker];
+        const badgeHtml = exp
+            ? `<div class="move-badge ${exp.attribution_type}" title="${exp.confidence} confidence">${ATTRIBUTION_SHORT[exp.attribution_type] || "?"}</div>`
+            : `<div class="move-badge" id="move-badge-${h.ticker}"></div>`;
+
         row.innerHTML = `
             <td class="fw-bold">
                 <span class="ticker-dot" style="background:${chartColor(i)}"></span>${h.ticker}<i class="bi bi-chevron-right row-chevron"></i>
             </td>
             <td class="d-none d-md-table-cell text-secondary small">${h.name.substring(0, 28)}</td>
             <td class="text-end">${formatCurrency(h.current_price)}</td>
-            <td class="text-end ${colorClass(h.day_change_pct)}">
-                <i class="bi ${up ? "bi-caret-up-fill" : "bi-caret-down-fill"}"
-                   style="font-size:.65rem;vertical-align:middle;opacity:.75"></i>
-                ${formatPct(h.day_change_pct)}
+            <td class="text-end">
+                <div class="${colorClass(h.day_change_pct)}">
+                    <i class="bi ${up ? "bi-caret-up-fill" : "bi-caret-down-fill"}"
+                       style="font-size:.65rem;vertical-align:middle;opacity:.75"></i>
+                    ${formatPct(h.day_change_pct)}
+                </div>
+                ${badgeHtml}
             </td>
             <td class="text-end d-none d-md-table-cell">${formatCurrency(h.current_value)}</td>
             <td class="text-end">${formatAllocationPct(h.allocation_pct)}</td>
@@ -442,8 +465,10 @@ function updateHoldingsTable(holdings, trendData = {}) {
         row.querySelector(".trend-cell").appendChild(canvas);
         drawTrend(canvas, trendData[h.ticker]);
     });
-    // Re-attach summary rows if summaries are already loaded
-    if (summariesLoaded || Object.keys(cachedSummaries).length > 0) {
+
+    const hasContent = summariesLoaded || summaryLoading || explanationsLoaded || explainerLoading
+        || Object.keys(cachedSummaries).length > 0 || Object.keys(cachedExplanations).length > 0;
+    if (hasContent) {
         injectSummaryRows(tbody);
     }
 }
@@ -468,12 +493,10 @@ function escapeHtml(str) {
 function parseBullets(text) {
     if (!text) return [];
     const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
-    // Accept •, -, * as bullet markers
     const bulletLines = lines.filter(l => /^[•\-*]/.test(l));
     if (bulletLines.length >= 2) {
         return bulletLines.map(l => l.replace(/^[•\-*]+\s*/, "").trim()).filter(Boolean);
     }
-    // Fallback: strip markdown headers and bold markers, use all non-empty lines
     return lines
         .map(l => l.replace(/^#+\s*/, "").replace(/\*\*/g, "").trim())
         .filter(Boolean);
@@ -498,6 +521,112 @@ function renderSummaryInner(inner, text, isLoading) {
     }
 }
 
+// ── Move Explainer UI ──────────────────────────────────────────────────────
+
+function renderMoveExplainerShimmer(section) {
+    section.innerHTML = `
+        <div class="move-explainer">
+            <div class="expand-section-label">
+                <i class="bi bi-lightning-charge-fill" style="color:var(--accent-yellow)"></i>
+                Why it moved today
+            </div>
+            <div class="move-explainer-header" style="margin-bottom:.5rem">
+                <div class="shimmer-line" style="width:110px;height:20px;border-radius:10px"></div>
+                <div class="shimmer-line" style="width:80px;height:16px;border-radius:10px"></div>
+            </div>
+            <div class="shimmer-line" style="width:88%;margin-bottom:.3rem"></div>
+            <div class="shimmer-line" style="width:70%;margin-bottom:.55rem"></div>
+            <div class="move-drivers">
+                ${[65, 52, 74].map(w => `
+                    <div class="driver-item">
+                        <div class="shimmer-line" style="width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-top:.12em"></div>
+                        <div class="shimmer-line" style="width:${w}%"></div>
+                    </div>
+                `).join("")}
+            </div>
+        </div>`;
+}
+
+function renderMoveExplainer(section, data) {
+    if (!data) { section.innerHTML = ""; return; }
+
+    const attrType    = data.attribution_type || "unclear";
+    const confidence  = data.confidence || "Low";
+    const drivers     = data.drivers || [];
+    const news        = data.news || [];
+    const macro       = data.macro_context;
+    const isPos       = (data.day_change_pct || 0) >= 0;
+    const pctColor    = isPos ? "var(--accent-green)" : "var(--accent-red)";
+
+    // Macro context pills
+    const macroPills = [];
+    if (macro) {
+        macroPills.push({ label: `SPY ${formatPct(macro.spy_change_pct)}`, pos: macro.spy_change_pct >= 0 });
+        macroPills.push({ label: `QQQ ${formatPct(macro.qqq_change_pct)}`, pos: macro.qqq_change_pct >= 0 });
+        if (macro.sector_etf && macro.sector_etf_change_pct !== null) {
+            macroPills.push({
+                label: `${macro.sector_etf} ${formatPct(macro.sector_etf_change_pct)}`,
+                pos: macro.sector_etf_change_pct >= 0,
+            });
+        }
+    }
+    if (data.volume_vs_avg !== null && data.volume_vs_avg !== undefined) {
+        macroPills.push({ label: `Vol ${data.volume_vs_avg.toFixed(1)}× avg`, pos: data.volume_vs_avg >= 1.5 });
+    }
+
+    const driversHtml = drivers.map(d => `
+        <div class="driver-item">
+            <i class="bi ${escapeHtml(d.icon)} driver-icon ${escapeHtml(d.magnitude)}"></i>
+            <span>${escapeHtml(d.description)}</span>
+        </div>`).join("");
+
+    const macroPillsHtml = macroPills.length
+        ? `<div class="macro-pills">
+            ${macroPills.map(p =>
+                `<span class="macro-pill ${p.pos ? "positive" : "negative"}">${escapeHtml(p.label)}</span>`
+            ).join("")}
+           </div>`
+        : "";
+
+    const newsHtml = news.length
+        ? `<div class="evidence-section">
+            <div class="expand-section-label" style="margin-top:.1rem">
+                <i class="bi bi-newspaper"></i> Recent News
+            </div>
+            ${news.map(n => `
+                <div class="news-item">
+                    <i class="bi bi-link-45deg" style="color:var(--accent-cyan);opacity:.6;font-size:.65rem;flex-shrink:0;margin-top:.15em"></i>
+                    <div>
+                        ${n.url
+                            ? `<a href="${escapeHtml(n.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(n.title)}</a>`
+                            : `<span style="color:var(--text-secondary)">${escapeHtml(n.title)}</span>`}
+                        ${n.source ? `<span class="news-source"> · ${escapeHtml(n.source)}</span>` : ""}
+                    </div>
+                </div>`).join("")}
+           </div>`
+        : "";
+
+    section.innerHTML = `
+        <div class="move-explainer">
+            <div class="expand-section-label">
+                <i class="bi bi-lightning-charge-fill" style="color:var(--accent-yellow)"></i>
+                Why it moved today
+            </div>
+            <div class="move-explainer-header">
+                <span class="attribution-badge ${escapeHtml(attrType)}">${escapeHtml(ATTRIBUTION_LABELS[attrType] || attrType)}</span>
+                <span class="confidence-badge ${escapeHtml(confidence)}">${escapeHtml(confidence)} confidence</span>
+                <span style="margin-left:auto;font-size:.72rem;color:${pctColor};font-variant-numeric:tabular-nums;font-weight:600">
+                    ${formatPct(data.day_change_pct)}
+                    <span style="opacity:.65;font-weight:400;font-size:.68rem"> · ${formatCompact(data.day_change_dollar || 0)}/share</span>
+                </span>
+            </div>
+            <p class="move-explanation-text">${escapeHtml(data.explanation_text || "")}</p>
+            ${driversHtml ? `<div class="move-drivers">${driversHtml}</div>` : ""}
+            ${macroPillsHtml}
+            ${newsHtml}
+        </div>`;
+}
+
 function injectSummaryRows(tbody) {
     Array.from(tbody.querySelectorAll("tr[data-ticker]")).forEach(mainRow => {
         const ticker = mainRow.dataset.ticker;
@@ -509,16 +638,45 @@ function injectSummaryRows(tbody) {
             expandRow.className = "summary-expand-row";
             const td = document.createElement("td");
             td.colSpan = 7;
-            td.innerHTML = `<div class="summary-body"><div class="summary-inner"></div></div>`;
+            td.innerHTML = `
+                <div class="summary-body">
+                    <div class="move-explainer-section"></div>
+                    <div class="summary-inner"></div>
+                </div>`;
             expandRow.appendChild(td);
             mainRow.after(expandRow);
+        } else {
+            // Ensure the new section exists in rows created before this feature was added
+            if (!expandRow.querySelector(".move-explainer-section")) {
+                const body = expandRow.querySelector(".summary-body");
+                const explainerSection = document.createElement("div");
+                explainerSection.className = "move-explainer-section";
+                body.insertBefore(explainerSection, body.firstChild);
+            }
         }
 
-        const body = expandRow.querySelector(".summary-body");
-        const inner = expandRow.querySelector(".summary-inner");
-        renderSummaryInner(inner, cachedSummaries[ticker], !summariesLoaded);
-        body.classList.add("open");
-        mainRow.classList.add("summary-open");
+        const body             = expandRow.querySelector(".summary-body");
+        const explainerSection = expandRow.querySelector(".move-explainer-section");
+        const inner            = expandRow.querySelector(".summary-inner");
+
+        // Render the move explainer section
+        if (explanationsLoaded && cachedExplanations[ticker]) {
+            renderMoveExplainer(explainerSection, cachedExplanations[ticker]);
+        } else if (explainerLoading) {
+            renderMoveExplainerShimmer(explainerSection);
+        } else {
+            explainerSection.innerHTML = "";
+        }
+
+        // Render the AI summary section
+        const showSummaryShimmer = summaryLoading && !summariesLoaded;
+        renderSummaryInner(inner, cachedSummaries[ticker], showSummaryShimmer);
+
+        // Auto-open when content is loading or loaded
+        if (explanationsLoaded || summariesLoaded || explainerLoading || summaryLoading) {
+            body.classList.add("open");
+            mainRow.classList.add("summary-open");
+        }
     });
 }
 
@@ -567,11 +725,10 @@ function drawTrend(canvas, history = []) {
 
     ctx.stroke();
 }
- 
- 
+
+
 document.addEventListener("DOMContentLoaded", initDashboard);
 
-// Refresh everything that can go stale: live values, P&L, and market status.
 function refreshData() {
     loadPortfolioValue();
     loadPnl();
@@ -598,8 +755,7 @@ async function updateMarketStatus() {
         }
     } catch(e) {}
 }
- 
-// Countdown timer
+
 function startCountdown() {
     let refreshCountdown = 300;
     const interval = setInterval(() => {
@@ -616,14 +772,13 @@ function startCountdown() {
         }
     }, 1000);
 }
- 
-// Keyboard shortcut: R to refresh
+
 document.addEventListener("keydown", (e) => {
     const tag = e.target.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA" || e.target.isContentEditable) return;
     if (e.key === "r" || e.key === "R") refreshData();
 });
- 
+
 async function initDashboard() {
     await loadPortfolioValue();
     await loadPnl();
@@ -631,13 +786,115 @@ async function initDashboard() {
     startCountdown();
 }
 
-// Load holdings into the management modal
+
+// ── AI Summaries ────────────────────────────────────────────────────────────
+
+async function generateAllSummaries() {
+    const tbody = document.getElementById("holdings-table");
+    const btn = document.querySelector('[onclick="generateAllSummaries()"]');
+
+    if (summariesLoaded) {
+        const allBodies = tbody.querySelectorAll(".summary-body");
+        const anyOpen = Array.from(allBodies).some(b => b.classList.contains("open"));
+        allBodies.forEach(b => b.classList.toggle("open", !anyOpen));
+        tbody.querySelectorAll("tr[data-ticker]").forEach(r => r.classList.toggle("summary-open", !anyOpen));
+        return;
+    }
+
+    summaryLoading = true;
+    injectSummaryRows(tbody);
+    if (btn) { btn.innerHTML = '<div class="spinner-border spinner-border-sm me-1" style="color:#64d2ff"></div> Thinking…'; btn.disabled = true; }
+
+    try {
+        const res = await fetch("/api/ai/summaries/all");
+        const data = await res.json();
+        Object.entries(data.summaries).forEach(([ticker, info]) => {
+            cachedSummaries[ticker] = info.summary;
+        });
+        summariesLoaded = true;
+        Array.from(tbody.querySelectorAll("tr[data-ticker]")).forEach(mainRow => {
+            const ticker = mainRow.dataset.ticker;
+            const expandRow = mainRow.nextElementSibling;
+            if (!expandRow || !expandRow.classList.contains("summary-expand-row")) return;
+            renderSummaryInner(expandRow.querySelector(".summary-inner"), cachedSummaries[ticker], false);
+        });
+    } catch (err) {
+        summariesLoaded = true;
+        Array.from(tbody.querySelectorAll(".summary-inner")).forEach(inner => {
+            inner.innerHTML = `<span style="font-size:.75rem;color:var(--accent-red)">Could not load summary</span>`;
+        });
+    } finally {
+        summaryLoading = false;
+        if (btn) { btn.innerHTML = '<i class="bi bi-stars"></i> AI Summaries'; btn.disabled = false; }
+    }
+}
+
+
+// ── Move Explainer ──────────────────────────────────────────────────────────
+
+async function generateAllExplanations() {
+    const tbody = document.getElementById("holdings-table");
+    const btn = document.querySelector('[onclick="generateAllExplanations()"]');
+
+    if (explanationsLoaded) {
+        const allBodies = tbody.querySelectorAll(".summary-body");
+        const anyOpen = Array.from(allBodies).some(b => b.classList.contains("open"));
+        allBodies.forEach(b => b.classList.toggle("open", !anyOpen));
+        tbody.querySelectorAll("tr[data-ticker]").forEach(r => r.classList.toggle("summary-open", !anyOpen));
+        return;
+    }
+
+    explainerLoading = true;
+    injectSummaryRows(tbody);
+    if (btn) { btn.innerHTML = '<div class="spinner-border spinner-border-sm me-1" style="color:#ffd60a"></div> Analyzing…'; btn.disabled = true; }
+
+    try {
+        const res = await fetch("/api/ai/move-explanations/all");
+        const data = await res.json();
+        Object.entries(data.explanations || {}).forEach(([ticker, exp]) => {
+            cachedExplanations[ticker] = exp;
+        });
+        explanationsLoaded = true;
+        explainerLoading = false;
+
+        // Update explainer sections in expand rows
+        Array.from(tbody.querySelectorAll("tr[data-ticker]")).forEach(mainRow => {
+            const ticker = mainRow.dataset.ticker;
+            const expandRow = mainRow.nextElementSibling;
+            if (!expandRow || !expandRow.classList.contains("summary-expand-row")) return;
+            const section = expandRow.querySelector(".move-explainer-section");
+            if (section) renderMoveExplainer(section, cachedExplanations[ticker]);
+        });
+
+        // Populate the compact badges in the holdings table
+        Object.entries(cachedExplanations).forEach(([ticker, exp]) => {
+            const badge = document.getElementById(`move-badge-${ticker}`);
+            if (!badge) return;
+            badge.textContent = ATTRIBUTION_SHORT[exp.attribution_type] || "?";
+            badge.className = `move-badge ${exp.attribution_type}`;
+            badge.title = `${exp.confidence} confidence`;
+        });
+
+    } catch (err) {
+        explainerLoading = false;
+        explanationsLoaded = true;
+        Array.from(tbody.querySelectorAll(".move-explainer-section")).forEach(section => {
+            section.innerHTML = `<div class="move-explainer"><span style="font-size:.75rem;color:var(--accent-red)">Could not load move analysis</span></div>`;
+        });
+    } finally {
+        if (btn) { btn.innerHTML = '<i class="bi bi-lightning-charge-fill"></i> Why Moved?'; btn.disabled = false; }
+    }
+}
+
+
+// ── Portfolio Management Modal ──────────────────────────────────────────────
+
 async function loadManageHoldings() {
     const res = await fetch("/api/portfolio/holdings");
     const data = await res.json();
     const tbody = document.getElementById("manage-holdings-table");
     tbody.innerHTML = "";
- 
+
     data.holdings.forEach(h => {
         const row = tbody.insertRow();
         row.innerHTML = `
@@ -667,17 +924,17 @@ async function loadManageHoldings() {
         `;
     });
 }
- 
- 
+
+
 async function updateHolding(holdingId) {
     const shares = parseFloat(document.getElementById(`shares-${holdingId}`).value);
     const avgCost = parseFloat(document.getElementById(`cost-${holdingId}`).value) || null;
- 
+
     if (isNaN(shares) || shares <= 0) {
         alert("Shares must be a positive number");
         return;
     }
- 
+
     const res = await fetch(`/api/portfolio/holdings/${holdingId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -685,36 +942,35 @@ async function updateHolding(holdingId) {
     });
     if (res.ok) {
         showToast("Holding updated!", "success");
-        loadPortfolioValue();  // Refresh totals (and any realized P&L from a reduction)
-        loadPnl();             // Refresh the ledger + performance chart
+        loadPortfolioValue();
+        loadPnl();
     } else {
         showToast("Update failed", "danger");
     }
 }
- 
- 
+
+
 async function removeHolding(holdingId, ticker) {
     if (!confirm(`Remove ${ticker} from your portfolio?`)) return;
- 
+
     const res = await fetch(`/api/portfolio/holdings/${holdingId}`, {
         method: "DELETE"
     });
     if (res.ok) {
         showToast(`${ticker} removed`, "warning");
-        loadManageHoldings();  // Refresh the modal list
-        loadPortfolioValue();  // Refresh the main dashboard
-        loadPnl();             // The full-position sale lands in the ledger
+        loadManageHoldings();
+        loadPortfolioValue();
+        loadPnl();
     }
 }
- 
- 
-// Add holding form submission
+
+
 document.getElementById("add-holding-form")?.addEventListener("submit", async (e) => {
-    e.preventDefault();  // Prevent page reload
+    e.preventDefault();
     const ticker = document.getElementById("new-ticker").value.trim().toUpperCase();
     const shares = parseFloat(document.getElementById("new-shares").value);
     const avgCost = parseFloat(document.getElementById("new-avgcost").value) || null;
- 
+
     const res = await fetch("/api/portfolio/holdings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -734,51 +990,8 @@ document.getElementById("add-holding-form")?.addEventListener("submit", async (e
         msg.textContent = err.detail || "Error adding holding";
     }
 });
- 
- 
-async function generateAllSummaries() {
-    const tbody = document.getElementById("holdings-table");
-    const btn = document.querySelector('[onclick="generateAllSummaries()"]');
-
-    // Toggle all open/closed if already loaded
-    if (summariesLoaded) {
-        const allBodies = tbody.querySelectorAll(".summary-body");
-        const anyOpen = Array.from(allBodies).some(b => b.classList.contains("open"));
-        allBodies.forEach(b => b.classList.toggle("open", !anyOpen));
-        tbody.querySelectorAll("tr[data-ticker]").forEach(r => r.classList.toggle("summary-open", !anyOpen));
-        return;
-    }
-
-    // Show shimmer placeholders immediately
-    injectSummaryRows(tbody);
-    if (btn) { btn.innerHTML = '<div class="spinner-border spinner-border-sm me-1" style="color:#64d2ff"></div> Thinking…'; btn.disabled = true; }
-
-    try {
-        const res = await fetch("/api/ai/summaries/all");
-        const data = await res.json();
-        Object.entries(data.summaries).forEach(([ticker, info]) => {
-            cachedSummaries[ticker] = info.summary;
-        });
-        summariesLoaded = true;
-        // Update each expand row with real content
-        Array.from(tbody.querySelectorAll("tr[data-ticker]")).forEach(mainRow => {
-            const ticker = mainRow.dataset.ticker;
-            const expandRow = mainRow.nextElementSibling;
-            if (!expandRow || !expandRow.classList.contains("summary-expand-row")) return;
-            renderSummaryInner(expandRow.querySelector(".summary-inner"), cachedSummaries[ticker], false);
-        });
-    } catch (err) {
-        summariesLoaded = true; // stop shimmer
-        Array.from(tbody.querySelectorAll(".summary-inner")).forEach(inner => {
-            inner.innerHTML = `<span style="font-size:.75rem;color:var(--accent-red)">Could not load summary</span>`;
-        });
-    } finally {
-        if (btn) { btn.innerHTML = '<i class="bi bi-stars"></i> AI Summaries'; btn.disabled = false; }
-    }
-}
 
 
-// Simple toast notification
 function showToast(message, type = "success") {
     const toast = document.createElement("div");
     toast.className = `alert alert-${type} position-fixed bottom-0 end-0 m-3`;
