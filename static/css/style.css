@@ -4,6 +4,9 @@
    Pure CSS: no markup changes required.
    ========================================================================== */
 
+/* ── Global font scale ───────────────────────────────────────────────────── */
+html { font-size: 17px; } /* ~6% bump over browser default 16px; scales all rem values */
+
 /* ── Design tokens ───────────────────────────────────────────────────────── */
 :root {
     /* Surfaces */
@@ -329,14 +332,14 @@ table tbody tr:hover {
 .stat-label {
     text-transform: uppercase;
     letter-spacing: 0.07em;
-    font-size: 0.65rem;
+    font-size: 0.68rem;
     font-weight: 600;
     color: var(--text-tertiary);
     margin-bottom: 0.1rem;
 }
 
 .stat-value {
-    font-size: 1.35rem;
+    font-size: 1.45rem;
     font-weight: 600;
     letter-spacing: -0.03em;
     line-height: 1.1;
