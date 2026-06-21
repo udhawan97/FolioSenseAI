@@ -11,7 +11,7 @@ Data priority: static metadata → yfinance enrichment → graceful "not availab
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 import yfinance as yf
@@ -41,9 +41,9 @@ class TopHolding:
 
 
 @dataclass
-class HoldingIntelligence:
+class HoldingIntelligence:  # pylint: disable=too-many-instance-attributes
     ticker: str
-    coverage_type: str       # equity | etf-broad | etf-sector | etf-thematic | etf-international | etf-crypto
+    coverage_type: str  # equity|etf-broad|etf-sector|etf-thematic|etf-international|etf-crypto
     coverage_label: str      # Human-readable label for coverage_type
     strategy: str            # What this holding does / tracks
     asset_class: str         # equities | crypto | fixed-income | mixed
@@ -87,7 +87,10 @@ CONCENTRATION_LABELS: dict[str, str] = {
 _STATIC: dict[str, dict] = {
     "IBIT": {
         "coverage_type": "etf-crypto",
-        "strategy": "Direct spot exposure to Bitcoin via a regulated ETF. Holds physical BTC in custody — not futures.",
+        "strategy": (
+            "Direct spot exposure to Bitcoin via a regulated ETF. "
+            "Holds physical BTC in custody — not futures."
+        ),
         "asset_class": "crypto",
         "theme": "Bitcoin",
         "sectors": [],
@@ -107,7 +110,10 @@ _STATIC: dict[str, dict] = {
     },
     "VOO": {
         "coverage_type": "etf-broad",
-        "strategy": "Tracks the S&P 500 index — 500 largest US public companies, market-cap weighted.",
+        "strategy": (
+            "Tracks the S&P 500 index — 500 largest US public companies, "
+            "market-cap weighted."
+        ),
         "asset_class": "equities",
         "theme": None,
         "sectors": [
@@ -140,7 +146,10 @@ _STATIC: dict[str, dict] = {
     },
     "VT": {
         "coverage_type": "etf-broad",
-        "strategy": "Tracks the FTSE Global All Cap Index — ~9,500 stocks across 49 countries, all market caps.",
+        "strategy": (
+            "Tracks the FTSE Global All Cap Index — ~9,500 stocks across "
+            "49 countries, all market caps."
+        ),
         "asset_class": "equities",
         "theme": "Global Equities",
         "sectors": [
@@ -181,7 +190,10 @@ _STATIC: dict[str, dict] = {
     },
     "IEMG": {
         "coverage_type": "etf-international",
-        "strategy": "Tracks the MSCI Emerging Markets Investable Market Index — large, mid, small cap across EM countries.",
+        "strategy": (
+            "Tracks the MSCI Emerging Markets Investable Market Index "
+            "— large, mid, small cap across EM countries."
+        ),
         "asset_class": "equities",
         "theme": "Emerging Markets",
         "sectors": [
@@ -222,7 +234,10 @@ _STATIC: dict[str, dict] = {
     },
     "ITA": {
         "coverage_type": "etf-sector",
-        "strategy": "Tracks the Dow Jones U.S. Select Aerospace & Defense Index — US defense primes and suppliers.",
+        "strategy": (
+            "Tracks the Dow Jones U.S. Select Aerospace & Defense Index "
+            "— US defense primes and suppliers."
+        ),
         "asset_class": "equities",
         "theme": "Aerospace & Defense",
         "sectors": [
@@ -253,7 +268,10 @@ _STATIC: dict[str, dict] = {
     },
     "QTUM": {
         "coverage_type": "etf-thematic",
-        "strategy": "Tracks companies involved in quantum computing, machine learning, and cloud infrastructure hardware.",
+        "strategy": (
+            "Tracks companies involved in quantum computing, machine learning, "
+            "and cloud infrastructure hardware."
+        ),
         "asset_class": "equities",
         "theme": "Quantum Computing & AI Hardware",
         "sectors": [
@@ -292,7 +310,10 @@ _STATIC: dict[str, dict] = {
     },
     "CGDV": {
         "coverage_type": "etf-sector",
-        "strategy": "Actively managed — Capital Group seeks dividend income + capital appreciation from undervalued stocks.",
+        "strategy": (
+            "Actively managed — Capital Group seeks dividend income + "
+            "capital appreciation from undervalued stocks."
+        ),
         "asset_class": "equities",
         "theme": "Dividend Value",
         "sectors": [
@@ -324,7 +345,10 @@ _STATIC: dict[str, dict] = {
     },
     "SETM": {
         "coverage_type": "etf-thematic",
-        "strategy": "Tracks companies mining and producing materials critical for clean energy: lithium, copper, nickel, rare earths.",
+        "strategy": (
+            "Tracks companies mining and producing materials critical for "
+            "clean energy: lithium, copper, nickel, rare earths."
+        ),
         "asset_class": "equities",
         "theme": "Energy Transition Materials",
         "sectors": [
@@ -361,7 +385,10 @@ _STATIC: dict[str, dict] = {
     },
     "WSML": {
         "coverage_type": "etf-international",
-        "strategy": "Tracks the MSCI World Small Cap Index — small cap stocks across 23 developed market countries.",
+        "strategy": (
+            "Tracks the MSCI World Small Cap Index — small cap stocks "
+            "across 23 developed market countries."
+        ),
         "asset_class": "equities",
         "theme": "Global Small Cap",
         "sectors": [
@@ -396,7 +423,10 @@ _STATIC: dict[str, dict] = {
     },
     "NOW": {
         "coverage_type": "equity",
-        "strategy": "Enterprise cloud platform for digital workflow automation — IT, HR, customer service, and app development.",
+        "strategy": (
+            "Enterprise cloud platform for digital workflow automation "
+            "— IT, HR, customer service, and app development."
+        ),
         "asset_class": "equities",
         "theme": "Enterprise SaaS",
         "sectors": [{"name": "Enterprise Software (SaaS)", "weight": 100.0}],

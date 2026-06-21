@@ -287,7 +287,9 @@ async def get_all_intelligence():
     results: dict[str, dict] = {}
     for ticker, stock_data in quotes.items():
         try:
-            intel = get_holding_intelligence(ticker, stock_data if not stock_data.get("error") else None)
+            intel = get_holding_intelligence(
+                ticker, stock_data if not stock_data.get("error") else None
+            )
             results[ticker] = intelligence_to_dict(intel)
         except Exception as e:
             logger.error("Intelligence fetch failed for %s: %s", ticker, e)

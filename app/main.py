@@ -1,8 +1,8 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles  
-from fastapi.responses import FileResponse    
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from app.routers import stocks, portfolio, ai
 from app.database import engine
 from app import models
