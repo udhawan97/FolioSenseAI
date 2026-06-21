@@ -2,7 +2,6 @@
 Tests for app/services/holding_intelligence.py and move attribution logic.
 No real network calls — yfinance is mocked where needed.
 """
-import pytest
 from unittest.mock import patch, MagicMock
 
 from app.services.holding_intelligence import (
@@ -88,7 +87,9 @@ class TestStaticMetadataCompleteness:
 
     def test_setm_has_commodity_benchmarks(self):
         bms = _STATIC["SETM"]["benchmark_tickers"]
-        assert any(b in bms for b in ["LIT", "COPX", "XME"]), "SETM should have commodity benchmarks"
+        assert any(b in bms for b in ["LIT", "COPX", "XME"]), (
+            "SETM should have commodity benchmarks"
+        )
 
     def test_all_etfs_have_sector_data(self):
         etf_tickers = [t for t, m in _STATIC.items() if m["coverage_type"] != "equity"]
@@ -257,7 +258,7 @@ class TestMoveExplainerBenchmarks:
         return ticker_mock
 
     def test_ibit_uses_btc_benchmark(self):
-        from app.services.move_explainer import explain_move, _TICKER_BENCHMARKS
+        from app.services.move_explainer import _TICKER_BENCHMARKS
         cfg = _TICKER_BENCHMARKS.get("IBIT", {})
         assert cfg.get("primary") == "BTC-USD"
         assert cfg.get("suppress_spy") is True

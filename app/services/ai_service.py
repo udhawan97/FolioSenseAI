@@ -3,9 +3,10 @@ app/services/ai_service.py
 Claude AI integration for generating stock and portfolio summaries.
 """
 
-import re
-import anthropic
 import logging
+import re
+
+import anthropic
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -85,7 +86,8 @@ def _build_prompt(stock_data: dict) -> str:
             f"{rules}\n\n"
             f"Bullet 1: What index, sector, or asset class this {security_label} tracks.\n"
             f"Bullet 2: Today's price change and where it sits in its 52-week range.\n"
-            f"Bullet 3: One notable characteristic — dividend yield if any, or the sector/geographic focus.\n\n"
+            f"Bullet 3: One notable characteristic — dividend yield if any, "
+            f"or the sector/geographic focus.\n\n"
             f"{security_label.upper()}: {name} ({ticker})\n"
             f"Category: {sector}\n"
             f"{metrics}"

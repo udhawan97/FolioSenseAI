@@ -2,7 +2,6 @@
 Tests for app/services/ai_service.py
 Mocks the Anthropic client — no real API calls are made.
 """
-import pytest
 from unittest.mock import MagicMock, patch
 
 
@@ -79,7 +78,11 @@ class TestNormalizeBullets:
 
     def test_strips_bullet_label_prefix(self):
         from app.services.ai_service import normalize_bullets
-        text = "Bullet 1: Tracks the S&P 500 index.\nBullet 2: Up 1% today.\nBullet 3: Low expense ratio."
+        text = (
+            "Bullet 1: Tracks the S&P 500 index.\n"
+            "Bullet 2: Up 1% today.\n"
+            "Bullet 3: Low expense ratio."
+        )
         result = normalize_bullets(text)
         lines = result.strip().split("\n")
         assert len(lines) == 3
@@ -138,7 +141,11 @@ class TestBuildPrompt:
 
 class TestGenerateStockSummary:
     def test_returns_three_bullets(self):
-        raw = "• Tracks the S&P 500 index.\n• Sitting at 75% of its 52-week range.\n• Yields 1.3% in dividends annually."
+        raw = (
+            "• Tracks the S&P 500 index.\n"
+            "• Sitting at 75% of its 52-week range.\n"
+            "• Yields 1.3% in dividends annually."
+        )
         with patch("app.services.ai_service.client") as mock_client:
             mock_client.messages.create.return_value = _mock_response(raw)
             from app.services.ai_service import generate_stock_summary
@@ -148,7 +155,11 @@ class TestGenerateStockSummary:
         assert all(l.startswith("• ") for l in lines)
 
     def test_normalizes_dash_bullets_from_model(self):
-        raw = "- Cloud software company.\n- At 36% of 52-week range.\n- High P/E of 55 signals growth premium."
+        raw = (
+            "- Cloud software company.\n"
+            "- At 36% of 52-week range.\n"
+            "- High P/E of 55 signals growth premium."
+        )
         with patch("app.services.ai_service.client") as mock_client:
             mock_client.messages.create.return_value = _mock_response(raw)
             from app.services.ai_service import generate_stock_summary
