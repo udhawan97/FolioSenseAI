@@ -69,34 +69,40 @@ html[data-text-size="comfortable"] {
 [data-bs-theme="light"] {
     color-scheme: light;
 
-    --bg-base:        #f5f7fb;
-    --surface:        rgba(255, 255, 255, 0.78);
-    --surface-strong: rgba(255, 255, 255, 0.94);
-    --surface-hover:  rgba(10, 23, 45, 0.045);
-    --hairline:       rgba(31, 41, 55, 0.11);
-    --hairline-soft:  rgba(31, 41, 55, 0.075);
-    --hairline-hover: rgba(10, 132, 255, 0.28);
-    --nav-surface:    rgba(255, 255, 255, 0.72);
-    --modal-surface:  rgba(255, 255, 255, 0.94);
-    --popover-surface: rgba(255, 255, 255, 0.97);
-    --toast-surface:  rgba(255, 255, 255, 0.96);
-    --control-bg:     rgba(15, 23, 42, 0.035);
-    --control-hover:  rgba(15, 23, 42, 0.075);
-    --field-focus-bg: rgba(255, 255, 255, 0.98);
-    --subtle-ring:    rgba(15, 23, 42, 0.08);
-    --shadow-card:    0 12px 32px -18px rgba(15, 23, 42, 0.24);
-    --shadow-card-hover: 0 24px 52px -22px rgba(15, 23, 42, 0.28);
-    --shadow-float:   0 24px 64px -22px rgba(15, 23, 42, 0.3);
-    --bg-ambient-1:   radial-gradient(1100px 560px at 8% -12%, rgba(10, 132, 255, 0.13), transparent 58%);
-    --bg-ambient-2:   radial-gradient(900px 480px at 112% 0%, rgba(100, 210, 255, 0.15), transparent 56%);
+    /* Apple system grays — warm neutral, never cold blue-white */
+    --bg-base:        #F2F2F7;          /* iOS secondarySystemBackground */
+    --surface:        rgba(255, 255, 255, 0.86);
+    --surface-strong: rgba(255, 255, 255, 0.97);
+    --surface-hover:  rgba(0, 0, 0, 0.04);
+    --hairline:       rgba(0, 0, 0, 0.08);    /* Apple standard separator */
+    --hairline-soft:  rgba(0, 0, 0, 0.055);
+    --hairline-hover: rgba(0, 0, 0, 0.16);
+    --nav-surface:    rgba(248, 248, 248, 0.84);
+    --modal-surface:  rgba(255, 255, 255, 0.97);
+    --popover-surface: rgba(255, 255, 255, 0.98);
+    --toast-surface:  rgba(255, 255, 255, 0.97);
+    --control-bg:     rgba(0, 0, 0, 0.038);
+    --control-hover:  rgba(0, 0, 0, 0.065);
+    --field-focus-bg: #ffffff;
+    --subtle-ring:    rgba(0, 0, 0, 0.06);
 
-    --text-primary:   #101828;
-    --text-secondary: rgba(16, 24, 40, 0.68);
-    --text-tertiary:  rgba(16, 24, 40, 0.45);
-    --focus-text:     #101828;
-    --icon-surface:   rgba(255, 255, 255, 0.78);
-    --icon-hairline:  rgba(15, 23, 42, 0.09);
-    --icon-shadow:    0 10px 26px -20px rgba(15, 23, 42, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.86);
+    /* Multi-layer warm shadows — depth without harshness */
+    --shadow-card:    0 1px 2px rgba(0, 0, 0, 0.05), 0 6px 20px -8px rgba(0, 0, 0, 0.09);
+    --shadow-card-hover: 0 1px 3px rgba(0, 0, 0, 0.07), 0 16px 36px -12px rgba(0, 0, 0, 0.13);
+    --shadow-float:   0 2px 6px rgba(0, 0, 0, 0.06), 0 18px 44px -12px rgba(0, 0, 0, 0.16);
+
+    /* Ambient: barely perceptible — warmth, not clinical blue */
+    --bg-ambient-1:   radial-gradient(1100px 560px at 8% -12%, rgba(10, 132, 255, 0.05), transparent 55%);
+    --bg-ambient-2:   radial-gradient(900px 480px at 112% 0%, rgba(255, 180, 100, 0.06), transparent 56%);
+
+    /* Apple label hierarchy — warm near-black, not cold navy */
+    --text-primary:   #1C1C1E;          /* iOS/macOS primary label */
+    --text-secondary: rgba(60, 60, 67, 0.60);   /* iOS secondary label */
+    --text-tertiary:  rgba(60, 60, 67, 0.30);   /* iOS tertiary label */
+    --focus-text:     #1C1C1E;
+    --icon-surface:   rgba(255, 255, 255, 0.88);
+    --icon-hairline:  rgba(0, 0, 0, 0.07);
+    --icon-shadow:    0 6px 20px -16px rgba(0, 0, 0, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.92);
 }
 
 /* ── Base ────────────────────────────────────────────────────────────────── */
@@ -195,6 +201,8 @@ body {
     background: transparent;
     padding: 0;
     line-height: 1;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .theme-toggle-track,
@@ -212,7 +220,13 @@ body {
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.08),
         0 8px 22px -18px rgba(0, 0, 0, 0.5);
-    transition: background 0.22s var(--ease), border-color 0.22s var(--ease), box-shadow 0.22s var(--ease);
+    overflow: hidden;
+    transform: translateZ(0);
+    transition:
+        background 0.22s var(--ease),
+        border-color 0.22s var(--ease),
+        box-shadow 0.22s var(--ease),
+        transform 0.22s var(--spring);
 }
 
 .theme-toggle-track {
@@ -223,6 +237,12 @@ body {
 .text-size-toggle:hover .text-size-toggle-track {
     background: var(--control-hover);
     border-color: var(--hairline-hover);
+    transform: translateY(-1px);
+}
+
+.theme-toggle:active .theme-toggle-track,
+.text-size-toggle:active .text-size-toggle-track {
+    transform: translateY(0) scale(0.985);
 }
 
 .theme-toggle:focus-visible .theme-toggle-track,
@@ -233,27 +253,34 @@ body {
 
 .theme-icon,
 .text-size-glyph {
-    font-size: 0.72rem;
+    position: relative;
+    font-size: 12px;
     color: var(--text-secondary);
-    transition: color 0.22s var(--ease), opacity 0.22s var(--ease);
+    transition:
+        color 0.22s var(--ease),
+        opacity 0.22s var(--ease),
+        transform 0.26s var(--spring);
     z-index: 1;
-    opacity: 0.78;
+    opacity: 0.64;
     -webkit-font-smoothing: antialiased;
-    text-rendering: geometricPrecision;
+    text-rendering: optimizeLegibility;
+    transform: translateZ(0);
+    user-select: none;
 }
 
 .text-size-glyph {
     display: inline-flex;
-    align-items: baseline;
+    align-items: center;
     justify-content: center;
     width: 18px;
+    height: 18px;
     font-family: var(--font-display);
-    font-weight: 700;
+    font-weight: 750;
     line-height: 1;
 }
 
-.text-size-glyph-small { font-size: 0.64rem; }
-.text-size-glyph-large { font-size: 0.88rem; }
+.text-size-glyph-small { font-size: 11px; }
+.text-size-glyph-large { font-size: 16px; }
 
 .theme-toggle-thumb,
 .text-size-toggle-thumb {
@@ -268,20 +295,34 @@ body {
     background: #f5f7fb;
     border: 1px solid var(--hairline);
     box-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.55);
-    transition: left 0.28s var(--spring), background 0.22s var(--ease), border-color 0.22s var(--ease);
+    z-index: 3;
+    transform: translateZ(0);
+    will-change: left, transform;
+    transition:
+        left 0.32s var(--spring),
+        background 0.22s var(--ease),
+        border-color 0.22s var(--ease),
+        box-shadow 0.22s var(--ease),
+        transform 0.32s var(--spring);
 }
 
 .theme-toggle-thumb-icon {
-    font-size: 0.92rem;
+    position: relative;
+    z-index: 4;
+    font-size: 15px;
     line-height: 1;
     opacity: 1;
+    transform: translateZ(0);
 }
 
 .text-size-toggle-thumb i {
+    position: relative;
+    z-index: 4;
     color: #0891b2;
-    font-size: 0.88rem;
+    font-size: 15px;
     line-height: 1;
     opacity: 1;
+    transform: translateZ(0);
 }
 
 [data-bs-theme="dark"] .theme-icon-dark,
@@ -290,6 +331,7 @@ body {
 [data-text-size="comfortable"] .text-size-glyph-large {
     color: var(--accent-cyan);
     opacity: 1;
+    transform: scale(1.04) translateZ(0);
 }
 
 [data-bs-theme="light"] .theme-toggle-thumb,
@@ -319,7 +361,18 @@ body {
         0 10px 20px -12px rgba(100, 210, 255, 0.58);
 }
 
+[data-bs-theme="dark"] .text-size-toggle-thumb {
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 0 0 1px rgba(100, 210, 255, 0.05),
+        0 10px 20px -12px rgba(100, 210, 255, 0.42);
+}
+
 [data-bs-theme="dark"] .theme-toggle-thumb-icon-dark {
+    color: #64d2ff;
+}
+
+[data-bs-theme="dark"] .text-size-toggle-thumb i {
     color: #64d2ff;
 }
 
@@ -332,9 +385,30 @@ body {
     color: #0a84ff;
 }
 
+.theme-toggle.is-animating .theme-toggle-thumb,
+.text-size-toggle.is-animating .text-size-toggle-thumb {
+    animation: toggleThumbSettle 0.36s var(--spring) both;
+}
+
+.theme-toggle.is-animating .theme-toggle-thumb-icon,
+.text-size-toggle.is-animating .text-size-toggle-thumb i {
+    animation: toggleIconSettle 0.34s var(--spring) both;
+}
+
+@keyframes toggleThumbSettle {
+    0% { transform: scale(0.9); }
+    62% { transform: scale(1.06); }
+    100% { transform: scale(1); }
+}
+
+@keyframes toggleIconSettle {
+    0% { opacity: 0; transform: scale(0.72) rotate(-8deg); }
+    100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+
 /* ── Cards — glass material ──────────────────────────────────────────────── */
 .card {
-    border-radius: 18px;
+    border-radius: 16px;
     animation: cardIn 0.55s var(--ease) both;
     transition: transform 0.35s var(--ease), box-shadow 0.35s var(--ease),
                 border-color 0.35s var(--ease);
@@ -343,8 +417,6 @@ body {
 .card.bg-dark,
 .card {
     background: var(--surface) !important;
-    backdrop-filter: saturate(160%) blur(24px);
-    -webkit-backdrop-filter: saturate(160%) blur(24px);
     border: 1px solid var(--hairline) !important;
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.06),
@@ -352,11 +424,15 @@ body {
 }
 
 .card:hover {
-    transform: translateY(-3px);
     border-color: var(--hairline-hover) !important;
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.09),
         var(--shadow-card-hover);
+}
+
+/* Lift only on interactive standalone cards */
+.card.stat-clickable:hover {
+    transform: translateY(-3px);
 }
 
 .card-body {
@@ -373,11 +449,10 @@ body {
     padding: 0.88rem 1.05rem;
 }
 
-/* ── Metric cards — premium micro-label + hero numbers ───────────────────── */
+/* ── Metric cards — micro-label + hero numbers ───────────────────────────── */
 .card .text-secondary.small,
 .card .small.text-secondary {
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
+    letter-spacing: 0.03em;
     font-size: 0.64rem;
     font-weight: 600;
     color: var(--text-tertiary) !important;
@@ -487,7 +562,7 @@ table tbody tr:hover {
 .form-control {
     background: var(--surface-strong) !important;
     border: 1px solid var(--hairline) !important;
-    border-radius: 11px !important;
+    border-radius: 10px !important;
     color: var(--text-primary) !important;
     transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease), background-color 0.2s var(--ease);
 }
@@ -505,7 +580,7 @@ table tbody tr:hover {
     backdrop-filter: saturate(180%) blur(40px);
     -webkit-backdrop-filter: saturate(180%) blur(40px);
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    border-radius: 22px !important;
+    border-radius: 20px !important;
     box-shadow: 0 40px 90px -24px rgba(0, 0, 0, 0.28);
 }
 .modal-header.border-secondary { border-bottom: 1px solid var(--hairline) !important; }
@@ -551,6 +626,14 @@ table tbody tr:hover {
     background: rgba(255, 255, 255, 0.24);
     background-clip: content-box;
 }
+[data-bs-theme="light"] ::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.16);
+    background-clip: content-box;
+}
+[data-bs-theme="light"] ::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.26);
+    background-clip: content-box;
+}
 
 /* ── Motion ──────────────────────────────────────────────────────────────── */
 @keyframes cardIn {
@@ -571,12 +654,13 @@ table tbody tr:hover {
         animation-iteration-count: 1 !important;
         transition-duration: 0.001ms !important;
     }
-    .card:hover { transform: none; }
+    .card.stat-clickable:hover { transform: none; }
 }
 
 /* ── Stat icon circles ───────────────────────────────────────────────────── */
 .stat-icon {
     flex-shrink: 0;
+    color: var(--text-secondary);
     width: calc(40px * var(--ui-scale));
     height: calc(40px * var(--ui-scale));
     border-radius: 12px;
@@ -620,23 +704,22 @@ table tbody tr:hover {
     background: color-mix(in srgb, currentColor 10%, white 90%) !important;
 }
 
-.card:hover .stat-icon { transform: scale(1.07); }
+.stat-clickable:hover .stat-icon { transform: scale(1.07); }
 
 /* ── Metric label + value ────────────────────────────────────────────────── */
 .stat-label {
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    font-size: 0.64rem;
+    letter-spacing: 0.03em;
+    font-size: 0.63rem;
     font-weight: 600;
     color: var(--text-tertiary);
     margin-bottom: 0.1rem;
 }
 
 .stat-value {
-    font-size: 1.34rem;
+    font-size: 1.9rem;
     font-weight: 600;
-    letter-spacing: 0;
-    line-height: 1.1;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1;
     white-space: nowrap;
@@ -648,8 +731,8 @@ table tbody tr:hover {
 .market-open i { animation: marketPulse 2.4s ease-in-out infinite; }
 
 @keyframes marketPulse {
-    0%, 100% { opacity: 1;   transform: scale(1);   }
-    50%       { opacity: 0.5; transform: scale(0.7); }
+    0%, 100% { opacity: 1;    transform: scale(1);   }
+    50%       { opacity: 0.45; transform: scale(0.9); }
 }
 
 /* ── Ticker dot (colored circle in holdings table) ──────────────────────── */
@@ -745,7 +828,7 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
     align-items: center;
     justify-content: center;
     flex: 0 0 24px;
-    border-radius: 8px;
+    border-radius: 12px;
     background: var(--icon-surface);
     border: 1px solid var(--icon-hairline);
     box-shadow: var(--icon-shadow);
@@ -1430,25 +1513,22 @@ body.holdings-spotlight #holdings-card {
    ENHANCED UI — animations, tips, interactions
    ══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Staggered card entrance ─────────────────────────────────────────────── */
-/* Row 1: summary stats */
-#main-content > div:nth-child(1) > div:nth-child(1) .card { animation-delay:   0ms; }
-#main-content > div:nth-child(1) > div:nth-child(2) .card { animation-delay:  75ms; }
-#main-content > div:nth-child(1) > div:nth-child(3) .card { animation-delay: 150ms; }
-#main-content > div:nth-child(1) > div:nth-child(4) .card { animation-delay: 225ms; }
+/* ── Staggered card entrance — 35 ms steps, capped at 175 ms ────────────── */
+/* Row 1: merged summary panel */
+#main-content > div:nth-child(1) .card                     { animation-delay:   0ms; }
 /* Row 2: allocation */
-#main-content > div:nth-child(2) > div:nth-child(1) .card { animation-delay: 300ms; }
-#main-content > div:nth-child(2) > div:nth-child(2) .card { animation-delay: 375ms; }
+#main-content > div:nth-child(2) > div:nth-child(1) .card { animation-delay:  35ms; }
+#main-content > div:nth-child(2) > div:nth-child(2) .card { animation-delay:  70ms; }
 /* Row 3: best / worst / largest */
-#main-content > div:nth-child(3) > div:nth-child(1) .card { animation-delay: 450ms; }
-#main-content > div:nth-child(3) > div:nth-child(2) .card { animation-delay: 525ms; }
-#main-content > div:nth-child(3) > div:nth-child(3) .card { animation-delay: 600ms; }
-/* Row 4: performance */
-#main-content > div:nth-child(4) > div:nth-child(1) .card { animation-delay: 675ms; }
-#main-content > div:nth-child(4) > div:nth-child(2) .card { animation-delay: 750ms; }
-/* Realized + Holdings (direct card children) */
-#realized-card  { animation-delay: 825ms; }
-#holdings-card  { animation-delay: 900ms; }
+#main-content > div:nth-child(3) > div:nth-child(1) .card { animation-delay: 105ms; }
+#main-content > div:nth-child(3) > div:nth-child(2) .card { animation-delay: 140ms; }
+#main-content > div:nth-child(3) > div:nth-child(3) .card { animation-delay: 175ms; }
+/* Below-the-fold: all capped — no additional cascade */
+#world-markets-card                                        { animation-delay: 175ms; }
+#main-content > div:nth-child(5) > div:nth-child(1) .card { animation-delay: 175ms; }
+#main-content > div:nth-child(5) > div:nth-child(2) .card { animation-delay: 175ms; }
+#realized-card                                             { animation-delay: 175ms; }
+#holdings-card                                             { animation-delay: 175ms; }
 
 /* ── Tip trigger button ──────────────────────────────────────────────────── */
 .tip-trigger {
@@ -1555,23 +1635,38 @@ body.holdings-spotlight #holdings-card {
     line-height: 1.6;
 }
 
-/* ── Value flash on data refresh ─────────────────────────────────────────── */
+/* ── Value flash on data refresh — gentle cross-fade, no blur ────────────── */
 @keyframes valueFlash {
-    0%   { opacity: 1;   filter: blur(0px);  }
-    28%  { opacity: 0.1; filter: blur(5px);  }
-    65%  { opacity: 0.85; filter: blur(1px); }
-    100% { opacity: 1;   filter: blur(0px);  }
+    0%   { opacity: 1;    }
+    18%  { opacity: 0.42; }
+    100% { opacity: 1;    }
 }
 .value-updating {
-    animation: valueFlash 0.52s var(--ease) both;
+    animation: valueFlash 0.4s var(--ease) both;
 }
 
 /* ── Clickable stat cards ────────────────────────────────────────────────── */
 .stat-clickable { cursor: pointer; }
-.stat-clickable:hover .stat-value { color: var(--accent-blue) !important; }
-.stat-clickable:active {
+.card.stat-clickable:hover .stat-value { color: var(--accent-blue) !important; }
+.card.stat-clickable:active {
     transform: scale(0.97) translateY(0px) !important;
     transition: transform 0.1s ease !important;
+}
+
+/* Segment variant: background tint instead of card lift */
+.summary-segment.stat-clickable {
+    transition: background 0.22s var(--ease);
+    border-radius: 0;
+}
+.summary-segment.stat-clickable:hover {
+    background: var(--surface-hover);
+}
+.summary-segment.stat-clickable:hover .stat-value {
+    color: var(--accent-blue) !important;
+}
+.summary-segment.stat-clickable:active {
+    background: var(--surface-strong);
+    transition: background 0.08s ease;
 }
 
 /* ── Apple-style bottom toast pill ──────────────────────────────────────── */
@@ -1901,10 +1996,65 @@ body.holdings-spotlight #holdings-card {
 [data-bs-theme="light"] .market-tile.market-shimmer,
 [data-bs-theme="light"] .shimmer-line {
     background: linear-gradient(90deg,
-        rgba(15,23,42,.05) 25%,
-        rgba(15,23,42,.1) 50%,
-        rgba(15,23,42,.05) 75%);
+        rgba(0, 0, 0, .045) 25%,
+        rgba(0, 0, 0, .085) 50%,
+        rgba(0, 0, 0, .045) 75%);
     background-size: 200% 100%;
+}
+
+/* Popover + toast borders: dark hairline in light mode */
+[data-bs-theme="light"] #tip-popover {
+    border-color: rgba(0, 0, 0, 0.09);
+    box-shadow:
+        0 2px 6px rgba(0, 0, 0, 0.06),
+        0 18px 44px -12px rgba(0, 0, 0, 0.14),
+        inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+[data-bs-theme="light"] .toast-apple {
+    border-color: rgba(0, 0, 0, 0.08);
+    box-shadow:
+        0 2px 6px rgba(0, 0, 0, 0.06),
+        0 18px 44px -12px rgba(0, 0, 0, 0.16),
+        inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+[data-bs-theme="light"] .kbd-panel {
+    border-color: rgba(0, 0, 0, 0.09);
+    box-shadow:
+        0 2px 6px rgba(0, 0, 0, 0.06),
+        0 18px 44px -12px rgba(0, 0, 0, 0.16),
+        inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+[data-bs-theme="light"] #kbd-overlay {
+    background: rgba(242, 242, 247, 0.52);
+}
+
+/* Cards: remove the near-invisible white top-edge spec in light mode */
+[data-bs-theme="light"] .card.bg-dark,
+[data-bs-theme="light"] .card {
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.7),
+        var(--shadow-card);
+}
+[data-bs-theme="light"] .card:hover {
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.8),
+        var(--shadow-card-hover);
+}
+
+/* Stat icons get a slightly stronger white fill in light mode */
+[data-bs-theme="light"] .stat-icon {
+    background: color-mix(in srgb, currentColor 9%, white 91%) !important;
+    box-shadow:
+        0 4px 14px -10px currentColor,
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+/* Navbar shortcut hint: warm gray, not cold navy */
+[data-bs-theme="light"] .navbar-shortcut-hint {
+    color: rgba(60, 60, 67, 0.38);
 }
 
 @media (max-width: 620px) {
@@ -1929,4 +2079,62 @@ body.holdings-spotlight #holdings-card {
     [data-text-size="comfortable"] .text-size-toggle-thumb {
         left: 27px;
     }
+}
+
+/* ── Summary Panel — single segmented card ───────────────────────────────── */
+.summary-panel { overflow: hidden; }
+
+.summary-panel-inner {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.summary-segment {
+    flex: 1 0 50%;
+    padding: 1rem 1.15rem;
+    min-width: 0;
+}
+
+/* Mobile 2×2: bottom border on row 1, right border on left column */
+@media (max-width: 767.98px) {
+    .summary-segment:nth-child(1),
+    .summary-segment:nth-child(2) {
+        border-bottom: 1px solid var(--hairline-soft);
+    }
+    .summary-segment:nth-child(odd) {
+        border-right: 1px solid var(--hairline-soft);
+    }
+}
+
+/* Desktop: 4-across with hairline dividers */
+@media (min-width: 768px) {
+    .summary-segment {
+        flex: 1 0 25%;
+    }
+    .summary-segment + .summary-segment {
+        border-left: 1px solid var(--hairline-soft);
+    }
+}
+
+/* ── Focus-visible rings for keyboard navigation ─────────────────────────── */
+.card.stat-clickable:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 3px;
+    border-radius: 16px;
+}
+
+.summary-segment.stat-clickable:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: -2px;
+}
+
+#alloc-sort:focus-visible,
+#holdings-price-sort:focus-visible,
+#holdings-today-sort:focus-visible,
+#holdings-value-sort:focus-visible,
+#holdings-alloc-sort:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: -2px;
+    border-radius: 3px;
+    color: var(--text-primary) !important;
 }
