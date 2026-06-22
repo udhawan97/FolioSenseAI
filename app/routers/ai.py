@@ -77,6 +77,7 @@ def _enrich_intelligence_dict(intel_dict: dict, stock_data: dict | None) -> dict
             "operating_margin": stock_data.get("operating_margin"),
             "profit_margin": stock_data.get("profit_margin"),
             "dividend_yield": stock_data.get("dividend_yield"),
+            "aum": stock_data.get("aum"),
         }
     )
     return intel_dict
@@ -436,6 +437,7 @@ async def get_all_intelligence(db: Session = Depends(get_db)):
                 "operating_margin": None,
                 "profit_margin": None,
                 "dividend_yield": None,
+                "aum": None,
                 "data_quality": "static",
                 "data_sources": [],
             }
