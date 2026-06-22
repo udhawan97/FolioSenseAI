@@ -1477,13 +1477,39 @@ function _updateHoldingsCostCallout(show) {
     callout.style.display = "";
 }
 
+function animateSummaryBody(body, opening) {
+    if (opening) {
+        // Measure natural height without constraint, then animate from 0
+        body.style.maxHeight = "none";
+        const targetHeight = body.scrollHeight;
+        body.style.maxHeight = "0px";
+        body.offsetHeight; // force reflow so browser sees 0 before transition starts
+        body.classList.add("open");
+        body.style.maxHeight = targetHeight + "px";
+        // After transition, remove constraint so AI content updates don't clip
+        const cleanup = (e) => {
+            if (e.propertyName !== "max-height") return;
+            body.removeEventListener("transitionend", cleanup);
+            if (body.classList.contains("open")) body.style.maxHeight = "none";
+        };
+        body.addEventListener("transitionend", cleanup);
+    } else {
+        // Pin current rendered height, then animate to 0
+        body.style.maxHeight = body.scrollHeight + "px";
+        body.offsetHeight; // force reflow
+        body.style.maxHeight = "0px";
+        body.classList.remove("open");
+    }
+}
+
 function toggleSummaryRow(mainRow) {
     const expandRow = mainRow.nextElementSibling;
     if (!expandRow || !expandRow.classList.contains("summary-expand-row")) return;
     const body = expandRow.querySelector(".summary-body");
-    const isOpen = body.classList.toggle("open");
-    mainRow.classList.toggle("summary-open", isOpen);
-    if (isOpen) mainRow.classList.remove("has-intel-ready");
+    const isOpen = body.classList.contains("open");
+    animateSummaryBody(body, !isOpen);
+    mainRow.classList.toggle("summary-open", !isOpen);
+    if (!isOpen) mainRow.classList.remove("has-intel-ready");
 }
 
 function escapeHtml(str) {
@@ -1699,6 +1725,56 @@ function buildHoldingFact(data) {
         return `AUM: $${formatCompactNumber(aum)}`;
     }
     return "";
+}
+
+function formatSignalPct(value, decimals = 1) {
+    if (!isFiniteNumber(value)) return "—";
+    const numeric = Number(value);
+    return `${numeric >= 0 ? "+" : ""}${numeric.toFixed(decimals)}%`;
+}
+
+function signalTone(value) {
+    if (!isFiniteNumber(value) || Number(value) === 0) return "neutral";
+    return Number(value) > 0 ? "positive" : "negative";
+}
+
+function firstFiniteValue(...values) {
+    return values.find(isFiniteNumber);
+}
+
+function renderFundTrendChip(label, value) {
+    const tone = signalTone(value);
+    return `
+        <span class="fund-trend-chip ${tone}">
+            <span>${escapeHtml(label)}</span>
+            <strong>${escapeHtml(formatSignalPct(value))}</strong>
+        </span>`;
+}
+
+function renderFundScaleSpotlight(data, priceSignal = null) {
+    const aum = data?.aum;
+    const hasAum = isFiniteNumber(aum) && Number(aum) > 0;
+    const change30 = firstFiniteValue(priceSignal?.vs30dChangePct, priceSignal?.vs30dPct);
+    const change200 = firstFiniteValue(priceSignal?.vs200dChangePct, priceSignal?.vs200dPct);
+    const hasTrends = isFiniteNumber(change30) || isFiniteNumber(change200);
+    if (!hasAum && !hasTrends) return "";
+
+    return `
+        <div class="fund-scale-spotlight" aria-label="Fund scale and price trend">
+            <div class="fund-scale-emblem" aria-hidden="true">
+                <i class="bi bi-stars"></i>
+            </div>
+            <div class="fund-scale-copy">
+                <span class="fund-scale-label">Fund scale</span>
+                <strong class="fund-scale-value">${hasAum ? escapeHtml(formatCompact(aum)) : "AUM unavailable"}</strong>
+                <span class="fund-scale-detail">Assets under management</span>
+            </div>
+            ${hasTrends ? `
+                <div class="fund-trend-stack" aria-label="Price change versus history">
+                    ${renderFundTrendChip("30D", change30)}
+                    ${renderFundTrendChip("200D", change200)}
+                </div>` : ""}
+        </div>`;
 }
 
 function formatExpenseRatio(expenseRatio) {
@@ -1990,6 +2066,7 @@ function renderHoldingCoverage(section, data) {
     const coverageClass = (data.coverage_type || "equity").replace(/[^a-z-]/g, "");
     const rating = cachedRecommendations[data.ticker] || {};
     const quality = rating.etf_quality || null;
+    const priceSignal = rating.price_signal || null;
 
     // Sector bars (top 5)
     const sectorBarsHtml = data.sectors && data.sectors.length
@@ -2055,8 +2132,9 @@ function renderHoldingCoverage(section, data) {
 
     // Metadata footer
     const marketPulseHtml = renderMarketPulseStrip(data);
+    const fundScaleHtml = renderFundScaleSpotlight(data, priceSignal);
     const fact = buildHoldingFact(data);
-    const factTag = fact
+    const factTag = fact && !fundScaleHtml
         ? `<span class="fact-tag"><i class="bi bi-stars"></i>${escapeHtml(fact)}</span>` : "";
 
     section.innerHTML = `
@@ -2069,6 +2147,7 @@ function renderHoldingCoverage(section, data) {
             ${countryChipsHtml}
             ${topHoldingsHtml}
             ${etfProfileHtml}
+            ${fundScaleHtml}
             ${marketPulseHtml}
             <div class="intel-meta-row">${factTag}</div>
         </div>`;
@@ -2219,10 +2298,11 @@ function renderTargetCell(rec) {
         const label = signal.priceZoneLabel || "Unavailable";
         if (label !== "Unavailable" && signal.percentile != null) {
             const zoneClass = label.toLowerCase();
-            const trend = signal.vs200dPct;
-            const trendText = trend == null
+            const trend30 = firstFiniteValue(signal.vs30dChangePct, signal.vs30dPct);
+            const trend200 = firstFiniteValue(signal.vs200dChangePct, signal.vs200dPct);
+            const trendText = trend30 == null && trend200 == null
                 ? escapeHtml(signal.basis || "Price zone")
-                : `${trend >= 0 ? "+" : ""}${Number(trend).toFixed(1)}% vs 200D`;
+                : `30D ${formatSignalPct(trend30)} · 200D ${formatSignalPct(trend200)}`;
             return `<div class="target-price-value price-zone-${escapeHtml(zoneClass)}">${escapeHtml(label)} · ${Number(signal.percentile).toFixed(0)}%</div>
                     <div class="target-upside" style="color:var(--text-tertiary)">${escapeHtml(trendText)}</div>
                     ${renderTargetKind("etf", "bi-activity", "ETF signal")}`;
@@ -2598,7 +2678,7 @@ async function loadHoldingIntelligence() {
         // Toggle expand rows open/closed on repeated click
         const allBodies = tbody.querySelectorAll(".summary-body");
         const anyOpen = Array.from(allBodies).some(b => b.classList.contains("open"));
-        allBodies.forEach(b => b.classList.toggle("open", !anyOpen));
+        allBodies.forEach(b => animateSummaryBody(b, !anyOpen));
         tbody.querySelectorAll("tr[data-ticker]").forEach(r => {
             r.classList.toggle("summary-open", !anyOpen);
             if (!anyOpen) r.classList.remove("has-intel-ready");
@@ -2648,6 +2728,15 @@ async function loadHoldingIntelligence() {
             const moveSection     = expandRow.querySelector(".intel-move-section");
             if (coverageSection) renderHoldingCoverage(coverageSection, cachedIntelligence[ticker]);
             if (moveSection)     renderMoveExplainer(moveSection, cachedExplanations[ticker], cachedIntelligence[ticker]);
+        });
+
+        // If any rows were open during load, re-sync their max-height to the new content size
+        requestAnimationFrame(() => {
+            tbody.querySelectorAll(".summary-body.open").forEach(body => {
+                if (body.style.maxHeight && body.style.maxHeight !== "none") {
+                    body.style.maxHeight = body.scrollHeight + "px";
+                }
+            });
         });
 
         renderHoldings();

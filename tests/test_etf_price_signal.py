@@ -12,6 +12,7 @@ def test_price_signal_uses_one_year_percentile():
     assert result["priceZoneLabel"] == "Fair"
     assert result["percentile"] == 51.2
     assert result["vs200dPct"] == -2.0
+    assert result["vs30dChangePct"] == 9.9
 
 
 def test_low_percentile_is_bargain_zone():
@@ -33,6 +34,17 @@ def test_high_percentile_is_rich_zone():
     assert result["priceZoneLabel"] == "Rich"
     assert result["percentile"] == 95.1
     assert result["vs200dPct"] == 9.3
+
+
+def test_price_signal_reports_30_and_200_day_changes():
+    closes = list(range(100, 320))
+    result = calculate_etf_price_signal(
+        {"ticker": "VOO", "current_price": 330},
+        closes,
+    )
+
+    assert result["vs30dChangePct"] == 13.8
+    assert result["vs200dChangePct"] == 175.0
 
 
 def test_falls_back_to_52_week_range_when_history_missing():

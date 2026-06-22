@@ -2404,15 +2404,16 @@ table tbody tr:hover {
     border-top: 0 !important;
     border-bottom: 0 !important;
     overflow: hidden;
+    contain: layout style;
 }
 .summary-body {
     max-height: 0;
     overflow: hidden;
-    transition: max-height 0.56s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease;
+    transition: max-height 0.36s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease;
     opacity: 0;
+    will-change: max-height;
 }
 .summary-body.open {
-    max-height: 200px;
     opacity: 1;
 }
 .summary-inner {
@@ -2598,11 +2599,7 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
     border-color: color-mix(in srgb, currentColor 18%, transparent);
 }
 
-/* ── Expand row max-height: accommodate move explainer + AI summary ─────── */
-.summary-body.open {
-    max-height: 1180px !important;
-    opacity: 1;
-}
+/* ── Expand row: max-height is set by JS to the exact scrollHeight ───────── */
 
 /* Slide-in animation for the intel panel when it first opens */
 .summary-body .intel-grid {
@@ -3005,6 +3002,157 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
     flex: 0 0 auto;
 }
 
+.fund-scale-spotlight {
+    --fund-trend-color: var(--accent-cyan);
+    position: relative;
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    gap: 0.62rem;
+    align-items: center;
+    min-height: 84px;
+    margin: 0.82rem 0 0.86rem;
+    padding: 0.74rem 0.78rem;
+    overflow: hidden;
+    border: 1px solid rgba(111, 214, 240, 0.24);
+    border-radius: 8px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.082), rgba(255, 255, 255, 0.030)),
+        linear-gradient(135deg, rgba(111, 214, 240, 0.16), rgba(151, 172, 236, 0.090) 54%, rgba(48, 209, 88, 0.065)),
+        rgba(4, 9, 16, 0.92);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.090),
+        inset 0 -1px 0 rgba(111, 214, 240, 0.070),
+        0 20px 42px -34px rgba(111, 214, 240, 0.88);
+    animation: fundScaleIn 0.52s cubic-bezier(0.22, 1, 0.36, 1) both 0.18s;
+}
+
+.fund-scale-spotlight::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+        linear-gradient(110deg, transparent 0%, rgba(255, 255, 255, 0.14) 45%, rgba(111, 214, 240, 0.14) 52%, transparent 72%);
+    transform: translateX(-115%);
+    pointer-events: none;
+    animation: fundScaleSheen 1.08s cubic-bezier(0.22, 1, 0.36, 1) 0.34s both;
+}
+
+.fund-scale-spotlight::after {
+    content: "";
+    position: absolute;
+    left: 0.78rem;
+    right: 0.78rem;
+    bottom: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent-cyan), var(--accent-green), transparent);
+    opacity: 0.62;
+    transform-origin: left;
+    animation: fundScaleMeter 1.35s ease both 0.36s;
+}
+
+.fund-scale-emblem {
+    position: relative;
+    z-index: 1;
+    width: 36px;
+    height: 36px;
+    display: inline-grid;
+    place-items: center;
+    border-radius: 8px;
+    color: var(--accent-cyan);
+    border: 1px solid rgba(111, 214, 240, 0.28);
+    background:
+        linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.035)),
+        rgba(111, 214, 240, 0.12);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.10),
+        0 0 22px -10px rgba(111, 214, 240, 0.98);
+    animation: fundEmblemPulse 2.7s ease-in-out infinite;
+}
+
+.fund-scale-copy,
+.fund-trend-stack {
+    position: relative;
+    z-index: 1;
+    min-width: 0;
+}
+
+.fund-scale-copy {
+    display: grid;
+    gap: 0.08rem;
+}
+
+.fund-scale-label {
+    color: rgba(151, 172, 236, 0.72);
+    font-size: 0.58rem;
+    font-weight: 820;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.fund-scale-value {
+    color: rgba(245, 250, 255, 0.97);
+    font-size: 1.32rem;
+    line-height: 1;
+    font-weight: 820;
+    letter-spacing: 0;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 22px rgba(111, 214, 240, 0.34);
+}
+
+.fund-scale-detail {
+    color: rgba(235, 245, 255, 0.58);
+    font-size: 0.66rem;
+    font-weight: 650;
+}
+
+.fund-trend-stack {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(72px, 1fr));
+    gap: 0.34rem;
+}
+
+.fund-trend-chip {
+    --chip-color: var(--text-tertiary);
+    display: grid;
+    gap: 0.04rem;
+    align-content: center;
+    min-height: 42px;
+    padding: 0.32rem 0.44rem;
+    border: 1px solid color-mix(in srgb, var(--chip-color) 26%, transparent);
+    border-radius: 8px;
+    background:
+        linear-gradient(180deg, rgba(255,255,255,0.065), rgba(255,255,255,0.020)),
+        color-mix(in srgb, var(--chip-color) 11%, transparent);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.070);
+    animation: fundTrendChipIn 0.42s var(--ease) both;
+}
+
+.fund-trend-chip:nth-child(2) {
+    animation-delay: 0.08s;
+}
+
+.fund-trend-chip.positive { --chip-color: var(--accent-green); }
+.fund-trend-chip.negative { --chip-color: var(--accent-red); }
+.fund-trend-chip.neutral  { --chip-color: var(--text-tertiary); }
+
+.fund-trend-chip span {
+    color: rgba(235, 245, 255, 0.52);
+    font-size: 0.52rem;
+    font-weight: 820;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.fund-trend-chip strong {
+    color: var(--chip-color);
+    font-size: 0.82rem;
+    line-height: 1;
+    font-weight: 820;
+    letter-spacing: 0;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 16px color-mix(in srgb, var(--chip-color) 34%, transparent);
+}
+
 .market-pulse-strip {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3144,9 +3292,53 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
     50% { transform: translateY(-1px); }
 }
 
+@keyframes fundScaleIn {
+    from { opacity: 0; transform: translateY(7px) scale(0.992); filter: blur(2px); }
+    to   { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
+@keyframes fundScaleSheen {
+    0%, 42% { transform: translateX(-115%); opacity: 0; }
+    54%     { opacity: 1; }
+    82%, 100% { transform: translateX(115%); opacity: 0; }
+}
+
+@keyframes fundScaleMeter {
+    from { transform: scaleX(0.18); opacity: 0.24; }
+    to   { transform: scaleX(1); opacity: 0.62; }
+}
+
+@keyframes fundEmblemPulse {
+    0%, 100% {
+        transform: translateY(0);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.10),
+            0 0 18px -11px rgba(111, 214, 240, 0.82);
+    }
+    50% {
+        transform: translateY(-1px);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.12),
+            0 0 26px -9px rgba(111, 214, 240, 1);
+    }
+}
+
+@keyframes fundTrendChipIn {
+    from { opacity: 0; transform: translateX(5px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
 @media (max-width: 900px) {
     .market-pulse-strip {
         grid-template-columns: 1fr;
+    }
+
+    .fund-scale-spotlight {
+        grid-template-columns: 34px minmax(0, 1fr);
+    }
+
+    .fund-trend-stack {
+        grid-column: 1 / -1;
     }
 }
 
@@ -6031,6 +6223,11 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
     .summary-body.open .intel-grid::after,
     .intel-coverage-section::before,
     .intel-move-section::before,
+    .fund-scale-spotlight,
+    .fund-scale-spotlight::before,
+    .fund-scale-spotlight::after,
+    .fund-scale-emblem,
+    .fund-trend-chip,
 	    .orbit-loader,
 	    .orbit-loader::before,
 	    .orbit-loader::after,
