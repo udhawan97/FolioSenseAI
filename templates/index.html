@@ -20,7 +20,7 @@
     <link rel="apple-touch-icon" href="/static/img/brand/folio-orbit-icon-1024.png">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="/static/css/style.css?v=35" rel="stylesheet">
+    <link href="/static/css/style.css?v=40" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -60,9 +60,40 @@
                     <span class="hud-status-divider" aria-hidden="true">·</span>
                     <span class="hud-status-countdown" id="countdown" aria-live="polite"></span>
                 </button>
-                <span class="navbar-shortcut-hint d-none d-md-inline" onclick="showKeyboardHelp()" title="Keyboard shortcuts">
-                    Press <kbd style="font-family:-apple-system,sans-serif;font-size:.56rem;padding:.03rem .22rem;border-radius:3px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12)">?</kbd> for shortcuts
-                </span>
+                <div class="hud-popover" id="hud-popover" role="tooltip" aria-hidden="true">
+                    <div class="hud-popover-header">
+                        <span class="hud-popover-header-dot" aria-hidden="true"></span>
+                        <span class="hud-popover-header-label">Live Feed</span>
+                        <span class="hud-popover-header-time" id="hud-pop-clock">—</span>
+                    </div>
+                    <div class="hud-popover-body">
+                        <div class="hud-popover-row">
+                            <span class="hud-popover-row-icon"><i class="bi bi-check-circle-fill"></i></span>
+                            <div>
+                                <div class="hud-popover-row-label">Last synced</div>
+                                <div class="hud-popover-row-value" id="hud-pop-updated">—</div>
+                                <div class="hud-popover-row-sub">Prices, P&amp;L and holdings pulled from market data</div>
+                            </div>
+                        </div>
+                        <div class="hud-popover-divider"></div>
+                        <div class="hud-popover-row">
+                            <span class="hud-popover-row-icon"><i class="bi bi-arrow-repeat"></i></span>
+                            <div>
+                                <div class="hud-popover-row-label">Next auto-refresh</div>
+                                <div class="hud-popover-row-value" id="hud-pop-countdown">—</div>
+                                <div class="hud-popover-row-sub">Dashboard refreshes every 5 minutes automatically</div>
+                                <div class="hud-progress-track">
+                                    <div class="hud-progress-fill" id="hud-pop-progress"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <button class="shortcut-pill" type="button" onclick="showKeyboardHelp()"
+                        aria-label="View keyboard shortcuts" title="Keyboard shortcuts">
+                    <span class="shortcut-pill-key" aria-hidden="true">?</span>
+                    <span class="shortcut-pill-label">Shortcuts</span>
+                </button>
                 <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to light mode" aria-pressed="true">
                     <span class="theme-toggle-track" aria-hidden="true">
                         <span class="theme-toggle-thumb">
@@ -461,7 +492,7 @@
                     </button>
                 </div>
                 <div class="holdings-header-actions">
-                    <div class="ai-agent-status" id="ai-agent-status" aria-live="polite">
+                    <div class="ai-agent-status" id="ai-agent-status" aria-live="polite" aria-hidden="true" hidden>
                         <span class="ai-agent-avatar" aria-hidden="true">
                             <img src="/static/img/brand/folio-orbit-icon.svg" alt="">
                         </span>
@@ -589,41 +620,10 @@
     </div><!-- /container -->
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <script defer src="/static/js/dashboard.js?v=35"></script>
+    <script defer src="/static/js/dashboard.js?v=39"></script>
 
     <!-- Tip Popover (singleton) -->
     <div id="tip-popover" role="tooltip" aria-hidden="true"></div>
-
-    <!-- HUD Status Popover -->
-    <div class="hud-popover" id="hud-popover" role="tooltip" aria-hidden="true">
-        <div class="hud-popover-header">
-            <span class="hud-popover-header-dot" aria-hidden="true"></span>
-            <span class="hud-popover-header-label">Live Feed</span>
-            <span class="hud-popover-header-time" id="hud-pop-clock">—</span>
-        </div>
-        <div class="hud-popover-body">
-            <div class="hud-popover-row">
-                <span class="hud-popover-row-icon"><i class="bi bi-check-circle-fill"></i></span>
-                <div>
-                    <div class="hud-popover-row-label">Last synced</div>
-                    <div class="hud-popover-row-value" id="hud-pop-updated">—</div>
-                    <div class="hud-popover-row-sub">Prices, P&amp;L and holdings pulled from market data</div>
-                </div>
-            </div>
-            <div class="hud-popover-divider"></div>
-            <div class="hud-popover-row">
-                <span class="hud-popover-row-icon"><i class="bi bi-arrow-repeat"></i></span>
-                <div>
-                    <div class="hud-popover-row-label">Next auto-refresh</div>
-                    <div class="hud-popover-row-value" id="hud-pop-countdown">—</div>
-                    <div class="hud-popover-row-sub">Dashboard refreshes every 5 minutes automatically</div>
-                    <div class="hud-progress-track">
-                        <div class="hud-progress-fill" id="hud-pop-progress"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <!-- Keyboard Shortcut Overlay -->
     <div id="kbd-overlay" role="dialog" aria-label="Keyboard shortcuts" aria-hidden="true">

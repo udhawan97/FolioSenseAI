@@ -366,6 +366,19 @@ function setAgentLine(text) {
     if (line) line.textContent = text;
 }
 
+function setAgentReadyState(ready, message = "Insights ready") {
+    const status = document.getElementById("ai-agent-status");
+    const card = document.getElementById("holdings-card");
+
+    if (card) card.classList.toggle("has-ai-insights", ready);
+    if (!status) return;
+
+    if (ready) setAgentLine(message);
+    status.hidden = !ready;
+    status.setAttribute("aria-hidden", ready ? "false" : "true");
+    status.classList.toggle("is-ready", ready);
+}
+
 const SCAN_ROW_LABELS = ["Scanning", "Reading", "Analyzing", "Processing", "Checking", "Fetching", "Loading", "Parsing", "Resolving"];
 
 function renderAiScanTickers() {
@@ -387,7 +400,7 @@ function renderAiScanTickers() {
     ).join("");
 }
 
-function setAiChecking(active, message = "Reading positions") {
+function setAiChecking(active, message = "Reading positions", insightsReady = false) {
     const card = document.getElementById("holdings-card");
     const panel = document.getElementById("ai-scan-panel");
     const subtitle = document.getElementById("ai-scan-subtitle");
@@ -402,15 +415,19 @@ function setAiChecking(active, message = "Reading positions") {
     if (!active) {
         card.classList.remove("is-ai-checking");
         if (panel) panel.setAttribute("aria-hidden", "true");
-        setAgentLine(message);
+        setAgentReadyState(insightsReady, message);
         HoldingsBg.stop();
         return;
     }
 
     let messageIndex = 0;
     card.classList.add("is-ai-checking");
-    HoldingsBg.start();
-    if (panel) panel.setAttribute("aria-hidden", "false");
+    setAgentReadyState(false);
+    HoldingsBg.stop();
+    if (panel) {
+        panel.setAttribute("aria-hidden", "false");
+        panel.style.setProperty("--scan-travel", `${panel.offsetHeight + 180}px`);
+    }
     renderAiScanTickers();
     setAgentLine(message);
     if (subtitle) {
@@ -425,13 +442,10 @@ function setAiChecking(active, message = "Reading positions") {
         setAgentLine(next);
         if (subtitle) {
             const isClaudeBeat = messageIndex === CLAUDE_FLIRT_BEAT;
-            subtitle.classList.toggle("ai-scan-subtitle--highlight", isClaudeBeat);
-            subtitle.style.animation = "none";
-            subtitle.getBoundingClientRect();
-            subtitle.style.animation = "";
             subtitle.textContent = isClaudeBeat
                 ? "She read it. Now typing. Always delivers — just takes her 30–60s."
                 : `${next} across ${latestHoldings.length || "your"} holdings.`;
+            subtitle.classList.toggle("ai-scan-subtitle--highlight", isClaudeBeat);
         }
     }, 1250);
 }
@@ -1641,23 +1655,44 @@ function renderMoveExplainer(section, data, coverageData = null) {
 
 // ── Holding Coverage ("What it covers") ──────────────────────────────────────
 
+function formatFactWeight(value, decimals = 1) {
+    if (!isFiniteNumber(value)) return "";
+    const numeric = Number(value);
+    return `${numeric.toFixed(decimals)}%`;
+}
+
+function compactFactLabel(label = "") {
+    return String(label).replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
+}
+
 function buildHoldingFact(data) {
     if (!data) return "";
 
     const coverageType = data.coverage_type || "";
     const topHolding = data.top_holdings?.[0];
     const topSector = data.sectors?.[0];
+    const secondSector = data.sectors?.[1];
     const topCountry = data.countries?.[0];
+    const secondCountry = data.countries?.[1];
 
     if (coverageType.startsWith("etf") || coverageType === "fund") {
-        if (topHolding) {
-            return `Largest holding: ${topHolding.ticker} (${topHolding.weight.toFixed(1)}%)`;
+        if (topCountry && secondCountry && Number(topCountry.weight) < 95) {
+            return `Country mix: ${compactFactLabel(topCountry.name)} ${formatFactWeight(topCountry.weight, 0)}, ${compactFactLabel(secondCountry.name)} ${formatFactWeight(secondCountry.weight, 0)}`;
+        }
+        if (topSector && secondSector && Number(topSector.weight) < 75) {
+            return `Sector mix: ${compactFactLabel(topSector.name)} ${formatFactWeight(topSector.weight)}, ${compactFactLabel(secondSector.name)} ${formatFactWeight(secondSector.weight)}`;
         }
         if (topSector) {
-            return `${topSector.name} leads exposure at ${topSector.weight.toFixed(1)}%`;
+            return `${compactFactLabel(topSector.name)} concentration: ${formatFactWeight(topSector.weight)} of exposure`;
         }
-        if (topCountry) {
-            return `${topCountry.name} is top region at ${topCountry.weight.toFixed(0)}%`;
+        if (data.theme) {
+            return `Theme lens: ${data.theme}`;
+        }
+        if (data.holdings_count && Number(data.holdings_count) > 1) {
+            return `Diversified basket: ${formatCompactNumber(data.holdings_count)} holdings`;
+        }
+        if (topHolding && Number(topHolding.weight) >= 95) {
+            return `Pure exposure: ${topHolding.name || topHolding.ticker}`;
         }
     }
 
@@ -1675,7 +1710,120 @@ function formatExpenseRatio(expenseRatio) {
     return `${(Number(expenseRatio) * 100).toFixed(2)}%`;
 }
 
+function formatPercentMetric(value, decimals = 1) {
+    if (!isFiniteNumber(value)) return "Unavailable";
+    const numeric = Number(value);
+    const pct = Math.abs(numeric) <= 1 ? numeric * 100 : numeric;
+    return `${pct >= 0 ? "+" : ""}${pct.toFixed(decimals)}%`;
+}
+
+function formatPositiveMultiple(value) {
+    if (!isFiniteNumber(value) || Number(value) <= 0) return "Unavailable";
+    return `${Number(value).toFixed(1)}×`;
+}
+
+function buildEquityMarketPulseItems(data) {
+    const marketCap = isFiniteNumber(data.market_cap) ? Number(data.market_cap) : null;
+    const enterpriseValue = isFiniteNumber(data.enterprise_value) ? Number(data.enterprise_value) : null;
+    const revenueGrowth = isFiniteNumber(data.revenue_growth) ? Number(data.revenue_growth) : null;
+    const fcfYield = isFiniteNumber(data.fcf_yield) ? Number(data.fcf_yield) : null;
+    const dividendYield = isFiniteNumber(data.dividend_yield) ? Number(data.dividend_yield) : null;
+    const profitMargin = isFiniteNumber(data.profit_margin) ? Number(data.profit_margin) : null;
+
+    const valuationOptions = [
+        {
+            label: "EV / Sales",
+            value: formatPositiveMultiple(data.enterprise_to_revenue),
+            detail: "Banker valuation multiple",
+            usable: isFiniteNumber(data.enterprise_to_revenue) && Number(data.enterprise_to_revenue) > 0,
+            tone: "cyan",
+            icon: "bi-building-check",
+        },
+        {
+            label: "Forward P/E",
+            value: formatPositiveMultiple(data.forward_pe),
+            detail: "Forward earnings multiple",
+            usable: isFiniteNumber(data.forward_pe) && Number(data.forward_pe) > 0,
+            tone: "blue",
+            icon: "bi-graph-up-arrow",
+        },
+        {
+            label: "P/E ratio",
+            value: formatPositiveMultiple(data.pe_ratio),
+            detail: "Trailing earnings multiple",
+            usable: isFiniteNumber(data.pe_ratio) && Number(data.pe_ratio) > 0,
+            tone: "blue",
+            icon: "bi-graph-up-arrow",
+        },
+    ];
+    const valuation = valuationOptions.find(item => item.usable) || valuationOptions[0];
+
+    const qualityOptions = [
+        {
+            label: "FCF yield",
+            value: isFiniteNumber(fcfYield) ? `${fcfYield >= 0 ? "+" : ""}${fcfYield.toFixed(1)}%` : "Unavailable",
+            detail: "Cash return on market cap",
+            usable: isFiniteNumber(fcfYield),
+            tone: fcfYield !== null && fcfYield >= 4 ? "positive" : fcfYield !== null && fcfYield < 0 ? "negative" : "gold",
+            icon: "bi-cash-coin",
+        },
+        {
+            label: "Revenue growth",
+            value: formatPercentMetric(revenueGrowth),
+            detail: "Top-line growth",
+            usable: isFiniteNumber(revenueGrowth),
+            tone: revenueGrowth !== null && revenueGrowth >= 0.15 ? "positive" : revenueGrowth !== null && revenueGrowth < 0 ? "negative" : "gold",
+            icon: "bi-speedometer2",
+        },
+        {
+            label: "Dividend yield",
+            value: formatPercentMetric(dividendYield),
+            detail: "Shareholder cash yield",
+            usable: isFiniteNumber(dividendYield) && Number(dividendYield) > 0,
+            tone: "positive",
+            icon: "bi-piggy-bank",
+        },
+        {
+            label: "Profit margin",
+            value: formatPercentMetric(profitMargin),
+            detail: "Net income margin",
+            usable: isFiniteNumber(profitMargin),
+            tone: profitMargin !== null && profitMargin >= 0.15 ? "positive" : profitMargin !== null && profitMargin < 0 ? "negative" : "gold",
+            icon: "bi-percent",
+        },
+    ];
+    const quality = qualityOptions.find(item => item.usable) || qualityOptions[0];
+
+    return [
+        {
+            icon: "bi-bank",
+            label: "Market cap",
+            value: marketCap !== null ? formatCompact(marketCap) : "Unavailable",
+            detail: enterpriseValue !== null ? `EV ${formatCompact(enterpriseValue)}` : "Equity value",
+            tone: "cyan",
+        },
+        {
+            icon: valuation.icon,
+            label: valuation.label,
+            value: valuation.value,
+            detail: valuation.detail,
+            tone: valuation.tone,
+        },
+        {
+            icon: quality.icon,
+            label: quality.label,
+            value: quality.value,
+            detail: quality.detail,
+            tone: quality.tone,
+        },
+    ];
+}
+
 function buildMarketPulseItems(data) {
+    if ((data.coverage_type || "") === "equity") {
+        return buildEquityMarketPulseItems(data);
+    }
+
     const items = [];
     const expenseRatio = isFiniteNumber(data.expense_ratio)
         ? Number(data.expense_ratio)
@@ -2496,7 +2644,7 @@ async function loadHoldingIntelligence() {
 
         intelligenceLoaded = Object.keys(cachedIntelligence).length > 0;
         intelligenceLoading = false;
-        setAiChecking(false, intelligenceLoaded ? "Insights ready" : "Watching holdings");
+        setAiChecking(false, intelligenceLoaded ? "Insights ready" : "Watching holdings", intelligenceLoaded);
 
         // Render all expanded rows
         Array.from(tbody.querySelectorAll("tr[data-ticker]")).forEach(mainRow => {
@@ -2514,13 +2662,13 @@ async function loadHoldingIntelligence() {
     } catch (err) {
         intelligenceLoading = false;
         intelligenceLoaded = false;
-        setAiChecking(false, "Check paused");
+        setAiChecking(false, "Check paused", false);
         Array.from(tbody.querySelectorAll(".intel-coverage-section")).forEach(s => {
             s.innerHTML = `<div class="intel-coverage"><span style="font-size:.75rem;color:var(--accent-red)">Could not load coverage data</span></div>`;
         });
         Array.from(tbody.querySelectorAll(".intel-move-section")).forEach(renderMoveExplainerFallback);
     } finally {
-        if (intelligenceLoading) setAiChecking(false, "Watching holdings");
+        if (intelligenceLoading) setAiChecking(false, "Watching holdings", false);
         if (btn) {
             btn.innerHTML = INTEL_BUTTON_READY_HTML;
             btn.disabled = false;
@@ -2801,35 +2949,73 @@ function initTips() {
 
 /* ── Holdings table canvas — active only during AI scan ─────────────────── */
 const HoldingsBg = (() => {
-    const DOTS      = 28;
-    const CONN_DIST = 110;
-    let canvas, ctx, W, H, dots, raf, running = false;
+    const MIN_DOTS  = 26;
+    const MAX_DOTS  = 58;
+    const CONN_DIST = 128;
+    let canvas, ctx, W = 0, H = 0, dpr = 1, dots = [], raf, running = false, tick = 0;
+
+    function targetDotCount() {
+        const area = Math.max(W * H, 1);
+        return Math.max(MIN_DOTS, Math.min(MAX_DOTS, Math.round(area / 16500)));
+    }
 
     function mkDot() {
         const angle = Math.random() * Math.PI * 2;
-        const speed = 0.08 + Math.random() * 0.14;
+        const speed = 0.12 + Math.random() * 0.18;
         return {
             x:  Math.random() * W,
             y:  Math.random() * H,
             vx: Math.cos(angle) * speed,
             vy: Math.sin(angle) * speed,
-            r:  1.2 + Math.random() * 1.6,
-            op: 0.55 + Math.random() * 0.35,
+            r:  1.1 + Math.random() * 1.9,
+            op: 0.45 + Math.random() * 0.38,
+            phase: Math.random() * Math.PI * 2,
         };
     }
 
     function resize() {
         const card = canvas.closest(".card-body") || canvas.parentElement;
-        W = canvas.width  = card.offsetWidth;
-        H = canvas.height = card.offsetHeight;
+        const rect = card.getBoundingClientRect();
+        const nextW = Math.max(1, Math.floor(rect.width));
+        const nextH = Math.max(1, Math.floor(rect.height));
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+        if (nextW === W && nextH === H && canvas.width === Math.floor(nextW * dpr)) return;
+
+        W = nextW;
+        H = nextH;
+        canvas.width = Math.floor(W * dpr);
+        canvas.height = Math.floor(H * dpr);
+        canvas.style.width = `${W}px`;
+        canvas.style.height = `${H}px`;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        const count = targetDotCount();
+        if (!dots.length) {
+            dots = Array.from({ length: count }, mkDot);
+        } else if (dots.length < count) {
+            dots.push(...Array.from({ length: count - dots.length }, mkDot));
+        } else if (dots.length > count) {
+            dots = dots.slice(0, count);
+        }
     }
 
     function frame() {
         if (!running) return;
+        resize();
+        tick += 0.012;
         ctx.clearRect(0, 0, W, H);
 
         const dark = document.documentElement.dataset.bsTheme !== "light";
-        const rgb  = dark ? "111,214,240" : "10,120,180";
+        const cyan = dark ? "111,214,240" : "10,120,180";
+        const green = dark ? "122,241,205" : "20,135,92";
+
+        const wash = ctx.createLinearGradient(0, 0, W, H);
+        wash.addColorStop(0, `rgba(${cyan},${dark ? 0.075 : 0.045})`);
+        wash.addColorStop(0.55, "rgba(151,172,236,0.035)");
+        wash.addColorStop(1, `rgba(${green},${dark ? 0.045 : 0.025})`);
+        ctx.fillStyle = wash;
+        ctx.fillRect(0, 0, W, H);
 
         for (const d of dots) {
             d.x += d.vx;
@@ -2841,16 +3027,16 @@ const HoldingsBg = (() => {
         }
 
         // connections with glow
-        ctx.shadowBlur = 4;
-        ctx.shadowColor = `rgba(${rgb},0.5)`;
+        ctx.shadowBlur = 5;
+        ctx.shadowColor = `rgba(${cyan},0.45)`;
         for (let i = 0; i < dots.length; i++) {
             for (let j = i + 1; j < dots.length; j++) {
                 const dx = dots[i].x - dots[j].x;
                 const dy = dots[i].y - dots[j].y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 if (dist < CONN_DIST) {
-                    const a = (dark ? 0.32 : 0.22) * (1 - dist / CONN_DIST);
-                    ctx.strokeStyle = `rgba(${rgb},${a.toFixed(3)})`;
+                    const a = (dark ? 0.34 : 0.20) * (1 - dist / CONN_DIST);
+                    ctx.strokeStyle = `rgba(${cyan},${a.toFixed(3)})`;
                     ctx.lineWidth = 0.8;
                     ctx.beginPath();
                     ctx.moveTo(dots[i].x, dots[i].y);
@@ -2863,12 +3049,22 @@ const HoldingsBg = (() => {
         // nodes with stronger glow
         ctx.shadowBlur = 10;
         for (const d of dots) {
-            ctx.shadowColor = `rgba(${rgb},${(d.op * 0.9).toFixed(3)})`;
+            const pulse = 0.78 + Math.sin(tick * 2.4 + d.phase) * 0.22;
+            ctx.shadowColor = `rgba(${cyan},${(d.op * 0.9).toFixed(3)})`;
             ctx.beginPath();
-            ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(${rgb},${(dark ? d.op * 0.85 : d.op * 0.6).toFixed(3)})`;
+            ctx.arc(d.x, d.y, d.r * pulse, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(${cyan},${(dark ? d.op * 0.9 : d.op * 0.62).toFixed(3)})`;
             ctx.fill();
         }
+
+        const sweepX = (Math.sin(tick * 0.9) * 0.5 + 0.5) * W;
+        const sweep = ctx.createLinearGradient(sweepX - 160, 0, sweepX + 160, H);
+        sweep.addColorStop(0, "rgba(255,255,255,0)");
+        sweep.addColorStop(0.5, `rgba(${cyan},${dark ? 0.10 : 0.055})`);
+        sweep.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = sweep;
+        ctx.fillRect(0, 0, W, H);
+
         ctx.shadowBlur = 0;
 
         raf = requestAnimationFrame(frame);
@@ -2882,9 +3078,10 @@ const HoldingsBg = (() => {
             window.addEventListener("resize", () => { if (running) resize(); });
         },
         start() {
-            if (!canvas) return;
+            if (!canvas || prefersReducedMotion()) return;
             resize();
-            dots = Array.from({ length: DOTS }, mkDot);
+            dots = Array.from({ length: targetDotCount() }, mkDot);
+            tick = 0;
             running = true;
             cancelAnimationFrame(raf);
             raf = requestAnimationFrame(frame);
@@ -2892,6 +3089,7 @@ const HoldingsBg = (() => {
         stop() {
             running = false;
             cancelAnimationFrame(raf);
+            if (ctx) ctx.clearRect(0, 0, W, H);
         },
     };
 })();
