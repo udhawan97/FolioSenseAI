@@ -1809,7 +1809,7 @@ function renderFundScaleSpotlight(data, priceSignal = null) {
     const change30 = firstFiniteValue(priceSignal?.vs30dChangePct, priceSignal?.vs30dPct);
     const change200 = firstFiniteValue(priceSignal?.vs200dChangePct, priceSignal?.vs200dPct);
     const hasTrends = isFiniteNumber(change30) || isFiniteNumber(change200);
-    if (!hasAum) return "";
+    if (!hasAum && !hasTrends) return "";
 
     return `
         <div class="fund-scale-spotlight" aria-label="Fund scale and price trend">
@@ -1818,8 +1818,8 @@ function renderFundScaleSpotlight(data, priceSignal = null) {
             </div>
             <div class="fund-scale-copy">
                 <span class="fund-scale-label">Fund scale</span>
-                <strong class="fund-scale-value">${escapeHtml(formatCompact(aum))}</strong>
-                <span class="fund-scale-detail">Assets under management</span>
+                <strong class="fund-scale-value" style="${hasAum ? "" : "font-size:.82rem;opacity:.7"}">${hasAum ? escapeHtml(formatCompact(aum)) : "Still sourcing"}</strong>
+                <span class="fund-scale-detail">${hasAum ? "Assets under management" : "Our database hasn’t caught up on AUM yet — try reloading, or if this holding is new, check back once it’s had a moment to accumulate data."}</span>
             </div>
             ${hasTrends ? `
                 <div class="fund-trend-stack" aria-label="Price change versus history">
@@ -2078,17 +2078,19 @@ function buildMoveStatItems(data) {
 
 function renderContributionBreakdown(breakdown, etfDayChangePct, ticker, coverageType, topHoldings) {
     if (!breakdown || !breakdown.length) {
-        // Only show the retry placeholder for ETFs that have top holdings defined
-        // but the price fetch failed — not for ETFs with no holdings data at all
-        const hasKnownHoldings = Array.isArray(topHoldings) && topHoldings.length > 0;
-        if (coverageType && coverageType !== "equity" && ticker && hasKnownHoldings) {
+        if (coverageType && coverageType !== "equity" && ticker) {
             return `
                 <div class="intel-label" style="margin-top:.6rem">
                     <i class="bi bi-distribute-vertical"></i> Holdings Contribution
                 </div>
                 <div class="contrib-empty">
-                    <i class="bi bi-slash-circle contrib-empty-icon"></i>
-                    <span class="contrib-empty-text">Holdings data unavailable</span>
+                    <i class="bi bi-hourglass-split contrib-empty-icon" style="opacity:.55"></i>
+                    <span class="contrib-empty-text" style="font-size:.8rem;line-height:1.45">
+                        The database is still catching up on individual holdings for this fund —
+                        it's not ignoring you, just a little behind.
+                        Try reloading, or if this holding is new to your portfolio,
+                        give it a little time to build up enough data points.
+                    </span>
                     <button class="contrib-retry-btn" onclick="reloadContributionForTicker('${escapeHtml(ticker)}')">
                         <i class="bi bi-arrow-clockwise"></i> Reload
                     </button>
