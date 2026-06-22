@@ -31,6 +31,39 @@ router = APIRouter(prefix="/api/ai", tags=["ai"])
 
 CACHE_TTL = timedelta(hours=24)
 PRICE_DRIFT_THRESHOLD = 0.05  # expire cache when price moves >5% from when it was generated
+HAIKU_45_INPUT_USD_PER_MILLION = 1.00
+HAIKU_45_OUTPUT_USD_PER_MILLION = 5.00
+ESTIMATED_PROMPT_TOKENS_PER_SUMMARY = 210
+
+
+def _estimate_text_tokens(text: str | None) -> int:
+    """Approximate token count from persisted text when exact API usage is unavailable."""
+    if not text:
+        return 0
+    return max(1, round(len(text) / 4))
+
+
+def _enrich_intelligence_dict(intel_dict: dict, stock_data: dict | None) -> dict:
+    """Add live quote fields used by the dashboard's market pulse strip."""
+    if not stock_data:
+        return intel_dict
+
+    expense_ratio = intel_dict.get("expense_ratio")
+    if expense_ratio is None:
+        expense_ratio = stock_data.get("expense_ratio")
+
+    intel_dict.update(
+        {
+            "day_change_pct": stock_data.get("day_change_pct"),
+            "volume": stock_data.get("volume"),
+            "average_volume": stock_data.get("average_volume"),
+            "expense_ratio": expense_ratio,
+            "bid": stock_data.get("bid"),
+            "ask": stock_data.get("ask"),
+            "bid_ask_spread_pct": stock_data.get("bid_ask_spread_pct"),
+        }
+    )
+    return intel_dict
 
 
 def _active_portfolio_tickers(db: Session, portfolio_id: int = 1) -> list[str]:
@@ -57,6 +90,41 @@ def _cache_is_fresh(cached: AISummary, current_price: float | None = None) -> bo
         if drift > PRICE_DRIFT_THRESHOLD:
             return False
     return True
+
+
+@router.get("/cache/stats")
+async def get_ai_cache_stats(db: Session = Depends(get_db)):
+    """
+    Return cached AI summary counts with an estimated Anthropic token cost.
+    AISummary rows do not persist exact token usage, so this uses a text-length
+    estimate plus the prompt size used by generate_stock_summary.
+    """
+    summaries = db.query(AISummary).all()
+    cached_count = len(summaries)
+    estimated_output_tokens = sum(
+        _estimate_text_tokens(getattr(summary, "summary_text", ""))
+        for summary in summaries
+    )
+    estimated_input_tokens = cached_count * ESTIMATED_PROMPT_TOKENS_PER_SUMMARY
+    estimated_cost_usd = (
+        estimated_input_tokens / 1_000_000 * HAIKU_45_INPUT_USD_PER_MILLION
+        + estimated_output_tokens / 1_000_000 * HAIKU_45_OUTPUT_USD_PER_MILLION
+    )
+
+    return {
+        "model": MODEL,
+        "cached_summaries": cached_count,
+        "estimated_input_tokens": estimated_input_tokens,
+        "estimated_output_tokens": estimated_output_tokens,
+        "estimated_total_tokens": estimated_input_tokens + estimated_output_tokens,
+        "estimated_cost_usd": round(estimated_cost_usd, 6),
+        "pricing": {
+            "input_usd_per_million_tokens": HAIKU_45_INPUT_USD_PER_MILLION,
+            "output_usd_per_million_tokens": HAIKU_45_OUTPUT_USD_PER_MILLION,
+        },
+        "is_estimate": True,
+        "note": "Estimated from cached summaries; exact Anthropic token usage is not stored.",
+    }
 
 
 @router.get("/summary/{ticker}")
@@ -290,7 +358,7 @@ async def get_holding_intelligence_single(ticker: str):
     if stock_data.get("error"):
         raise HTTPException(status_code=404, detail=f"Cannot fetch data for {ticker}")
     intel = get_holding_intelligence(ticker, stock_data)
-    return intelligence_to_dict(intel)
+    return _enrich_intelligence_dict(intelligence_to_dict(intel), stock_data)
 
 
 @router.get("/intelligence/all/batch")
@@ -306,7 +374,10 @@ async def get_all_intelligence(db: Session = Depends(get_db)):
             intel = get_holding_intelligence(
                 ticker, stock_data if not stock_data.get("error") else None
             )
-            results[ticker] = intelligence_to_dict(intel)
+            results[ticker] = _enrich_intelligence_dict(
+                intelligence_to_dict(intel),
+                stock_data if not stock_data.get("error") else None,
+            )
         except Exception as e:
             logger.error("Intelligence fetch failed for %s: %s", ticker, e)
             results[ticker] = {
@@ -327,6 +398,12 @@ async def get_all_intelligence(db: Session = Depends(get_db)):
                 "concentration_label": "",
                 "expense_ratio": None,
                 "expense_ratio_bps": None,
+                "day_change_pct": None,
+                "volume": None,
+                "average_volume": None,
+                "bid": None,
+                "ask": None,
+                "bid_ask_spread_pct": None,
                 "data_quality": "static",
                 "data_sources": [],
             }

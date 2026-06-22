@@ -10,6 +10,20 @@ const toNumber = (n, fallback = 0) => {
 };
 const formatCurrency = (n) =>
     new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(toNumber(n));
+const formatUsdTiny = (n) => {
+    const value = toNumber(n);
+    if (value > 0 && value < 0.01) return `$${value.toFixed(4)}`;
+    return `$${value.toFixed(2)}`;
+};
+const formatCompactNumber = (n) => {
+    const value = toNumber(n);
+    const abs = Math.abs(value);
+    const sign = value < 0 ? "-" : "";
+    if (abs >= 1e9) return `${sign}${(abs / 1e9).toFixed(1)}B`;
+    if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(1)}M`;
+    if (abs >= 1e3) return `${sign}${(abs / 1e3).toFixed(1)}K`;
+    return `${Math.round(value)}`;
+};
 
 // Abbreviated for tight spaces: $1.2K, $1.4M, $2.1B
 const formatCompact = (n) => {
@@ -281,8 +295,7 @@ const INTEL_BUTTON_READY_HTML = `
             <img class="btn-intel-logo btn-intel-icon" src="/static/img/brand/folio-orbit-icon.svg" alt="">
         </span>
         <span class="btn-intel-text">
-            <span class="btn-intel-command">AI Scan</span>
-            <span class="btn-intel-signal">Live context</span>
+            <span class="btn-intel-command">Holding Intel</span>
         </span>
         <span class="btn-intel-badge">AI</span>
     </span>
@@ -295,7 +308,6 @@ const INTEL_BUTTON_LOADING_HTML = `
         </span>
         <span class="btn-intel-text">
             <span class="btn-intel-command">Scanning</span>
-            <span class="btn-intel-signal">Benchmarks + news</span>
         </span>
         <span class="btn-intel-badge">AI</span>
     </span>
@@ -482,36 +494,153 @@ function selectAllocationTicker(ticker) {
         if (ticker) {
             const idx = allocationChart.data.labels.indexOf(ticker);
             if (idx >= 0) {
+                setAllocationFocus(allocationChart, idx);
                 allocationChart.setActiveElements([{ datasetIndex: 0, index: idx }]);
-                allocationChart.tooltip.setActiveElements(
-                    [{ datasetIndex: 0, index: idx }],
-                    { x: 0, y: 0 }
-                );
             }
         } else {
+            setAllocationFocus(allocationChart, -1);
             allocationChart.setActiveElements([]);
-            allocationChart.tooltip.setActiveElements([], { x: 0, y: 0 });
         }
         allocationChart.update("none");
     }
 }
 
-function allocationTooltipLines(ticker, value) {
+function allocationImpactForHolding(holding) {
+    return toNumber(holding?.current_value) * (toNumber(holding?.day_change_pct) / 100);
+}
+
+function allocationTooltipMetrics(ticker, value) {
     const holding = latestHoldings.find(h => h.ticker === ticker);
     const holdingsCount = latestHoldings.length;
-    if (!holding || !holdingsCount) return [];
+    if (!holding || !holdingsCount) return null;
 
     const rank = sortedByAllocation(latestHoldings)
         .findIndex(h => h.ticker === ticker) + 1;
     const equalWeightValue = allocationTotal / holdingsCount;
     const equalWeightDrift = toNumber(value) - equalWeightValue;
-    const impactToday = toNumber(holding.daily_value_change);
+    const impactToday = allocationImpactForHolding(holding);
+    const portfolioImpactToday = latestHoldings.reduce(
+        (sum, h) => sum + allocationImpactForHolding(h),
+        0
+    );
+    const shareOfMove = Math.abs(portfolioImpactToday) > 0.01
+        ? (impactToday / portfolioImpactToday) * 100
+        : null;
+    const weightPct = allocationTotal > 0 ? (toNumber(value) / allocationTotal) * 100 : 0;
+    const stressValue = toNumber(value) * -0.10;
+    const stressPct = allocationTotal > 0 ? (stressValue / allocationTotal) * 100 : 0;
 
-    return [
-        `Rank #${rank} of ${holdingsCount}`,
-        `${equalWeightDrift >= 0 ? "Over" : "Under"} equal-wt by ${formatCompact(Math.abs(equalWeightDrift))}`,
-        `1-day impact ${formatSignedCurrency(impactToday)}`,
-    ];
+    return {
+        holding,
+        holdingsCount,
+        rank,
+        equalWeightDrift,
+        equalWeightRatio: equalWeightValue > 0 ? equalWeightDrift / equalWeightValue : 0,
+        impactToday,
+        shareOfMove,
+        stressValue,
+        stressPct,
+        weightPct,
+    };
+}
+
+function allocationInsightRow(title, value, note, tone = "") {
+    return `
+        <div class="alloc-popover-row ${tone}">
+            <div>
+                <span>${escapeHtml(title)}</span>
+                <small>${escapeHtml(note)}</small>
+            </div>
+            <strong>${escapeHtml(value)}</strong>
+        </div>`;
+}
+
+function getOrCreateAllocationPopover(chart) {
+    const parent = chart.canvas.parentNode;
+    let popover = parent.querySelector(".alloc-popover");
+    if (!popover) {
+        popover = document.createElement("div");
+        popover.className = "alloc-popover";
+        popover.setAttribute("role", "tooltip");
+        parent.appendChild(popover);
+    }
+    return popover;
+}
+
+function allocationExternalTooltip({ chart, tooltip }) {
+    const popover = getOrCreateAllocationPopover(chart);
+
+    if (!tooltip || tooltip.opacity === 0 || !tooltip.dataPoints?.length) {
+        popover.classList.remove("is-visible");
+        return;
+    }
+
+    const point = tooltip.dataPoints[0];
+    const ticker = point.label;
+    const value = toNumber(point.raw);
+    const color = chart.data.datasets[point.datasetIndex].$baseColors?.[point.dataIndex]
+        || chart.data.datasets[point.datasetIndex].backgroundColor?.[point.dataIndex]
+        || "rgba(111,214,240,1)";
+    const metrics = allocationTooltipMetrics(ticker, value);
+    if (!metrics) {
+        popover.classList.remove("is-visible");
+        return;
+    }
+
+    const impactTone = metrics.impactToday > 0 ? "is-positive" : metrics.impactToday < 0 ? "is-negative" : "";
+    const concentrationTone = metrics.equalWeightDrift > 0 && Math.abs(metrics.equalWeightRatio) >= 0.35
+        ? "is-warning"
+        : "";
+    const concentrationNote = metrics.equalWeightDrift >= 0
+        ? `${formatCurrency(Math.abs(metrics.equalWeightDrift))} more than an even split`
+        : `${formatCurrency(Math.abs(metrics.equalWeightDrift))} less than an even split`;
+    const todayNote = metrics.shareOfMove !== null
+        ? `${Math.abs(metrics.shareOfMove).toFixed(0)}% of today's portfolio change`
+        : "Its dollar effect on today's portfolio move";
+
+    popover.innerHTML = `
+        <div class="alloc-popover-hero">
+            <span class="alloc-popover-dot" style="background:${color}"></span>
+            <div>
+                <div class="alloc-popover-title">${escapeHtml(ticker)}</div>
+                <div class="alloc-popover-subtitle">
+                    ${escapeHtml(formatCurrency(value))} · ${metrics.weightPct.toFixed(1)}%
+                </div>
+            </div>
+        </div>
+        <div class="alloc-popover-rows">
+            ${allocationInsightRow("How much rides on this?", `${metrics.weightPct.toFixed(1)}% · #${metrics.rank}`, concentrationNote, concentrationTone)}
+            ${allocationInsightRow("Did it drive today?", formatSignedCurrency(metrics.impactToday), todayNote, impactTone)}
+            ${allocationInsightRow("What if it drops 10%?", formatSignedCurrency(metrics.stressValue), `${metrics.stressPct.toFixed(1)}% hit to the whole portfolio`, "is-negative")}
+        </div>
+    `;
+
+    const shell = chart.canvas.parentNode;
+    const shellRect = shell.getBoundingClientRect();
+    const popWidth = popover.offsetWidth || 236;
+    const popHeight = popover.offsetHeight || 172;
+    const gap = 14;
+    let left = tooltip.caretX + gap;
+    let top = tooltip.caretY - popHeight / 2;
+
+    if (left + popWidth > shellRect.width - 8) {
+        left = tooltip.caretX - popWidth - gap;
+    }
+    left = Math.max(8, Math.min(left, shellRect.width - popWidth - 8));
+    top = Math.max(8, Math.min(top, shellRect.height - popHeight - 8));
+
+    popover.style.left = `${left}px`;
+    popover.style.top = `${top}px`;
+    popover.classList.add("is-visible");
+}
+
+function setAllocationFocus(chart, activeIndex = -1) {
+    if (!chart?.data?.datasets?.[0]) return;
+    const dataset = chart.data.datasets[0];
+    const baseColors = dataset.$baseColors || dataset.backgroundColor || [];
+    dataset.backgroundColor = baseColors.map((color, index) =>
+        activeIndex >= 0 && index !== activeIndex ? withAlpha(color, 0.80) : withAlpha(color, 0.96)
+    );
 }
 
 function renderAllocation() {
@@ -547,8 +676,11 @@ function renderAllocation() {
         allocationChart.data.labels = labels;
         allocationChart.data.datasets[0].data = values;
         allocationChart.data.datasets[0].backgroundColor = colors;
+        allocationChart.data.datasets[0].$baseColors = colors;
         allocationChart.data.datasets[0].hoverBorderColor = glowBorders;
         allocationChart.data.datasets[0].borderColor = allocBorderColor();
+        const activeIndex = selectedAllocationTicker ? labels.indexOf(selectedAllocationTicker) : -1;
+        setAllocationFocus(allocationChart, activeIndex);
         allocationChart.update();
     } else {
         const ctx = document.getElementById("allocation-chart").getContext("2d");
@@ -556,42 +688,48 @@ function renderAllocation() {
             type: "doughnut",
             data: {
                 labels: labels,
-                datasets: [{
-                    data: values,
-                    backgroundColor: colors,
-                    borderColor: allocBorderColor(),
-                    borderWidth: 2.5,
-                    borderRadius: 6,
-                    spacing: 2.5,
-                    hoverOffset: 16,
-                    hoverBorderColor: glowBorders,
-                    hoverBorderWidth: 4,
-                }]
-            },
+	                datasets: [{
+	                    data: values,
+	                    backgroundColor: colors,
+	                    $baseColors: colors,
+	                    borderColor: allocBorderColor(),
+	                    borderWidth: 3,
+	                    borderRadius: 8,
+	                    spacing: 3.5,
+	                    hoverOffset: prefersReducedMotion() ? 8 : 14,
+	                    hoverBorderColor: glowBorders,
+	                    hoverBorderWidth: 3,
+	                }]
+	            },
             options: {
-                responsive: true,
-                cutout: "70%",
-                layout: { padding: 4 },
-                animation: { animateRotate: true, animateScale: true, duration: 900,
-                             easing: "easeOutQuart" },
-                transitions: {
-                    active: { animation: { duration: 300, easing: "easeOutBack" } }
-                },
-                onHover: (event, elements) => {
-                    if (elements.length > 0) {
-                        const idx = elements[0].index;
-                        hoveredCenterLabel = allocationChart.data.labels[idx];
-                        const val = toNumber(allocationChart.data.datasets[0].data[idx]);
-                        const pct = allocationTotal > 0 ? (val / allocationTotal * 100).toFixed(1) : "0.0";
-                        hoveredCenterValue = formatCurrency(val);
-                        hoveredCenterPct = `${pct}%`;
-                    } else {
-                        hoveredCenterLabel = null;
-                        hoveredCenterValue = null;
-                        hoveredCenterPct = null;
-                        if (!selectedAllocationTicker) {
-                            allocationChart.setActiveElements([]);
-                            allocationChart.tooltip.setActiveElements(
+	                responsive: true,
+	                cutout: "68%",
+	                layout: { padding: 8 },
+	                animation: { animateRotate: true, animateScale: true, duration: 900,
+	                             easing: "easeOutQuart" },
+	                transitions: {
+	                    active: { animation: { duration: prefersReducedMotion() ? 0 : 340, easing: "easeOutBack" } }
+	                },
+	                onHover: (event, elements) => {
+	                    if (elements.length > 0) {
+	                        const idx = elements[0].index;
+	                        hoveredCenterLabel = allocationChart.data.labels[idx];
+	                        const val = toNumber(allocationChart.data.datasets[0].data[idx]);
+	                        const pct = allocationTotal > 0 ? (val / allocationTotal * 100).toFixed(1) : "0.0";
+	                        hoveredCenterValue = formatCurrency(val);
+	                        hoveredCenterPct = `${pct}%`;
+	                        setAllocationFocus(allocationChart, idx);
+	                    } else {
+	                        hoveredCenterLabel = null;
+	                        hoveredCenterValue = null;
+	                        hoveredCenterPct = null;
+	                        const selectedIndex = selectedAllocationTicker
+	                            ? allocationChart.data.labels.indexOf(selectedAllocationTicker)
+	                            : -1;
+	                        setAllocationFocus(allocationChart, selectedIndex);
+	                        if (!selectedAllocationTicker) {
+	                            allocationChart.setActiveElements([]);
+	                            allocationChart.tooltip.setActiveElements(
                                 [],
                                 { x: event?.x ?? 0, y: event?.y ?? 0 }
                             );
@@ -605,30 +743,13 @@ function renderAllocation() {
                         : null;
                     selectAllocationTicker(ticker);
                 },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        ...tooltipOptions(),
-                        boxPadding: 6,
-                        usePointStyle: true,
-                        titleFont: { family: "-apple-system, SF Pro Display, sans-serif",
-                                     weight: "600", size: 13 },
-                        bodyFont: { family: "-apple-system, SF Pro Text, sans-serif", size: 12 },
-                        callbacks: {
-                            title: (items) => items[0]?.label ?? "",
-                            label: (item) => {
-                                const sum = allocationTotal || 1;
-                                const pct = (toNumber(item.raw) / sum) * 100;
-                                const ticker = item.label;
-                                return [
-                                    `${formatCurrency(item.raw)}  ·  ${pct.toFixed(1)}%`,
-                                    ...allocationTooltipLines(ticker, item.raw),
-                                ];
-                            },
-                            labelPointStyle: () => ({ pointStyle: "circle" }),
-                        }
-                    }
-                }
+	                plugins: {
+	                    legend: { display: false },
+	                    tooltip: {
+	                        enabled: false,
+	                        external: allocationExternalTooltip,
+	                    }
+	                }
             },
             plugins: [segmentGlowPlugin, centerHaloPlugin, centerTotalPlugin],
         });
@@ -1390,7 +1511,17 @@ function renderMoveExplainerFallback(section) {
         </div>`;
 }
 
-function renderMoveExplainer(section, data) {
+function renderKeyDriversSpecRows(keyDrivers = []) {
+    if (!keyDrivers.length) return "";
+    return `<div class="intel-label"><i class="bi bi-bullseye"></i> Key Drivers</div>
+       <div class="intel-spec-rows key-drivers">
+         ${keyDrivers.slice(0, 4).map((d, i) =>
+           `<div class="intel-spec-row"><span>Driver ${i + 1}</span><strong>${escapeHtml(d)}</strong></div>`
+         ).join("")}
+       </div>`;
+}
+
+function renderMoveExplainer(section, data, coverageData = null) {
     if (!data) { renderMoveExplainerFallback(section); return; }
 
     const attrType   = data.attribution_type || "unclear";
@@ -1399,7 +1530,6 @@ function renderMoveExplainer(section, data) {
     const news       = data.news || [];
     const macro      = data.macro_context;
     const isPos      = (data.day_change_pct || 0) >= 0;
-    const pctColor   = isPos ? "var(--accent-green)" : "var(--accent-red)";
 
     // Build context pills — use holding-specific benchmark first, then SPY/QQQ if relevant
     const macroPills = [];
@@ -1432,7 +1562,7 @@ function renderMoveExplainer(section, data) {
     const driversHtml = drivers.map(d => `
         <div class="driver-item">
             <i class="bi ${escapeHtml(d.icon)} driver-icon ${escapeHtml(d.magnitude)}"></i>
-            <span>${escapeHtml(d.description)}</span>
+            <span class="driver-text">${escapeHtml(d.description)}</span>
         </div>`).join("");
 
     const macroPillsHtml = macroPills.length
@@ -1440,10 +1570,11 @@ function renderMoveExplainer(section, data) {
             `<span class="macro-pill ${p.pos ? "positive" : "negative"}">${escapeHtml(p.label)}</span>`
           ).join("")}</div>`
         : "";
+    const keyDriversHtml = renderKeyDriversSpecRows(coverageData?.key_drivers || []);
 
     const newsHtml = news.length
         ? `<div class="evidence-section">
-            <div class="expand-section-label" style="margin-top:.3rem">
+            <div class="expand-section-label evidence-label">
                 <i class="bi bi-newspaper"></i> Recent News
             </div>
             ${news.map(n => `
@@ -1466,21 +1597,118 @@ function renderMoveExplainer(section, data) {
                 Why it moved
             </div>
             <div class="move-explainer-header">
-                <span class="attribution-badge ${escapeHtml(attrType)}">${escapeHtml(ATTRIBUTION_LABELS[attrType] || attrType)}</span>
-                <span class="confidence-badge ${escapeHtml(confidence)}">${escapeHtml(confidence)} confidence</span>
-                <span style="margin-left:auto;font-size:.72rem;color:${pctColor};font-variant-numeric:tabular-nums;font-weight:600">
-                    ${formatPct(data.day_change_pct)}
-                    <span style="opacity:.65;font-weight:400;font-size:.68rem"> · ${formatCompact(data.day_change_dollar || 0)}/share</span>
-                </span>
+                <div class="move-hero">
+                    <span class="move-hero-number ${isPos ? "positive" : "negative"}">${formatPct(data.day_change_pct)}</span>
+                    <span class="move-hero-sub">${formatSignedCurrency(data.day_change_dollar || 0)}/share</span>
+                </div>
+                <div class="move-context-chips">
+                    <span class="attribution-badge ${escapeHtml(attrType)}">${escapeHtml(ATTRIBUTION_LABELS[attrType] || attrType)}</span>
+                    <span class="confidence-badge ${escapeHtml(confidence)}">${escapeHtml(confidence)} confidence</span>
+                </div>
             </div>
             <p class="move-explanation-text">${escapeHtml(data.explanation_text || "")}</p>
             ${driversHtml ? `<div class="move-drivers">${driversHtml}</div>` : ""}
             ${macroPillsHtml}
+            ${keyDriversHtml}
             ${newsHtml}
         </div>`;
 }
 
 // ── Holding Coverage ("What it covers") ──────────────────────────────────────
+
+function buildHoldingFact(data) {
+    if (!data) return "";
+
+    const coverageType = data.coverage_type || "";
+    const topHolding = data.top_holdings?.[0];
+    const topSector = data.sectors?.[0];
+    const topCountry = data.countries?.[0];
+
+    if (coverageType.startsWith("etf") || coverageType === "fund") {
+        if (topHolding) {
+            return `Largest holding: ${topHolding.ticker} (${topHolding.weight.toFixed(1)}%)`;
+        }
+        if (topSector) {
+            return `${topSector.name} leads exposure at ${topSector.weight.toFixed(1)}%`;
+        }
+        if (topCountry) {
+            return `${topCountry.name} is top region at ${topCountry.weight.toFixed(0)}%`;
+        }
+    }
+
+    if (data.theme) return `Theme: ${data.theme}`;
+    if (data.peer_tickers?.length) {
+        return `Peer set: ${data.peer_tickers.slice(0, 3).join(", ")}`;
+    }
+    if (topSector) return `Sector lens: ${topSector.name}`;
+    if (data.key_drivers?.length) return data.key_drivers[0];
+    return "";
+}
+
+function formatExpenseRatio(expenseRatio) {
+    if (!isFiniteNumber(expenseRatio)) return "Unavailable";
+    return `${(Number(expenseRatio) * 100).toFixed(2)}%`;
+}
+
+function buildMarketPulseItems(data) {
+    const items = [];
+    const expenseRatio = isFiniteNumber(data.expense_ratio)
+        ? Number(data.expense_ratio)
+        : (isFiniteNumber(data.expense_ratio_bps) ? Number(data.expense_ratio_bps) / 10000 : null);
+    const volume = isFiniteNumber(data.volume) ? Number(data.volume) : null;
+    const avgVolume = isFiniteNumber(data.average_volume) ? Number(data.average_volume) : null;
+    const volumeRatio = volume !== null && avgVolume && avgVolume > 0 ? volume / avgVolume : null;
+    const dayChange = isFiniteNumber(data.day_change_pct) ? Number(data.day_change_pct) : null;
+    const pressureType = dayChange === null ? "neutral" : dayChange >= 0 ? "positive" : "negative";
+    const pressureLabel = dayChange === null
+        ? "Flow unavailable"
+        : dayChange >= 0 ? "Buyers leading" : "Sellers leading";
+    const pressureDetail = dayChange === null
+        ? "No live price move"
+        : `${formatPct(dayChange)} today${volumeRatio !== null ? ` on ${volumeRatio.toFixed(1)}x volume` : ""}`;
+
+    items.push({
+        icon: "bi-receipt-cutoff",
+        label: "Expense ratio",
+        value: formatExpenseRatio(expenseRatio),
+        detail: "Annual fund fee",
+        tone: "cyan",
+    });
+
+    items.push({
+        icon: "bi-bar-chart-line-fill",
+        label: "Market volume",
+        value: volume !== null ? formatCompactNumber(volume) : "Unavailable",
+        detail: volumeRatio !== null ? `${volumeRatio.toFixed(1)}x average volume` : "Avg volume unavailable",
+        tone: volumeRatio !== null && volumeRatio >= 1.5 ? "gold" : "blue",
+    });
+
+    items.push({
+        icon: pressureType === "positive" ? "bi-arrow-up-right-circle-fill" : pressureType === "negative" ? "bi-arrow-down-right-circle-fill" : "bi-circle-half",
+        label: "Buy/Sell pressure",
+        value: pressureLabel,
+        detail: pressureDetail,
+        tone: pressureType,
+    });
+
+    return items;
+}
+
+function renderMarketPulseStrip(data) {
+    const items = buildMarketPulseItems(data);
+    return `
+        <div class="market-pulse-strip" aria-label="AI market pulse">
+            ${items.map((item, index) => `
+                <div class="market-pulse-card ${escapeHtml(item.tone)}" style="--pulse-index:${index}">
+                    <i class="bi ${escapeHtml(item.icon)} pulse-icon" aria-hidden="true"></i>
+                    <span class="pulse-copy">
+                        <span class="pulse-label">${escapeHtml(item.label)}</span>
+                        <strong>${escapeHtml(item.value)}</strong>
+                        <span class="pulse-detail">${escapeHtml(item.detail)}</span>
+                    </span>
+                </div>`).join("")}
+        </div>`;
+}
 
 function renderHoldingCoverage(section, data) {
     if (!data) {
@@ -1494,13 +1722,14 @@ function renderHoldingCoverage(section, data) {
 
     // Sector bars (top 5)
     const sectorBarsHtml = data.sectors && data.sectors.length
-        ? `<div class="intel-label" style="margin-top:.45rem"><i class="bi bi-diagram-3"></i> Sectors</div>
+        ? `<div class="intel-label"><i class="bi bi-diagram-3"></i> Sectors</div>
            <div class="sector-bars">
-             ${data.sectors.slice(0, 5).map(s => `
+             ${data.sectors.slice(0, 5).map((s, i) => `
                <div class="sector-bar-row">
+                 <span class="sector-bar-swatch" style="--sector-color:${chartColor(i)}"></span>
                  <div class="sector-bar-label" title="${escapeHtml(s.name)}">${escapeHtml(s.name)}</div>
-                 <div class="sector-bar-track"><div class="sector-bar-fill" style="width:${Math.min(s.weight, 100)}%"></div></div>
-                 <div class="sector-bar-pct">${s.weight.toFixed(0)}%</div>
+                 <div class="sector-bar-track"><div class="sector-bar-fill" style="--sector-color:${chartColor(i)};width:${Math.min(s.weight, 100)}%"></div></div>
+                 <div class="sector-bar-pct">${s.weight.toFixed(1)}%</div>
                </div>`).join("")}
            </div>`
         : "";
@@ -1526,10 +1755,12 @@ function renderHoldingCoverage(section, data) {
                 <div class="holding-mini-row">
                   <span class="holding-mini-ticker">${escapeHtml(h.ticker)}</span>
                   <span class="holding-mini-name">${escapeHtml(h.name)}</span>
-                  <div class="holding-mini-bar-track">
-                    <div class="holding-mini-bar-fill" style="width:${(h.weight / maxBarWeight * 100).toFixed(0)}%"></div>
+                  <div class="holding-mini-weight">
+                    <div class="holding-mini-bar-track">
+                      <div class="holding-mini-bar-fill" style="width:${(h.weight / maxBarWeight * 100).toFixed(0)}%"></div>
+                    </div>
+                    <span class="holding-mini-pct">${h.weight.toFixed(1)}%</span>
                   </div>
-                  <span class="holding-mini-pct">${h.weight.toFixed(1)}%</span>
                 </div>`).join("")}
             </div>`;
     } else if (data.coverage_type === "equity" && data.peer_tickers && data.peer_tickers.length) {
@@ -1540,30 +1771,22 @@ function renderHoldingCoverage(section, data) {
             </div>`;
     }
 
-    // Key drivers
-    const keyDriversHtml = data.key_drivers && data.key_drivers.length
-        ? `<div class="intel-label" style="margin-top:.3rem"><i class="bi bi-bullseye"></i> Key Drivers</div>
-           <div class="key-drivers">
-             ${data.key_drivers.slice(0, 4).map(d =>
-               `<div class="key-driver-item"><span class="key-driver-dot"></span><span>${escapeHtml(d)}</span></div>`
-             ).join("")}
-           </div>`
-        : "";
-
     const etfProfileHtml = quality && (data.coverage_type || "").startsWith("etf")
-        ? `<div class="intel-label" style="margin-top:.45rem"><i class="bi bi-sliders"></i> ETF Profile</div>
-           <div class="key-drivers">
-             <div class="key-driver-item"><span class="key-driver-dot"></span><span>ETF Quality: ${escapeHtml(quality.qualityLabel || "Insufficient Data")}</span></div>
-             <div class="key-driver-item"><span class="key-driver-dot"></span><span>Cost: ${escapeHtml(quality.costLabel || "Unknown")}</span></div>
-             <div class="key-driver-item"><span class="key-driver-dot"></span><span>Liquidity: ${escapeHtml(quality.liquidityLabel || "Unknown")}</span></div>
-             <div class="key-driver-item"><span class="key-driver-dot"></span><span>Diversification: ${escapeHtml(quality.diversificationLabel || "Unknown")}</span></div>
-             <div class="key-driver-item"><span class="key-driver-dot"></span><span>Category risk: ${escapeHtml(quality.categoryRiskLabel || "Unknown")}</span></div>
+        ? `<div class="intel-label"><i class="bi bi-sliders"></i> ETF Profile</div>
+           <div class="intel-spec-rows">
+             <div class="intel-spec-row"><span>ETF quality</span><strong><span class="spec-pill">${escapeHtml(quality.qualityLabel || "Insufficient Data")}</span></strong></div>
+             <div class="intel-spec-row"><span>Cost</span><strong><span class="spec-pill">${escapeHtml(quality.costLabel || "Unknown")}</span></strong></div>
+             <div class="intel-spec-row"><span>Liquidity</span><strong>${escapeHtml(quality.liquidityLabel || "Unknown")}</strong></div>
+             <div class="intel-spec-row"><span>Diversification</span><strong>${escapeHtml(quality.diversificationLabel || "Unknown")}</strong></div>
+             <div class="intel-spec-row"><span>Category risk</span><strong><span class="spec-pill risk">${escapeHtml(quality.categoryRiskLabel || "Unknown")}</span></strong></div>
            </div>`
         : "";
 
     // Metadata footer
-    const expRatio = data.expense_ratio_bps != null
-        ? `<span class="expense-tag">${data.expense_ratio_bps}bps/yr</span>` : "";
+    const marketPulseHtml = renderMarketPulseStrip(data);
+    const fact = buildHoldingFact(data);
+    const factTag = fact
+        ? `<span class="fact-tag"><i class="bi bi-stars"></i>${escapeHtml(fact)}</span>` : "";
     const dataQual = data.data_quality
         ? `<span class="data-quality-tag ${escapeHtml(data.data_quality)}">
              <i class="bi bi-${data.data_quality === 'live' ? 'circle-fill' : 'database'}"></i>
@@ -1574,14 +1797,14 @@ function renderHoldingCoverage(section, data) {
         <div class="intel-coverage">
             <div class="intel-label"><i class="bi bi-layers"></i> What it covers</div>
             <span class="coverage-type-badge ${escapeHtml(coverageClass)}">${escapeHtml(data.coverage_label || data.coverage_type)}</span>
-            ${data.theme ? `<div style="font-size:.65rem;color:var(--accent-cyan);opacity:.8;margin-bottom:.3rem;font-weight:600">${escapeHtml(data.theme)}</div>` : ""}
+            ${data.theme ? `<div class="intel-theme">${escapeHtml(data.theme)}</div>` : ""}
             <div class="intel-strategy">${escapeHtml(data.strategy || "")}</div>
             ${sectorBarsHtml}
             ${countryChipsHtml}
             ${topHoldingsHtml}
             ${etfProfileHtml}
-            ${keyDriversHtml}
-            <div style="margin-top:.45rem">${expRatio}${dataQual}</div>
+            ${marketPulseHtml}
+            <div class="intel-meta-row">${factTag}${dataQual}</div>
         </div>`;
 }
 
@@ -1615,7 +1838,7 @@ function injectSummaryRows(tbody) {
             renderMoveExplainerShimmer(moveSection);
         } else if (intelligenceLoaded) {
             renderHoldingCoverage(coverageSection, cachedIntelligence[ticker]);
-            renderMoveExplainer(moveSection, cachedExplanations[ticker]);
+            renderMoveExplainer(moveSection, cachedExplanations[ticker], cachedIntelligence[ticker]);
         }
 
         if (intelligenceLoaded || intelligenceLoading) {
@@ -1793,12 +2016,63 @@ async function loadAnalystRecommendations() {
     }
 }
 
+async function loadAiCostStats() {
+    const valueEl = document.getElementById("brand-cost-value");
+    const metaEl = document.getElementById("brand-cost-meta");
+    if (!valueEl || !metaEl) return;
+
+    try {
+        const res = await fetch("/api/ai/cache/stats");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        valueEl.textContent = formatUsdTiny(data.estimated_cost_usd);
+        metaEl.textContent = `${toNumber(data.estimated_total_tokens).toLocaleString()} est. tokens across ${data.cached_summaries} cached summaries`;
+    } catch (err) {
+        valueEl.textContent = "Unavailable";
+        metaEl.textContent = "Could not load AI cost stats";
+    }
+}
+
+function initBrandCostCallout() {
+    const brand = document.querySelector(".brand-lockup");
+    const callout = document.getElementById("brand-cost-callout");
+    if (!brand || !callout) return;
+
+    let hasLoaded = false;
+    const show = () => {
+        callout.classList.add("is-visible");
+        if (!hasLoaded) {
+            hasLoaded = true;
+            loadAiCostStats();
+        }
+    };
+    const hide = () => callout.classList.remove("is-visible");
+
+    brand.addEventListener("mouseenter", show);
+    brand.addEventListener("mouseleave", hide);
+    brand.addEventListener("focus", show);
+    brand.addEventListener("blur", hide);
+
+    loadAiCostStats();
+}
+
 document.addEventListener("DOMContentLoaded", initDashboard);
 
 function refreshData() {
-    loadPortfolioValue();
-    loadPnl();
-    updateMarketStatus();
+    const refreshButton = document.querySelector(".btn-refresh-data");
+    refreshButton?.classList.remove("is-refreshing");
+    if (refreshButton && !prefersReducedMotion()) {
+        void refreshButton.offsetWidth;
+        refreshButton.classList.add("is-refreshing");
+    }
+
+    Promise.allSettled([
+        loadPortfolioValue(),
+        loadPnl(),
+        updateMarketStatus(),
+    ]).finally(() => {
+        window.setTimeout(() => refreshButton?.classList.remove("is-refreshing"), 260);
+    });
 }
 
 
@@ -1862,6 +2136,7 @@ document.addEventListener("keydown", (e) => {
 async function initDashboard() {
     initThemeToggle();
     initTextSizeToggle();
+    initBrandCostCallout();
     initPerformanceTabs();
     await loadPortfolioValue();
     await loadPnl();
@@ -2000,7 +2275,7 @@ async function loadHoldingIntelligence() {
             const coverageSection = expandRow.querySelector(".intel-coverage-section");
             const moveSection     = expandRow.querySelector(".intel-move-section");
             if (coverageSection) renderHoldingCoverage(coverageSection, cachedIntelligence[ticker]);
-            if (moveSection)     renderMoveExplainer(moveSection, cachedExplanations[ticker]);
+            if (moveSection)     renderMoveExplainer(moveSection, cachedExplanations[ticker], cachedIntelligence[ticker]);
         });
 
         // Update compact badges in the holdings table
