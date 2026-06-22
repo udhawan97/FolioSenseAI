@@ -71,6 +71,12 @@ def _pct(numerator: float, denominator: float) -> float | None:
     return round((numerator / denominator) * 100, 1)
 
 
+def _change_vs_lookback(current: float | None, closes: list[float], days: int) -> float | None:
+    if current is None or len(closes) < days:
+        return None
+    return _pct(current - closes[-days], closes[-days])
+
+
 def calculate_etf_price_signal(
     etf_data: Mapping[str, Any],
     closes: Iterable[Any] | None = None,
@@ -120,6 +126,8 @@ def calculate_etf_price_signal(
 
     vs_200d = _pct((current - ma_200), ma_200) if current is not None and ma_200 else None
     vs_50d = _pct((current - ma_50), ma_50) if current is not None and ma_50 else None
+    vs_30d_change = _change_vs_lookback(current, close_values, 30)
+    vs_200d_change = _change_vs_lookback(current, close_values, 200)
     label = _label_from_percentile(percentile)
 
     missing_fields = []
@@ -138,6 +146,8 @@ def calculate_etf_price_signal(
         "rangePositionPct": range_position,
         "vs200dPct": vs_200d,
         "vs50dPct": vs_50d,
+        "vs30dChangePct": vs_30d_change,
+        "vs200dChangePct": vs_200d_change,
         "basis": basis,
         "source": "yfinance",
         "missingFields": missing_fields,
