@@ -61,6 +61,15 @@ def get_stock_data(ticker: str) -> dict:
 
         security_type = classify_security(ticker, info).value
 
+        market_cap = info.get("marketCap") or 0
+        free_cashflow = info.get("freeCashflow")
+        fcf_yield = None
+        if free_cashflow is not None and market_cap:
+            try:
+                fcf_yield = round(float(free_cashflow) / float(market_cap) * 100, 2)
+            except (TypeError, ValueError, ZeroDivisionError):
+                fcf_yield = None
+
         return {
             "ticker": ticker.upper(),
             "name": info.get("longName") or info.get("shortName") or ticker,
@@ -74,7 +83,12 @@ def get_stock_data(ticker: str) -> dict:
             "fifty_two_week_low": round(info.get("fiftyTwoWeekLow") or 0, 2),
             "volume": info.get("volume") or info.get("regularMarketVolume") or 0,
             "average_volume": info.get("averageVolume") or info.get("averageVolume10days") or 0,
-            "market_cap": info.get("marketCap") or 0,
+            "market_cap": market_cap,
+            "enterprise_value": info.get("enterpriseValue"),
+            "total_revenue": info.get("totalRevenue"),
+            "ebitda": info.get("ebitda"),
+            "free_cashflow": free_cashflow,
+            "fcf_yield": fcf_yield,
             "aum": info.get("totalAssets") or info.get("netAssets"),
             "bid": bid,
             "ask": ask,
@@ -86,6 +100,14 @@ def get_stock_data(ticker: str) -> dict:
             ),
             "holdings_count": info.get("holdingsCount"),
             "pe_ratio": round(info.get("trailingPE") or 0, 2),
+            "forward_pe": round(info.get("forwardPE") or 0, 2),
+            "price_to_sales": round(info.get("priceToSalesTrailing12Months") or 0, 2),
+            "enterprise_to_revenue": round(info.get("enterpriseToRevenue") or 0, 2),
+            "enterprise_to_ebitda": round(info.get("enterpriseToEbitda") or 0, 2),
+            "revenue_growth": info.get("revenueGrowth"),
+            "gross_margin": info.get("grossMargins"),
+            "operating_margin": info.get("operatingMargins"),
+            "profit_margin": info.get("profitMargins"),
             "dividend_yield": round(info.get("dividendYield") or 0, 4),
             "currency": info.get("currency") or "USD",
             "sector": info.get("sector") or info.get("categoryName") or "N/A",
