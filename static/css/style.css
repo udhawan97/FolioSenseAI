@@ -1575,15 +1575,20 @@ table tbody tr:hover {
 }
 
 .ai-scan-subtitle--highlight {
-    font-size: 0.73rem;
-    font-weight: 620;
+    font-size: 0.8rem;
+    font-weight: 680;
     background: linear-gradient(100deg, #e8f4ff 0%, rgba(111, 214, 240, 1) 45%, rgba(180, 160, 255, 0.95) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
     background-size: 220% 100%;
     animation: scan-sub-fade 0.28s var(--ease) both, scan-title-shimmer 2.8s ease-in-out infinite;
-    letter-spacing: 0.005em;
+    letter-spacing: 0.008em;
+    filter: drop-shadow(0 0 8px rgba(111, 214, 240, 0.45));
+}
+
+.ai-scan-subtitle--pop {
+    animation: claude-msg-pop 0.42s cubic-bezier(0.16, 1, 0.3, 1) both !important;
 }
 
 [data-bs-theme="light"] .ai-scan-subtitle--highlight {
@@ -1596,6 +1601,13 @@ table tbody tr:hover {
 @keyframes scan-sub-fade {
     from { opacity: 0; transform: translateY(4px); }
     to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes claude-msg-pop {
+    0%   { opacity: 0; transform: translateY(5px) scale(0.94); }
+    55%  { opacity: 1; transform: translateY(-2px) scale(1.04); }
+    75%  { transform: translateY(0px) scale(0.99); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 /* ── Research rows ───────────────────────────────────────────────────────── */
@@ -2483,6 +2495,65 @@ table tbody tr:hover {
 }
 tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
 .summary-open .row-chevron { transform: rotate(90deg); opacity: 0.75 !important; }
+
+/* ── Intel-ready: futuristic reveal indicators ──────────────────────────── */
+.holdings-table tbody tr[data-ticker].has-intel-ready td {
+    background-image: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(111, 214, 240, 0.04) 38%,
+        rgba(111, 214, 240, 0.09) 50%,
+        rgba(111, 214, 240, 0.04) 62%,
+        transparent 100%
+    );
+    background-size: 300% 100%;
+    animation: intel-ready-sweep 3.6s ease-in-out infinite;
+    animation-delay: calc(var(--row-index, 0) * 130ms);
+}
+[data-bs-theme="light"] .holdings-table tbody tr[data-ticker].has-intel-ready td {
+    background-image: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(10, 120, 180, 0.04) 38%,
+        rgba(10, 120, 180, 0.08) 50%,
+        rgba(10, 120, 180, 0.04) 62%,
+        transparent 100%
+    );
+}
+@keyframes intel-ready-sweep {
+    0%   { background-position: 200% 0; }
+    45%  { background-position: 50% 0; }
+    100% { background-position: -100% 0; }
+}
+.has-intel-ready .row-chevron {
+    opacity: 1 !important;
+    color: var(--accent-cyan) !important;
+    filter: drop-shadow(0 0 5px rgba(111, 214, 240, 0.8));
+    animation: intel-chevron-beckon 2.2s ease-in-out infinite;
+    animation-delay: calc(var(--row-index, 0) * 130ms);
+}
+@keyframes intel-chevron-beckon {
+    0%, 60%, 100% { transform: translateX(0); opacity: 0.45; }
+    28%            { transform: translateX(4px); opacity: 1; }
+    44%            { transform: translateX(2px); opacity: 0.75; }
+}
+.has-intel-ready .ticker-dot {
+    position: relative;
+}
+.has-intel-ready .ticker-dot::after {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    border: 1.5px solid currentColor;
+    opacity: 0;
+    animation: ticker-sonar 2.6s ease-out infinite;
+    animation-delay: calc(var(--row-index, 0) * 130ms + 0.5s);
+}
+@keyframes ticker-sonar {
+    0%   { transform: scale(1); opacity: 0.65; }
+    100% { transform: scale(2.8); opacity: 0; }
+}
 
 /* ── Shimmer loading lines ──────────────────────────────────────────────── */
 .shimmer-line {

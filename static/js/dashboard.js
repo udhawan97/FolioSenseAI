@@ -289,6 +289,16 @@ const AI_CHECK_MESSAGES = [
     "Writing notes",
 ];
 
+const CLAUDE_FUNNY_MESSAGES = [
+    "Sliding into Claude's DMs for your portfolio tea...",
+    "She read it. Now typing. Always delivers — just takes her 30–60s.",
+    "Claude has entered the chat. Your stonks don't stand a chance.",
+    "Still typing... she's very thorough. Or judging your YOLO plays.",
+    "Claude is cooking. Your portfolio is about to get roasted — lovingly.",
+    "She's seen your allocations. She's choosing her words carefully.",
+];
+let claudeMessageIndex = 0;
+
 const INTEL_BUTTON_READY_HTML = `
     <span class="btn-intel-frame">
         <span class="btn-intel-glyph">
@@ -430,9 +440,12 @@ function setAiChecking(active, message = "Reading positions", insightsReady = fa
     }
     renderAiScanTickers();
     setAgentLine(message);
+    claudeMessageIndex = 0;
     if (subtitle) {
-        subtitle.textContent = "Sliding into Claude's DMs for your portfolio tea...";
+        subtitle.textContent = CLAUDE_FUNNY_MESSAGES[0];
         subtitle.classList.add("ai-scan-subtitle--highlight");
+        subtitle.classList.add("ai-scan-subtitle--pop");
+        subtitle.addEventListener("animationend", () => subtitle.classList.remove("ai-scan-subtitle--pop"), { once: true });
     }
 
     const CLAUDE_FLIRT_BEAT = 2;
@@ -442,9 +455,16 @@ function setAiChecking(active, message = "Reading positions", insightsReady = fa
         setAgentLine(next);
         if (subtitle) {
             const isClaudeBeat = messageIndex === CLAUDE_FLIRT_BEAT;
-            subtitle.textContent = isClaudeBeat
-                ? "She read it. Now typing. Always delivers — just takes her 30–60s."
-                : `${next} across ${latestHoldings.length || "your"} holdings.`;
+            if (isClaudeBeat) {
+                claudeMessageIndex = (claudeMessageIndex + 1) % CLAUDE_FUNNY_MESSAGES.length;
+                subtitle.textContent = CLAUDE_FUNNY_MESSAGES[claudeMessageIndex];
+                subtitle.classList.remove("ai-scan-subtitle--pop");
+                void subtitle.offsetWidth; // force reflow to restart animation
+                subtitle.classList.add("ai-scan-subtitle--pop");
+                subtitle.addEventListener("animationend", () => subtitle.classList.remove("ai-scan-subtitle--pop"), { once: true });
+            } else {
+                subtitle.textContent = `${next} across ${latestHoldings.length || "your"} holdings.`;
+            }
             subtitle.classList.toggle("ai-scan-subtitle--highlight", isClaudeBeat);
         }
     }, 1250);
@@ -1458,6 +1478,7 @@ function toggleSummaryRow(mainRow) {
     const body = expandRow.querySelector(".summary-body");
     const isOpen = body.classList.toggle("open");
     mainRow.classList.toggle("summary-open", isOpen);
+    if (isOpen) mainRow.classList.remove("has-intel-ready");
 }
 
 function escapeHtml(str) {
@@ -1667,41 +1688,10 @@ function compactFactLabel(label = "") {
 
 function buildHoldingFact(data) {
     if (!data) return "";
-
-    const coverageType = data.coverage_type || "";
-    const topHolding = data.top_holdings?.[0];
-    const topSector = data.sectors?.[0];
-    const secondSector = data.sectors?.[1];
-    const topCountry = data.countries?.[0];
-    const secondCountry = data.countries?.[1];
-
-    if (coverageType.startsWith("etf") || coverageType === "fund") {
-        if (topCountry && secondCountry && Number(topCountry.weight) < 95) {
-            return `Country mix: ${compactFactLabel(topCountry.name)} ${formatFactWeight(topCountry.weight, 0)}, ${compactFactLabel(secondCountry.name)} ${formatFactWeight(secondCountry.weight, 0)}`;
-        }
-        if (topSector && secondSector && Number(topSector.weight) < 75) {
-            return `Sector mix: ${compactFactLabel(topSector.name)} ${formatFactWeight(topSector.weight)}, ${compactFactLabel(secondSector.name)} ${formatFactWeight(secondSector.weight)}`;
-        }
-        if (topSector) {
-            return `${compactFactLabel(topSector.name)} concentration: ${formatFactWeight(topSector.weight)} of exposure`;
-        }
-        if (data.theme) {
-            return `Theme lens: ${data.theme}`;
-        }
-        if (data.holdings_count && Number(data.holdings_count) > 1) {
-            return `Diversified basket: ${formatCompactNumber(data.holdings_count)} holdings`;
-        }
-        if (topHolding && Number(topHolding.weight) >= 95) {
-            return `Pure exposure: ${topHolding.name || topHolding.ticker}`;
-        }
+    const aum = data.aum;
+    if (isFiniteNumber(aum) && Number(aum) > 0) {
+        return `AUM: $${formatCompactNumber(aum)}`;
     }
-
-    if (data.theme) return `Theme: ${data.theme}`;
-    if (data.peer_tickers?.length) {
-        return `Peer set: ${data.peer_tickers.slice(0, 3).join(", ")}`;
-    }
-    if (topSector) return `Sector lens: ${topSector.name}`;
-    if (data.key_drivers?.length) return data.key_drivers[0];
     return "";
 }
 
@@ -2062,11 +2052,6 @@ function renderHoldingCoverage(section, data) {
     const fact = buildHoldingFact(data);
     const factTag = fact
         ? `<span class="fact-tag"><i class="bi bi-stars"></i>${escapeHtml(fact)}</span>` : "";
-    const dataQual = data.data_quality
-        ? `<span class="data-quality-tag ${escapeHtml(data.data_quality)}">
-             <i class="bi bi-${data.data_quality === 'live' ? 'circle-fill' : 'database'}"></i>
-             ${data.data_quality === 'live' ? 'Live data' : data.data_quality === 'partial' ? 'Partial live' : 'Reference data'}
-           </span>` : "";
 
     section.innerHTML = `
         <div class="intel-coverage">
@@ -2079,7 +2064,7 @@ function renderHoldingCoverage(section, data) {
             ${topHoldingsHtml}
             ${etfProfileHtml}
             ${marketPulseHtml}
-            <div class="intel-meta-row">${factTag}${dataQual}</div>
+            <div class="intel-meta-row">${factTag}</div>
         </div>`;
 }
 
@@ -2128,9 +2113,8 @@ function injectSummaryRows(tbody) {
             renderMoveExplainer(moveSection, cachedExplanations[ticker], cachedIntelligence[ticker]);
         }
 
-        if (intelligenceLoaded || intelligenceLoading) {
-            body.classList.add("open");
-            mainRow.classList.add("summary-open");
+        if (intelligenceLoaded) {
+            mainRow.classList.add("has-intel-ready");
         }
     });
 }
@@ -2609,7 +2593,10 @@ async function loadHoldingIntelligence() {
         const allBodies = tbody.querySelectorAll(".summary-body");
         const anyOpen = Array.from(allBodies).some(b => b.classList.contains("open"));
         allBodies.forEach(b => b.classList.toggle("open", !anyOpen));
-        tbody.querySelectorAll("tr[data-ticker]").forEach(r => r.classList.toggle("summary-open", !anyOpen));
+        tbody.querySelectorAll("tr[data-ticker]").forEach(r => {
+            r.classList.toggle("summary-open", !anyOpen);
+            if (!anyOpen) r.classList.remove("has-intel-ready");
+        });
         return;
     }
 
