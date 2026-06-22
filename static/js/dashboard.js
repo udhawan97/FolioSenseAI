@@ -366,6 +366,8 @@ function setAgentLine(text) {
     if (line) line.textContent = text;
 }
 
+const SCAN_ROW_LABELS = ["Scanning", "Reading", "Analyzing", "Processing", "Checking", "Fetching", "Loading", "Parsing", "Resolving"];
+
 function renderAiScanTickers() {
     const tickerRail = document.getElementById("ai-scan-tickers");
     if (!tickerRail) return;
@@ -373,10 +375,15 @@ function renderAiScanTickers() {
     const tickers = latestHoldings
         .map(h => h.ticker)
         .filter(Boolean)
-        .slice(0, 9);
+        .slice(0, 12);
 
     tickerRail.innerHTML = tickers.map((ticker, index) =>
-        `<span class="ai-scan-chip" style="--chip-index:${index}">${escapeHtml(ticker)}</span>`
+        `<div class="ai-scan-row" style="--row-index:${index}">
+            <span class="ai-scan-row-dot" aria-hidden="true"></span>
+            <span class="ai-scan-row-ticker">${escapeHtml(ticker)}</span>
+            <span class="ai-scan-row-bar" aria-hidden="true"><span class="ai-scan-row-fill" style="--row-index:${index}"></span></span>
+            <span class="ai-scan-row-label">${SCAN_ROW_LABELS[index % SCAN_ROW_LABELS.length]}</span>
+        </div>`
     ).join("");
 }
 
@@ -396,21 +403,36 @@ function setAiChecking(active, message = "Reading positions") {
         card.classList.remove("is-ai-checking");
         if (panel) panel.setAttribute("aria-hidden", "true");
         setAgentLine(message);
+        HoldingsBg.stop();
         return;
     }
 
     let messageIndex = 0;
     card.classList.add("is-ai-checking");
+    HoldingsBg.start();
     if (panel) panel.setAttribute("aria-hidden", "false");
     renderAiScanTickers();
     setAgentLine(message);
-    if (subtitle) subtitle.textContent = "Reading prices, catalysts, and portfolio context.";
+    if (subtitle) {
+        subtitle.textContent = "Sliding into Claude's DMs for your portfolio tea...";
+        subtitle.classList.add("ai-scan-subtitle--highlight");
+    }
 
+    const CLAUDE_FLIRT_BEAT = 2;
     aiCheckInterval = window.setInterval(() => {
         messageIndex = (messageIndex + 1) % AI_CHECK_MESSAGES.length;
         const next = AI_CHECK_MESSAGES[messageIndex];
         setAgentLine(next);
-        if (subtitle) subtitle.textContent = `${next} across ${latestHoldings.length || "your"} holdings.`;
+        if (subtitle) {
+            const isClaudeBeat = messageIndex === CLAUDE_FLIRT_BEAT;
+            subtitle.classList.toggle("ai-scan-subtitle--highlight", isClaudeBeat);
+            subtitle.style.animation = "none";
+            subtitle.getBoundingClientRect();
+            subtitle.style.animation = "";
+            subtitle.textContent = isClaudeBeat
+                ? "She read it. Now typing. Always delivers — just takes her 30–60s."
+                : `${next} across ${latestHoldings.length || "your"} holdings.`;
+        }
     }, 1250);
 }
 
@@ -1527,6 +1549,25 @@ function renderKeyDriversSpecRows(keyDrivers = []) {
        </div>`;
 }
 
+function animateMoveHeroNumber(el, targetText) {
+    const match = targetText.match(/([+-]?\d+\.?\d*)%/);
+    if (!match) return;
+    const target = parseFloat(match[1]);
+    const prefix = target >= 0 ? "+" : "";
+    const absTarget = Math.abs(target);
+    const duration = 720;
+    const start = performance.now();
+    function tick(now) {
+        const t = Math.min((now - start) / duration, 1);
+        const eased = 1 - Math.pow(2, -10 * t);
+        const current = (target < 0 ? -1 : 1) * absTarget * eased;
+        el.textContent = `${prefix}${current.toFixed(2)}%`;
+        if (t < 1) requestAnimationFrame(tick);
+        else el.textContent = targetText;
+    }
+    requestAnimationFrame(tick);
+}
+
 function renderMoveExplainer(section, data, coverageData = null) {
     if (!data) { renderMoveExplainerFallback(section); return; }
 
@@ -1594,6 +1635,8 @@ function renderMoveExplainer(section, data, coverageData = null) {
             ${keyDriversHtml}
             ${moveStatStripHtml}
         </div>`;
+    const heroEl = section.querySelector('.move-hero-number');
+    if (heroEl) animateMoveHeroNumber(heroEl, heroEl.textContent);
 }
 
 // ── Holding Coverage ("What it covers") ──────────────────────────────────────
@@ -1906,9 +1949,21 @@ function injectSummaryRows(tbody) {
             td.innerHTML = `<div class="summary-body"><div class="intel-grid">
                 <div class="intel-coverage-section"></div>
                 <div class="intel-move-section"></div>
+                <div class="intel-loading-overlay" aria-hidden="true">
+                    <div class="intel-loading-content">
+                        <img src="/static/img/brand/folio-orbit-icon.svg" alt="" class="intel-loading-orbit">
+                        <div class="intel-loading-title">Sliding into Claude's DMs for your portfolio tea...</div>
+                        <div class="intel-loading-sub">She read it. Now typing. Always delivers — just takes her 30–60s.</div>
+                    </div>
+                </div>
             </div></div>`;
             expandRow.appendChild(td);
             mainRow.after(expandRow);
+        }
+
+        const intelGrid = expandRow.querySelector(".intel-grid");
+        if (intelGrid) {
+            intelGrid.classList.toggle("is-intel-loading", !!(intelligenceLoading && !intelligenceLoaded));
         }
 
         const body          = expandRow.querySelector(".summary-body");
@@ -2103,14 +2158,17 @@ async function loadAnalystRecommendations() {
 async function loadAiCostStats() {
     const valueEl = document.getElementById("brand-cost-value");
     const metaEl = document.getElementById("brand-cost-meta");
+    const triggerLabel = document.getElementById("brand-cost-trigger-label");
     if (!valueEl || !metaEl) return;
 
     try {
         const res = await fetch("/api/ai/cache/stats");
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        valueEl.textContent = formatUsdTiny(data.estimated_cost_usd);
+        const cost = formatUsdTiny(data.estimated_cost_usd);
+        valueEl.textContent = cost;
         metaEl.textContent = `${toNumber(data.estimated_total_tokens).toLocaleString()} est. tokens across ${data.cached_summaries} cached summaries`;
+        if (triggerLabel) triggerLabel.textContent = cost;
     } catch (err) {
         valueEl.textContent = "Unavailable";
         metaEl.textContent = "Could not load AI cost stats";
@@ -2118,29 +2176,37 @@ async function loadAiCostStats() {
 }
 
 function initBrandCostCallout() {
-    const brand = document.querySelector(".brand-lockup");
+    const trigger = document.getElementById("brand-cost-trigger");
     const callout = document.getElementById("brand-cost-callout");
-    if (!brand || !callout) return;
+    if (!trigger || !callout) return;
 
-    let hasLoaded = false;
-    const show = () => {
+    function openCallout() {
         callout.classList.add("is-visible");
-        if (!hasLoaded) {
-            hasLoaded = true;
-            loadAiCostStats();
-        }
-    };
-    const hide = () => callout.classList.remove("is-visible");
+        callout.setAttribute("aria-hidden", "false");
+        trigger.setAttribute("aria-expanded", "true");
+    }
 
-    brand.addEventListener("mouseenter", show);
-    brand.addEventListener("mouseleave", hide);
-    brand.addEventListener("focus", show);
-    brand.addEventListener("blur", hide);
+    function closeCallout() {
+        callout.classList.remove("is-visible");
+        callout.setAttribute("aria-hidden", "true");
+        trigger.setAttribute("aria-expanded", "false");
+    }
+
+    trigger.addEventListener("click", (e) => {
+        e.stopPropagation();
+        callout.classList.contains("is-visible") ? closeCallout() : openCallout();
+    });
+
+    document.addEventListener("click", (e) => {
+        if (!callout.contains(e.target) && !trigger.contains(e.target)) {
+            closeCallout();
+        }
+    });
 
     loadAiCostStats();
 }
 
-document.addEventListener("DOMContentLoaded", initDashboard);
+document.addEventListener("DOMContentLoaded", () => { initDashboard(); HoldingsBg.init(); });
 
 function refreshData() {
     const refreshButton = document.querySelector(".btn-refresh-data");
@@ -2177,17 +2243,36 @@ async function updateMarketStatus() {
     } catch(e) {}
 }
 
+const HUD_TOTAL = 300;
+let _hudCountdown = HUD_TOTAL;
+
+function updateHudPopoverCountdown() {
+    const popCountdown = document.getElementById("hud-pop-countdown");
+    const progress = document.getElementById("hud-pop-progress");
+    if (!popCountdown || !progress) return;
+    const soon = _hudCountdown <= 30;
+    const mins = Math.floor(_hudCountdown / 60);
+    const secs = _hudCountdown % 60;
+    popCountdown.textContent = mins > 0
+        ? `${mins}m ${secs}s`
+        : `${secs} second${secs !== 1 ? "s" : ""}`;
+    const pct = (_hudCountdown / HUD_TOTAL) * 100;
+    progress.style.width = `${pct}%`;
+    progress.classList.toggle("is-soon", soon);
+}
+
 function startCountdown() {
-    let refreshCountdown = 300;
+    _hudCountdown = HUD_TOTAL;
     const interval = setInterval(() => {
-        refreshCountdown--;
+        _hudCountdown--;
         const el = document.getElementById("countdown");
         if (el) {
-            const soon = refreshCountdown <= 30;
-            el.textContent = soon ? `${refreshCountdown}s` : `↻ ${refreshCountdown}s`;
+            const soon = _hudCountdown <= 30;
+            el.textContent = soon ? `${_hudCountdown}s` : `↻ ${_hudCountdown}s`;
             el.classList.toggle("is-soon", soon);
         }
-        if (refreshCountdown <= 0) {
+        updateHudPopoverCountdown();
+        if (_hudCountdown <= 0) {
             clearInterval(interval);
             loadPortfolioValue().then(() => {
                 loadPnl();
@@ -2196,6 +2281,63 @@ function startCountdown() {
             });
         }
     }, 1000);
+}
+
+function initHudPopover() {
+    const pill = document.getElementById("hud-status-pill");
+    const popover = document.getElementById("hud-popover");
+    if (!pill || !popover) return;
+
+    let clockInterval = null;
+
+    function updatePopoverContent() {
+        const updatedEl = document.getElementById("last-updated");
+        const popUpdated = document.getElementById("hud-pop-updated");
+        const popClock = document.getElementById("hud-pop-clock");
+        if (popUpdated && updatedEl) popUpdated.textContent = updatedEl.textContent || "—";
+        if (popClock) popClock.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        updateHudPopoverCountdown();
+    }
+
+    function positionPopover() {
+        const pillRect = pill.getBoundingClientRect();
+        const popW = popover.offsetWidth || 224;
+        let left = pillRect.left + pillRect.width / 2 - popW / 2;
+        left = Math.max(8, Math.min(left, window.innerWidth - popW - 8));
+        const top = pillRect.bottom + 10;
+        popover.style.left = `${left}px`;
+        popover.style.top = `${top}px`;
+    }
+
+    function showPopover() {
+        updatePopoverContent();
+        positionPopover();
+        popover.classList.add("is-visible");
+        popover.setAttribute("aria-hidden", "false");
+        pill.setAttribute("aria-expanded", "true");
+        clockInterval = setInterval(() => {
+            const popClock = document.getElementById("hud-pop-clock");
+            if (popClock) popClock.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        }, 1000);
+    }
+
+    function hidePopover() {
+        popover.classList.remove("is-visible");
+        popover.setAttribute("aria-hidden", "true");
+        pill.setAttribute("aria-expanded", "false");
+        if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
+    }
+
+    pill.addEventListener("click", (e) => {
+        e.stopPropagation();
+        popover.classList.contains("is-visible") ? hidePopover() : showPopover();
+    });
+
+    document.addEventListener("click", (e) => {
+        if (!popover.contains(e.target) && !pill.contains(e.target)) {
+            hidePopover();
+        }
+    });
 }
 
 document.addEventListener("keydown", (e) => {
@@ -2233,6 +2375,7 @@ async function initDashboard() {
     loadAnalystRecommendations();
     loadWorldMarkets();
     startCountdown();
+    initHudPopover();
     initTips();
     initKeyboardHelp();
 }
@@ -2588,26 +2731,50 @@ function initTips() {
     document.querySelectorAll(".tip-trigger").forEach(trigger => {
         trigger.addEventListener("mouseenter", () => {
             clearTimeout(hideTimeout);
-            const title = trigger.dataset.tipTitle || "";
-            const body  = trigger.dataset.tipBody  || "";
-            const hint  = trigger.dataset.tipHint  || "";
-            const icon  = trigger.dataset.tipIcon  || "bi-info-circle-fill";
+            const title   = trigger.dataset.tipTitle   || "";
+            const body    = trigger.dataset.tipBody    || "";
+            const hint    = trigger.dataset.tipHint    || "";
+            const icon    = trigger.dataset.tipIcon    || "bi-info-circle-fill";
+            const variant = trigger.dataset.tipVariant || "";
 
-            popover.innerHTML = `
-                <i class="bi ${escapeHtml(icon)} tip-popover-icon" aria-hidden="true"></i>
-                <div class="tip-popover-title">${escapeHtml(title)}</div>
-                <div class="tip-popover-body">${escapeHtml(body)}</div>
-                ${hint ? `<div class="tip-popover-hint"><i class="bi bi-hand-index-thumb" style="font-size:.6rem"></i> ${escapeHtml(hint)}</div>` : ""}
-            `;
+            // Clear previous variant classes
+            popover.classList.remove("tip-variant-ai");
+
+            if (variant === "ai") {
+                popover.classList.add("tip-variant-ai");
+                popover.innerHTML = `
+                    <div class="tip-ai-header">
+                        <span class="tip-ai-orbit" aria-hidden="true">
+                            <img src="/static/img/brand/folio-orbit-icon.svg" alt="">
+                        </span>
+                        <span class="tip-ai-title-wrap">
+                            <div class="tip-ai-name">${escapeHtml(title)}</div>
+                            <div class="tip-ai-badge">AI</div>
+                        </span>
+                    </div>
+                    <div class="tip-ai-body">${escapeHtml(body)}</div>
+                    <div class="tip-ai-footer">
+                        <span class="tip-ai-footer-dot" aria-hidden="true"></span>
+                        <span class="tip-ai-footer-label">Powered by Claude</span>
+                    </div>
+                `;
+            } else {
+                popover.innerHTML = `
+                    <i class="bi ${escapeHtml(icon)} tip-popover-icon" aria-hidden="true"></i>
+                    <div class="tip-popover-title">${escapeHtml(title)}</div>
+                    <div class="tip-popover-body">${escapeHtml(body)}</div>
+                    ${hint ? `<div class="tip-popover-hint"><i class="bi bi-hand-index-thumb" style="font-size:.6rem"></i> ${escapeHtml(hint)}</div>` : ""}
+                `;
+            }
 
             // Position below trigger, viewport-clamped
-            const rect   = trigger.getBoundingClientRect();
-            const popW   = 226;
-            const popH   = popover.offsetHeight || 110;
-            let left     = rect.left + rect.width / 2 - popW / 2;
-            let top      = rect.bottom + 8;
+            const rect = trigger.getBoundingClientRect();
+            const popW = variant === "ai" ? 260 : 252;
+            const popH = popover.offsetHeight || 120;
+            let left   = rect.left + rect.width / 2 - popW / 2;
+            let top    = rect.bottom + 10;
             left = Math.max(10, Math.min(left, window.innerWidth - popW - 10));
-            if (top + popH > window.innerHeight - 14) top = rect.top - popH - 8;
+            if (top + popH > window.innerHeight - 14) top = rect.top - popH - 10;
 
             popover.style.left = `${left}px`;
             popover.style.top  = `${top}px`;
@@ -2631,3 +2798,100 @@ function initTips() {
         trigger.addEventListener("click", e => e.stopPropagation());
     });
 }
+
+/* ── Holdings table canvas — active only during AI scan ─────────────────── */
+const HoldingsBg = (() => {
+    const DOTS      = 28;
+    const CONN_DIST = 110;
+    let canvas, ctx, W, H, dots, raf, running = false;
+
+    function mkDot() {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 0.08 + Math.random() * 0.14;
+        return {
+            x:  Math.random() * W,
+            y:  Math.random() * H,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            r:  1.2 + Math.random() * 1.6,
+            op: 0.55 + Math.random() * 0.35,
+        };
+    }
+
+    function resize() {
+        const card = canvas.closest(".card-body") || canvas.parentElement;
+        W = canvas.width  = card.offsetWidth;
+        H = canvas.height = card.offsetHeight;
+    }
+
+    function frame() {
+        if (!running) return;
+        ctx.clearRect(0, 0, W, H);
+
+        const dark = document.documentElement.dataset.bsTheme !== "light";
+        const rgb  = dark ? "111,214,240" : "10,120,180";
+
+        for (const d of dots) {
+            d.x += d.vx;
+            d.y += d.vy;
+            if (d.x < -10)  d.x = W + 10;
+            if (d.x > W+10) d.x = -10;
+            if (d.y < -10)  d.y = H + 10;
+            if (d.y > H+10) d.y = -10;
+        }
+
+        // connections with glow
+        ctx.shadowBlur = 4;
+        ctx.shadowColor = `rgba(${rgb},0.5)`;
+        for (let i = 0; i < dots.length; i++) {
+            for (let j = i + 1; j < dots.length; j++) {
+                const dx = dots[i].x - dots[j].x;
+                const dy = dots[i].y - dots[j].y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < CONN_DIST) {
+                    const a = (dark ? 0.32 : 0.22) * (1 - dist / CONN_DIST);
+                    ctx.strokeStyle = `rgba(${rgb},${a.toFixed(3)})`;
+                    ctx.lineWidth = 0.8;
+                    ctx.beginPath();
+                    ctx.moveTo(dots[i].x, dots[i].y);
+                    ctx.lineTo(dots[j].x, dots[j].y);
+                    ctx.stroke();
+                }
+            }
+        }
+
+        // nodes with stronger glow
+        ctx.shadowBlur = 10;
+        for (const d of dots) {
+            ctx.shadowColor = `rgba(${rgb},${(d.op * 0.9).toFixed(3)})`;
+            ctx.beginPath();
+            ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(${rgb},${(dark ? d.op * 0.85 : d.op * 0.6).toFixed(3)})`;
+            ctx.fill();
+        }
+        ctx.shadowBlur = 0;
+
+        raf = requestAnimationFrame(frame);
+    }
+
+    return {
+        init() {
+            canvas = document.getElementById("holdings-bg-canvas");
+            if (!canvas) return;
+            ctx = canvas.getContext("2d");
+            window.addEventListener("resize", () => { if (running) resize(); });
+        },
+        start() {
+            if (!canvas) return;
+            resize();
+            dots = Array.from({ length: DOTS }, mkDot);
+            running = true;
+            cancelAnimationFrame(raf);
+            raf = requestAnimationFrame(frame);
+        },
+        stop() {
+            running = false;
+            cancelAnimationFrame(raf);
+        },
+    };
+})();
