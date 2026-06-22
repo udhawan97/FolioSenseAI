@@ -400,14 +400,15 @@ function renderAiScanTickers() {
         .filter(Boolean)
         .slice(0, 12);
 
-    tickerRail.innerHTML = tickers.map((ticker, index) =>
-        `<div class="ai-scan-row" style="--row-index:${index}">
+    tickerRail.innerHTML = tickers.map((ticker, index) => {
+        const phase = ((index * 0.6180339887) % 1).toFixed(3);
+        return `<div class="ai-scan-row" style="--row-index:${index};--row-phase:${phase}">
             <span class="ai-scan-row-dot" aria-hidden="true"></span>
             <span class="ai-scan-row-ticker">${escapeHtml(ticker)}</span>
             <span class="ai-scan-row-bar" aria-hidden="true"><span class="ai-scan-row-fill" style="--row-index:${index}"></span></span>
             <span class="ai-scan-row-label">${SCAN_ROW_LABELS[index % SCAN_ROW_LABELS.length]}</span>
-        </div>`
-    ).join("");
+        </div>`;
+    }).join("");
 }
 
 function setAiChecking(active, message = "Reading positions", insightsReady = false) {
@@ -719,6 +720,7 @@ function renderAllocation() {
     sorted.forEach((h, i) => {
         const row = allocTable.insertRow();
         row.dataset.ticker = h.ticker;
+        row.style.setProperty("--row-index", i);
         if (selectedAllocationTicker === h.ticker) row.classList.add("alloc-selected");
         row.innerHTML = `
             <td><span class="badge" style="background:${chartColor(i)}">&nbsp;</span>
@@ -2637,14 +2639,15 @@ async function loadWorldMarkets() {
                 strip.appendChild(div);
             }
 
-            group.forEach(m => {
+            group.forEach((m, marketIdx) => {
                 const up   = m.day_change_pct >= 0;
                 const cls  = up ? "text-success" : "text-danger";
                 const icon = up ? "bi-caret-up-fill" : "bi-caret-down-fill";
                 const sign = up ? "+" : "";
 
                 const tile = document.createElement("div");
-                tile.className = "market-tile";
+                tile.className = `market-tile ${up ? "is-positive" : "is-negative"}`;
+                tile.style.setProperty("--tile-index", regionIdx * 3 + marketIdx);
                 tile.innerHTML = `
                     <div class="market-tile-top">
                         <span class="market-tile-flag">${m.flag}</span>

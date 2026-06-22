@@ -851,6 +851,23 @@ body > .navbar {
     padding: 0.88rem 1.05rem;
 }
 
+.card-header > .bi:first-child,
+.card-header .d-flex > .bi:first-child,
+.performance-card-icon {
+    animation: headerGlyphSignal 5.4s ease-in-out infinite;
+}
+
+@keyframes headerGlyphSignal {
+    0%, 100% {
+        opacity: 0.68;
+        filter: drop-shadow(0 0 0 rgba(111, 214, 240, 0));
+    }
+    48% {
+        opacity: 1;
+        filter: drop-shadow(0 0 8px rgba(111, 214, 240, 0.36));
+    }
+}
+
 /* ── Metric cards — micro-label + hero numbers ───────────────────────────── */
 .card .text-secondary.small,
 .card .small.text-secondary {
@@ -1339,24 +1356,24 @@ table tbody tr:hover {
 
 .ai-scan-corner {
     position: absolute;
-    width: 16px;
-    height: 16px;
+    width: 22px;
+    height: 22px;
     opacity: 0;
-    animation: scan-corner-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both;
+    animation: scan-corner-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both;
 }
 
-.ai-scan-corner-tl { top: 10px;    left: 10px;    border-top: 1.5px solid rgba(111,214,240,0.7); border-left:  1.5px solid rgba(111,214,240,0.7); }
-.ai-scan-corner-tr { top: 10px;    right: 10px;   border-top: 1.5px solid rgba(111,214,240,0.7); border-right: 1.5px solid rgba(111,214,240,0.7); }
-.ai-scan-corner-bl { bottom: 10px; left: 10px;    border-bottom: 1.5px solid rgba(111,214,240,0.7); border-left:  1.5px solid rgba(111,214,240,0.7); }
-.ai-scan-corner-br { bottom: 10px; right: 10px;   border-bottom: 1.5px solid rgba(111,214,240,0.7); border-right: 1.5px solid rgba(111,214,240,0.7); }
+.ai-scan-corner-tl { top: 10px;    left: 10px;    border-top: 1.5px solid rgba(111,214,240,0.8); border-left:  1.5px solid rgba(111,214,240,0.8); box-shadow: -2px -2px 8px rgba(111,214,240,0.2); }
+.ai-scan-corner-tr { top: 10px;    right: 10px;   border-top: 1.5px solid rgba(111,214,240,0.8); border-right: 1.5px solid rgba(111,214,240,0.8); box-shadow:  2px -2px 8px rgba(111,214,240,0.2); }
+.ai-scan-corner-bl { bottom: 10px; left: 10px;    border-bottom: 1.5px solid rgba(111,214,240,0.8); border-left:  1.5px solid rgba(111,214,240,0.8); box-shadow: -2px  2px 8px rgba(111,214,240,0.2); }
+.ai-scan-corner-br { bottom: 10px; right: 10px;   border-bottom: 1.5px solid rgba(111,214,240,0.8); border-right: 1.5px solid rgba(111,214,240,0.8); box-shadow:  2px  2px 8px rgba(111,214,240,0.2); }
 
 .ai-scan-corner-tl,
-.ai-scan-corner-br { animation-delay: 0.3s; }
+.ai-scan-corner-br { animation-delay: 0.28s; }
 .ai-scan-corner-tr,
-.ai-scan-corner-bl { animation-delay: 0.42s; }
+.ai-scan-corner-bl { animation-delay: 0.40s; }
 
 @keyframes scan-corner-in {
-    from { opacity: 0; transform: scale(0.7); }
+    from { opacity: 0; transform: scale(0.6); }
     to   { opacity: 1; transform: scale(1); }
 }
 
@@ -1403,22 +1420,24 @@ table tbody tr:hover {
     position: absolute;
     left: 0;
     right: 0;
-    height: 2px;
+    height: 1.5px;
     background: linear-gradient(
         90deg,
         transparent 0%,
-        rgba(111, 214, 240, 0.4) 8%,
-        rgba(180, 230, 255, 0.95) 38%,
-        rgba(255, 255, 255, 1) 50%,
-        rgba(180, 230, 255, 0.95) 62%,
-        rgba(111, 214, 240, 0.4) 92%,
+        rgba(111, 214, 240, 0.25) 5%,
+        rgba(170, 228, 250, 0.85) 30%,
+        rgba(220, 248, 255, 1)   46%,
+        rgba(255, 255, 255, 1)   50%,
+        rgba(220, 248, 255, 1)   54%,
+        rgba(170, 228, 250, 0.85) 70%,
+        rgba(111, 214, 240, 0.25) 95%,
         transparent 100%
     );
-    filter: blur(0.5px) drop-shadow(0 0 6px rgba(111,214,240,0.9));
+    filter: blur(0.3px) drop-shadow(0 0 8px rgba(111,214,240,1));
     pointer-events: none;
     z-index: 4;
     top: 0;
-    animation: scan-beam-drop 2.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    animation: scan-beam-drop 3.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
     animation-delay: 0.7s;
     opacity: 0;
     will-change: transform, opacity;
@@ -1429,17 +1448,17 @@ table tbody tr:hover {
     position: absolute;
     left: 0;
     right: 0;
-    top: -1px;
-    height: 4px;
+    top: -2px;
+    height: 6px;
     background: linear-gradient(
         90deg,
         transparent 5%,
-        rgba(111,214,240,0.3) 30%,
-        rgba(200,240,255,0.6) 50%,
-        rgba(111,214,240,0.3) 70%,
+        rgba(111,214,240,0.2) 28%,
+        rgba(200,242,255,0.55) 50%,
+        rgba(111,214,240,0.2) 72%,
         transparent 95%
     );
-    filter: blur(3px);
+    filter: blur(4px);
 }
 
 .ai-scan-beam::after {
@@ -1448,23 +1467,24 @@ table tbody tr:hover {
     left: 0;
     right: 0;
     top: 0;
-    height: 160px;
+    height: 200px;
     background: linear-gradient(
         180deg,
-        rgba(111, 214, 240, 0.18) 0%,
-        rgba(111, 214, 240, 0.06) 40%,
+        rgba(111, 214, 240, 0.14) 0%,
+        rgba(111, 214, 240, 0.05) 35%,
         transparent 100%
     );
 }
 
 [data-bs-theme="light"] .ai-scan-beam {
-    background: linear-gradient(90deg, transparent 0%, rgba(10,120,180,0.4) 40%, rgba(10,120,180,0.9) 50%, rgba(10,120,180,0.4) 60%, transparent 100%);
+    background: linear-gradient(90deg, transparent 0%, rgba(10,120,180,0.3) 35%, rgba(10,120,180,0.85) 50%, rgba(10,120,180,0.3) 65%, transparent 100%);
+    filter: blur(0.3px) drop-shadow(0 0 6px rgba(10,120,180,0.8));
 }
 
 @keyframes scan-beam-drop {
     0%   { transform: translate3d(0, -12px, 0); opacity: 0; }
-    5%   { opacity: 1; }
-    88%  { opacity: 0.65; }
+    4%   { opacity: 1; }
+    86%  { opacity: 0.7; }
     100% { transform: translate3d(0, var(--scan-travel, 760px), 0); opacity: 0; }
 }
 
@@ -1614,7 +1634,7 @@ table tbody tr:hover {
 .ai-scan-tickers {
     display: flex;
     flex-direction: column;
-    gap: 0.7rem;
+    gap: 0.6rem;
     position: relative;
     z-index: 2;
     flex: 1;
@@ -1623,131 +1643,222 @@ table tbody tr:hover {
 
 .ai-scan-row {
     display: grid;
-    grid-template-columns: 8px 56px 1fr auto;
+    grid-template-columns: 10px 56px 1fr auto;
     align-items: center;
-    gap: 0.9rem;
+    gap: 1rem;
     opacity: 0;
-    animation: scan-row-in 0.38s cubic-bezier(0.16, 1, 0.3, 1) both;
-    animation-delay: calc(var(--row-index, 0) * 80ms + 300ms);
+    animation: scan-row-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: calc(var(--row-index, 0) * 75ms + 280ms);
     will-change: transform, opacity;
+    position: relative;
 }
 
 @keyframes scan-row-in {
-    from { opacity: 0; transform: translateX(-24px); }
-    to   { opacity: 1; transform: translateX(0); }
+    from { opacity: 0; transform: translateX(-22px); filter: blur(3px); }
+    to   { opacity: 1; transform: translateX(0);     filter: blur(0px); }
 }
 
+/* ── Status dot with broadcasting rings ──────────────────────────────────── */
 .ai-scan-row-dot {
+    position: relative;
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: rgba(111, 214, 240, 0.85);
-    box-shadow: 0 0 8px rgba(111, 214, 240, 0.85);
+    background: rgba(111, 214, 240, 0.95);
+    box-shadow:
+        0 0 0 2px rgba(111, 214, 240, 0.12),
+        0 0 10px rgba(111, 214, 240, 0.9),
+        0 0 22px rgba(111, 214, 240, 0.35);
     flex-shrink: 0;
-    animation: scan-dot-pulse 1.5s ease-in-out infinite;
-    animation-delay: calc(var(--row-index, 0) * 100ms);
-    will-change: transform, opacity;
+    animation: scan-dot-pulse 2s ease-in-out infinite;
+    animation-delay: calc(var(--row-index, 0) * 160ms);
+    will-change: transform, box-shadow;
+}
+
+.ai-scan-row-dot::before,
+.ai-scan-row-dot::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: 50%;
+    border: 1px solid rgba(111, 214, 240, 0.65);
+    animation: dot-broadcast 2.4s ease-out infinite;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.ai-scan-row-dot::after {
+    animation-delay: 1.2s;
+    border-color: rgba(111, 214, 240, 0.32);
 }
 
 [data-bs-theme="light"] .ai-scan-row-dot {
-    background: rgba(10, 120, 180, 0.8);
-    box-shadow: 0 0 8px rgba(10, 120, 180, 0.6);
+    background: rgba(10, 120, 180, 0.9);
+    box-shadow: 0 0 10px rgba(10, 120, 180, 0.8), 0 0 22px rgba(10, 120, 180, 0.3);
+}
+
+[data-bs-theme="light"] .ai-scan-row-dot::before { border-color: rgba(10, 120, 180, 0.5); }
+[data-bs-theme="light"] .ai-scan-row-dot::after  { border-color: rgba(10, 120, 180, 0.25); }
+
+@keyframes dot-broadcast {
+    0%   { transform: scale(1);   opacity: 0.75; }
+    100% { transform: scale(4.5); opacity: 0; }
 }
 
 @keyframes scan-dot-pulse {
-    0%, 100% { opacity: 0.58; transform: scale(1);    box-shadow: 0 0 4px rgba(111,214,240,0.55), 0 0 10px rgba(111,214,240,0.18); }
-    50%      { opacity: 1;    transform: scale(1.35); box-shadow: 0 0 10px rgba(111,214,240,0.9),  0 0 20px rgba(111,214,240,0.36); }
+    0%, 100% {
+        opacity: 0.72;
+        transform: scale(1);
+        box-shadow: 0 0 6px rgba(111,214,240,0.7), 0 0 14px rgba(111,214,240,0.22);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.28);
+        box-shadow: 0 0 14px rgba(111,214,240,1), 0 0 28px rgba(111,214,240,0.48), 0 0 42px rgba(111,214,240,0.15);
+    }
 }
 
+/* ── Ticker label ─────────────────────────────────────────────────────────── */
 .ai-scan-row-ticker {
     font-size: 0.65rem;
     font-weight: 800;
-    letter-spacing: 0.05em;
-    color: var(--text-primary);
+    letter-spacing: 0.06em;
+    color: rgba(200, 235, 255, 0.92);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+    text-shadow: 0 0 14px rgba(111, 214, 240, 0.42);
 }
 
 [data-bs-theme="light"] .ai-scan-row-ticker {
     color: #1c1c1e;
+    text-shadow: none;
 }
 
+/* ── Progress track (segmented measurement scale) ────────────────────────── */
 .ai-scan-row-bar {
-    height: 4px;
-    background: rgba(111, 214, 240, 0.07);
+    height: 3px;
+    background:
+        repeating-linear-gradient(
+            90deg,
+            rgba(111, 214, 240, 0.07) 0px,
+            rgba(111, 214, 240, 0.07) 1px,
+            transparent 1px,
+            transparent 14px
+        ),
+        rgba(111, 214, 240, 0.055);
     border-radius: 999px;
     overflow: hidden;
     position: relative;
-    box-shadow: 0 0 0 1px rgba(111, 214, 240, 0.06);
+    box-shadow:
+        0 0 0 1px rgba(111, 214, 240, 0.09),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 [data-bs-theme="light"] .ai-scan-row-bar {
-    background: rgba(10, 120, 180, 0.1);
+    background:
+        repeating-linear-gradient(90deg, rgba(10,120,180,0.07) 0px, rgba(10,120,180,0.07) 1px, transparent 1px, transparent 14px),
+        rgba(10, 120, 180, 0.1);
 }
 
+/* ── Progress fill — dual-layer: static head + animated shimmer ──────────── */
 .ai-scan-row-fill {
     position: absolute;
     left: 0;
     top: 0;
     bottom: 0;
     width: 100%;
-    transform: scaleX(0.05);
+    transform: scaleX(0.04);
     transform-origin: left center;
-    background: linear-gradient(
-        90deg,
-        rgba(80, 180, 220, 0.7) 0%,
-        rgba(140, 210, 240, 0.9) 30%,
-        rgba(220, 245, 255, 1) 50%,
-        rgba(140, 210, 240, 0.9) 70%,
-        rgba(80, 180, 220, 0.7) 100%
-    );
+    background:
+        linear-gradient(90deg,
+            transparent 0%,
+            transparent 68%,
+            rgba(220, 248, 255, 0.45) 82%,
+            rgba(255, 255, 255, 0.78) 91%,
+            rgba(180, 235, 255, 0.35) 100%
+        ),
+        linear-gradient(90deg,
+            rgba(35, 130, 195, 0.48) 0%,
+            rgba(85, 188, 228, 0.88) 18%,
+            rgba(158, 222, 248, 1)   38%,
+            rgba(215, 246, 255, 1)   50%,
+            rgba(158, 222, 248, 1)   62%,
+            rgba(85, 188, 228, 0.88) 82%,
+            rgba(35, 130, 195, 0.48) 100%
+        );
+    background-size: 100% 100%, 300% 100%;
     border-radius: 999px;
-    background-size: 250% 100%;
-    box-shadow: 0 0 10px rgba(111, 214, 240, 0.55), 0 0 4px rgba(180, 230, 255, 0.8);
+    box-shadow:
+        0 0 18px rgba(111, 214, 240, 0.78),
+        0 0 5px  rgba(220, 248, 255, 0.95),
+        0 0 32px rgba(111, 214, 240, 0.28);
     animation:
         scan-bar-progress 2.8s ease-in-out infinite,
-        scan-bar-shimmer 1s linear infinite;
-    animation-delay: calc(var(--row-index, 0) * 130ms + 350ms), calc(var(--row-index, 0) * 80ms + 350ms);
+        scan-bar-shimmer  0.9s linear infinite;
+    animation-delay:
+        calc(var(--row-phase, 0) * -2.8s),
+        calc(var(--row-index, 0) * 80ms + 350ms);
     will-change: transform, background-position;
 }
 
 [data-bs-theme="light"] .ai-scan-row-fill {
-    background: linear-gradient(90deg, rgba(10,120,180,0.5), rgba(30,160,240,0.95), rgba(10,120,180,0.5));
-    box-shadow: 0 0 8px rgba(10,120,180,0.4);
+    background:
+        linear-gradient(90deg, transparent 68%, rgba(10,120,180,0.35) 84%, rgba(30,160,240,0.75) 92%, rgba(10,100,160,0.3) 100%),
+        linear-gradient(90deg, rgba(10,120,180,0.4), rgba(30,160,240,0.95), rgba(10,120,180,0.4));
+    background-size: 100% 100%, 300% 100%;
+    box-shadow: 0 0 12px rgba(10,120,180,0.5);
 }
 
 @keyframes scan-bar-progress {
-    0%   { transform: scaleX(0.05); }
-    35%  { transform: scaleX(0.72); }
-    55%  { transform: scaleX(0.88); }
-    75%  { transform: scaleX(0.55); }
-    100% { transform: scaleX(0.05); }
+    0%   { transform: scaleX(0.04); }
+    18%  { transform: scaleX(0.42); }
+    42%  { transform: scaleX(0.76); }
+    60%  { transform: scaleX(0.92); }
+    72%  { transform: scaleX(0.83); }
+    85%  { transform: scaleX(0.56); }
+    94%  { transform: scaleX(0.20); }
+    100% { transform: scaleX(0.04); }
 }
 
 @keyframes scan-bar-shimmer {
-    0%   { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
+    0%   { background-position: 0% 0%, 280% 0; }
+    100% { background-position: 0% 0%, -280% 0; }
 }
 
+/* ── Status label with blinking terminal cursor ──────────────────────────── */
 .ai-scan-row-label {
-    font-size: 0.53rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
+    font-size: 0.5rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: rgba(111, 214, 240, 0.55);
+    color: rgba(111, 214, 240, 0.65);
     white-space: nowrap;
     opacity: 0;
-    animation: scan-label-in 0.3s var(--ease) both;
-    animation-delay: calc(var(--row-index, 0) * 80ms + 700ms);
+    animation: scan-label-in 0.32s var(--ease) both;
+    animation-delay: calc(var(--row-index, 0) * 75ms + 680ms);
+    position: relative;
+}
+
+.ai-scan-row-label::after {
+    content: '_';
+    animation: cursor-blink 0.85s step-end infinite;
+    animation-delay: calc(var(--row-index, 0) * 0.18s);
+    opacity: 1;
+    margin-left: 0.5px;
 }
 
 [data-bs-theme="light"] .ai-scan-row-label {
-    color: rgba(10, 120, 180, 0.6);
+    color: rgba(10, 120, 180, 0.65);
 }
 
 @keyframes scan-label-in {
-    from { opacity: 0; }
-    to   { opacity: 1; }
+    from { opacity: 0; transform: translateX(6px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes cursor-blink {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0; }
 }
 
 /* ── Sweep wave ──────────────────────────────────────────────────────────── */
@@ -2331,6 +2442,12 @@ table tbody tr:hover {
     position: relative;
     z-index: 1;
     filter: drop-shadow(0 3px 8px color-mix(in srgb, currentColor 24%, transparent));
+    animation: statGlyphFloat 4.8s ease-in-out infinite;
+}
+
+@keyframes statGlyphFloat {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-1.5px); }
 }
 
 [data-bs-theme="dark"] .stat-icon {
@@ -5145,6 +5262,29 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
 
 /* ── Clickable stat cards ────────────────────────────────────────────────── */
 .stat-clickable { cursor: pointer; }
+.card.stat-clickable {
+    position: relative;
+    overflow: hidden;
+}
+.card.stat-clickable::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background:
+        linear-gradient(112deg, transparent 0%, rgba(111, 214, 240, 0.12) 42%, rgba(255, 255, 255, 0.08) 50%, transparent 66%);
+    opacity: 0;
+    transform: translateX(-118%);
+    pointer-events: none;
+    animation: tileMicroScan 7s ease-in-out infinite;
+}
+#best-card::before { animation-delay: 0.4s; }
+#worst-card::before { animation-delay: 1.1s; }
+#largest-card::before { animation-delay: 1.8s; }
+.card.stat-clickable > .card-body {
+    position: relative;
+    z-index: 1;
+}
 .card.stat-clickable:hover .stat-value { color: var(--brand-periwinkle) !important; }
 .card.stat-clickable:active {
     transform: scale(0.97) translateY(0px) !important;
@@ -5165,6 +5305,20 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
 .summary-segment.stat-clickable:active {
     background: var(--surface-strong);
     transition: background 0.08s ease;
+}
+
+@keyframes tileMicroScan {
+    0%, 58% {
+        opacity: 0;
+        transform: translateX(-118%);
+    }
+    68% {
+        opacity: 0.78;
+    }
+    84%, 100% {
+        opacity: 0;
+        transform: translateX(118%);
+    }
 }
 
 /* ── Apple-style bottom toast pill ──────────────────────────────────────── */
@@ -5446,9 +5600,25 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
 .performance-chart-shell {
     position: relative;
     min-height: 190px;
+    overflow: hidden;
+    border-radius: 12px;
+}
+
+.performance-chart-shell::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+        linear-gradient(90deg, transparent 0%, rgba(111, 214, 240, 0.08) 50%, transparent 100%);
+    background-size: 220% 100%;
+    opacity: 0.26;
+    pointer-events: none;
+    animation: chartPanelSweep 8s ease-in-out infinite;
 }
 
 .performance-chart-shell canvas {
+    position: relative;
+    z-index: 1;
     width: 100% !important;
     height: 190px !important;
 }
@@ -5477,6 +5647,8 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
 .market-tile {
     flex-shrink: 0;
     width: 148px;
+    position: relative;
+    overflow: hidden;
     background: var(--control-bg);
     border: 1px solid var(--hairline-soft);
     border-radius: 14px;
@@ -5485,6 +5657,35 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
                 transform 0.22s var(--spring), box-shadow 0.22s ease;
     cursor: default;
 }
+.market-tile::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+        linear-gradient(112deg, transparent 0%, color-mix(in srgb, var(--market-tile-tone, var(--accent-cyan)) 16%, transparent) 44%, rgba(255,255,255,0.08) 50%, transparent 68%);
+    opacity: 0;
+    transform: translateX(-120%);
+    pointer-events: none;
+    animation: marketTileTrace 6.8s ease-in-out infinite;
+    animation-delay: calc(0.45s + var(--tile-index, 0) * 220ms);
+}
+.market-tile::after {
+    content: "";
+    position: absolute;
+    left: 0.82rem;
+    right: 0.82rem;
+    bottom: 0;
+    height: 2px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, transparent, var(--market-tile-tone, var(--accent-cyan)), transparent);
+    opacity: 0.34;
+    transform: scaleX(0.42);
+    transform-origin: left;
+    animation: marketTileMeter 4.2s ease-in-out infinite;
+    animation-delay: calc(var(--tile-index, 0) * 180ms);
+}
+.market-tile.is-positive { --market-tile-tone: var(--accent-green); }
+.market-tile.is-negative { --market-tile-tone: var(--accent-red); }
 .market-tile:hover {
     background: var(--control-hover);
     border-color: var(--hairline-hover);
@@ -5500,6 +5701,8 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
 .market-tile-flag {
     font-size: 1.05rem;
     line-height: 1;
+    animation: marketFlagFloat 5.2s ease-in-out infinite;
+    animation-delay: calc(var(--tile-index, 0) * 170ms);
 }
 .market-tile-region {
     font-size: 0.52rem;
@@ -5539,6 +5742,31 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
 }
 .market-tile-change i { font-size: 0.6rem; opacity: 0.8; }
 
+@keyframes marketTileTrace {
+    0%, 54% {
+        opacity: 0;
+        transform: translateX(-120%);
+    }
+    64% {
+        opacity: 0.7;
+    }
+    82%, 100% {
+        opacity: 0;
+        transform: translateX(120%);
+    }
+}
+
+@keyframes marketTileMeter {
+    0%, 100% { opacity: 0.28; transform: scaleX(0.34); }
+    44%      { opacity: 0.72; transform: scaleX(0.86); }
+    68%      { opacity: 0.38; transform: scaleX(0.58); }
+}
+
+@keyframes marketFlagFloat {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-1.5px); }
+}
+
 /* Shimmer state for loading */
 .market-tile.market-shimmer {
     animation: shimmer 1.6s ease-in-out infinite;
@@ -5552,16 +5780,69 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
     pointer-events: none;
     height: 100px;
 }
+.market-tile.market-shimmer::before,
+.market-tile.market-shimmer::after {
+    content: none;
+}
 
 /* ── Allocation doughnut — glass depth treatment ─────────────────────────── */
 .allocation-chart-shell {
     position: relative;
     width: min(100%, 326px);
     aspect-ratio: 1;
+    isolation: isolate;
+}
+.allocation-chart-shell::before,
+.allocation-chart-shell::after {
+    content: "";
+    position: absolute;
+    inset: 7%;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+}
+.allocation-chart-shell::before {
+    border: 1px solid rgba(111, 214, 240, 0.14);
+    box-shadow:
+        0 0 34px -18px rgba(111, 214, 240, 0.9),
+        inset 0 0 42px -30px rgba(151, 172, 236, 0.9);
+    animation: allocHaloBreath 5.8s ease-in-out infinite;
+}
+.allocation-chart-shell::after {
+    inset: 3%;
+    background:
+        conic-gradient(from 0deg, transparent 0deg, rgba(111, 214, 240, 0.22) 32deg, transparent 72deg, transparent 360deg);
+    -webkit-mask: radial-gradient(circle, transparent 61%, black 62%, black 64%, transparent 65%);
+    mask: radial-gradient(circle, transparent 61%, black 62%, black 64%, transparent 65%);
+    opacity: 0.62;
+    animation: allocOrbitTrace 12s linear infinite;
 }
 .allocation-chart-shell canvas {
+    position: relative;
+    z-index: 1;
     width: 100% !important;
     height: 100% !important;
+}
+
+@keyframes chartPanelSweep {
+    0%, 26%   { background-position: -120% 0; opacity: 0; }
+    42%       { opacity: 0.32; }
+    68%, 100% { background-position: 140% 0; opacity: 0; }
+}
+
+@keyframes allocHaloBreath {
+    0%, 100% {
+        opacity: 0.42;
+        transform: scale(0.99);
+    }
+    50% {
+        opacity: 0.9;
+        transform: scale(1.015);
+    }
+}
+
+@keyframes allocOrbitTrace {
+    to { transform: rotate(360deg); }
 }
 
 /* drop-shadow applies to rendered canvas content (the chart), not the box.   */
@@ -5682,7 +5963,31 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
 /* ── Allocation table row selection ──────────────────────────────────────── */
 #allocation-table tr[data-ticker] {
     cursor: pointer;
+    position: relative;
     transition: background 0.18s ease;
+}
+#allocation-table tr[data-ticker] td:first-child .badge {
+    animation: allocationBadgePulse 5.2s ease-in-out infinite;
+    animation-delay: calc(var(--row-index, 0) * 160ms);
+}
+#allocation-table tr[data-ticker] td:last-child {
+    position: relative;
+    overflow: hidden;
+}
+#allocation-table tr[data-ticker] td:last-child::after {
+    content: "";
+    position: absolute;
+    right: 1rem;
+    bottom: 0.42rem;
+    width: 42%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(111, 214, 240, 0.62));
+    opacity: 0;
+    transform: translateX(-16px) scaleX(0.4);
+    transform-origin: right;
+    pointer-events: none;
+    animation: allocationRowMeter 6.4s ease-in-out infinite;
+    animation-delay: calc(var(--row-index, 0) * 180ms + 0.9s);
 }
 #allocation-table tr.alloc-selected td {
     background: rgba(111, 214, 240, 0.09) !important;
@@ -5699,6 +6004,25 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
 }
 #allocation-table.has-selection tr[data-ticker]:not(.alloc-selected):hover td {
     opacity: 0.75;
+}
+
+@keyframes allocationBadgePulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(111, 214, 240, 0); }
+    50%      { box-shadow: 0 0 14px -7px rgba(111, 214, 240, 0.92); }
+}
+
+@keyframes allocationRowMeter {
+    0%, 58% {
+        opacity: 0;
+        transform: translateX(-16px) scaleX(0.4);
+    }
+    70% {
+        opacity: 0.5;
+    }
+    88%, 100% {
+        opacity: 0;
+        transform: translateX(0) scaleX(1);
+    }
 }
 
 /* ── Target price cell ───────────────────────────────────────────────────── */
@@ -6017,15 +6341,31 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
     margin-top: 0.28rem;
 }
 .hud-progress-fill {
+    position: relative;
     height: 100%;
     border-radius: 3px;
     background: linear-gradient(90deg, rgba(90,200,250,0.5), rgba(90,200,250,0.9));
     box-shadow: 0 0 6px rgba(90,200,250,0.5);
     transition: width 1s linear;
+    overflow: hidden;
+}
+.hud-progress-fill::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.52), transparent);
+    transform: translateX(-120%);
+    animation: hudProgressGlint 2.8s ease-in-out infinite;
 }
 .hud-progress-fill.is-soon {
     background: linear-gradient(90deg, rgba(255,159,10,0.5), rgba(255,159,10,0.9));
     box-shadow: 0 0 6px rgba(255,159,10,0.5);
+}
+
+@keyframes hudProgressGlint {
+    0%, 32% { transform: translateX(-120%); opacity: 0; }
+    46%     { opacity: 0.85; }
+    68%, 100% { transform: translateX(120%); opacity: 0; }
 }
 
 .hud-popover-divider {
@@ -6248,8 +6588,54 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
 
 .summary-segment {
     flex: 1 0 50%;
+    position: relative;
     padding: 1rem 1.15rem;
     min-width: 0;
+    overflow: hidden;
+}
+
+.summary-segment::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+        linear-gradient(115deg, transparent 0%, rgba(111, 214, 240, 0.08) 45%, rgba(255,255,255,0.07) 50%, transparent 68%);
+    opacity: 0;
+    transform: translateX(-120%);
+    pointer-events: none;
+    animation: summarySegmentTrace 8.5s ease-in-out infinite;
+    animation-delay: calc(var(--summary-index, 0) * 520ms + 0.8s);
+}
+
+.summary-segment::after {
+    content: "";
+    position: absolute;
+    left: 1.15rem;
+    right: 1.15rem;
+    bottom: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(111, 214, 240, 0.74), transparent);
+    opacity: 0.22;
+    transform: scaleX(0.35);
+    transform-origin: left;
+    pointer-events: none;
+    animation: summarySegmentMeter 5.6s ease-in-out infinite;
+    animation-delay: calc(var(--summary-index, 0) * 420ms);
+}
+
+.summary-segment:nth-child(1) { --summary-index: 0; }
+.summary-segment:nth-child(2) { --summary-index: 1; }
+.summary-segment:nth-child(3) { --summary-index: 2; }
+.summary-segment:nth-child(4) { --summary-index: 3; }
+
+.summary-segment > * {
+    position: relative;
+    z-index: 1;
+}
+
+.summary-panel .stat-value {
+    animation: summaryValueGlow 6.2s ease-in-out infinite;
+    animation-delay: calc(var(--summary-index, 0) * 480ms);
 }
 
 /* Mobile 2×2: bottom border on row 1, right border on left column */
@@ -6270,6 +6656,35 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
     }
     .summary-segment + .summary-segment {
         border-left: 1px solid var(--hairline-soft);
+    }
+}
+
+@keyframes summarySegmentTrace {
+    0%, 56% {
+        opacity: 0;
+        transform: translateX(-120%);
+    }
+    66% {
+        opacity: 0.62;
+    }
+    82%, 100% {
+        opacity: 0;
+        transform: translateX(120%);
+    }
+}
+
+@keyframes summarySegmentMeter {
+    0%, 100% { opacity: 0.20; transform: scaleX(0.35); }
+    44%      { opacity: 0.62; transform: scaleX(0.92); }
+    70%      { opacity: 0.28; transform: scaleX(0.58); }
+}
+
+@keyframes summaryValueGlow {
+    0%, 100% {
+        text-shadow: 0 0 0 rgba(111, 214, 240, 0);
+    }
+    50% {
+        text-shadow: 0 0 22px rgba(111, 214, 240, 0.20);
     }
 }
 
@@ -6314,14 +6729,34 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
     .ai-scan-bg-grid,
     .ai-scan-row,
     .ai-scan-row-dot,
+    .ai-scan-row-dot::before,
+    .ai-scan-row-dot::after,
     .ai-scan-row-fill,
     .ai-scan-row-label,
+    .ai-scan-row-label::after,
     .ai-scan-title,
     .ai-scan-subtitle--highlight,
     .ai-scan-corner,
     body::before,
     #holdings-card .card-body::before,
     #holdings-card.is-ai-checking .holdings-table tbody tr[data-ticker] td,
+    .card-header > .bi:first-child,
+    .card-header .d-flex > .bi:first-child,
+    .performance-card-icon,
+    .stat-icon i,
+    .card.stat-clickable::before,
+    .summary-segment::before,
+    .summary-segment::after,
+    .summary-panel .stat-value,
+    .market-tile::before,
+    .market-tile::after,
+    .market-tile-flag,
+    .performance-chart-shell::before,
+    .allocation-chart-shell::before,
+    .allocation-chart-shell::after,
+    #allocation-table tr[data-ticker] td:first-child .badge,
+    #allocation-table tr[data-ticker] td:last-child::after,
+    .hud-progress-fill::after,
     .summary-inner::before,
     .summary-bullet,
     .summary-body.open .intel-grid,
