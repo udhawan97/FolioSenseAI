@@ -78,6 +78,7 @@ def _compute_portfolio(portfolio_id, db):
             "total_return_pct": (
                 round(total_return_pct, 2) if total_return_pct is not None else None
             ),
+            "day_change": q["day_change"],
             "day_change_pct": q["day_change_pct"],
             "daily_value_change": round(daily_value_change, 2),
             "allocation_pct": 0,

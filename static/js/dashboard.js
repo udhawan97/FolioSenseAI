@@ -263,6 +263,7 @@ let latestTrendData = {};    // Cached sparkline data, so the Holdings table re-
 let allocSortDir = "desc";   // Allocation sort direction: "desc" | "asc"
 let holdingsSort = { key: "allocation_pct", dir: "desc" };
 let allocationTotal = 0;     // Portfolio total, drawn in the doughnut's center
+let latestPortfolioDailyChange = null; // Backend total, used to validate allocation impact math
 let _hasLoadedOnce = false;  // True after first successful data load
 
 // Doughnut center hover / selection state
@@ -545,6 +546,9 @@ async function loadPortfolioValue() {
 
         renderTotalReturn(data);
 
+        latestPortfolioDailyChange = isFiniteNumber(data.total_daily_change)
+            ? Number(data.total_daily_change)
+            : null;
         latestHoldings = data.holdings;
         renderAllocation();
 
@@ -616,7 +620,50 @@ function selectAllocationTicker(ticker) {
 }
 
 function allocationImpactForHolding(holding) {
-    return toNumber(holding?.current_value) * (toNumber(holding?.day_change_pct) / 100);
+    if (isFiniteNumber(holding?.daily_value_change)) {
+        return Number(holding.daily_value_change);
+    }
+
+    if (isFiniteNumber(holding?.shares) && isFiniteNumber(holding?.day_change)) {
+        return Number(holding.shares) * Number(holding.day_change);
+    }
+
+    const dayChangePct = toNumber(holding?.day_change_pct);
+    return (100 + dayChangePct) !== 0
+        ? toNumber(holding?.current_value) * (dayChangePct / (100 + dayChangePct))
+        : 0;
+}
+
+function validateAllocationHoldingMath(holding, impactToday) {
+    const warnings = [];
+    const hasSharesMove = isFiniteNumber(holding?.shares) && isFiniteNumber(holding?.day_change);
+    if (hasSharesMove && isFiniteNumber(holding?.daily_value_change)) {
+        const expectedImpact = Number(holding.shares) * Number(holding.day_change);
+        if (Math.abs(expectedImpact - Number(holding.daily_value_change)) > 0.05) {
+            warnings.push(`${holding.ticker}: daily_value_change does not match shares * day_change`);
+        }
+    }
+
+    if (!Number.isFinite(impactToday)) {
+        warnings.push(`${holding?.ticker || "Holding"}: impactToday is not finite`);
+    }
+
+    return warnings;
+}
+
+function validateAllocationPortfolioMath(portfolioImpactToday, grossPortfolioMove, holdingsCount) {
+    const warnings = [];
+    if (!Number.isFinite(portfolioImpactToday) || !Number.isFinite(grossPortfolioMove)) {
+        warnings.push("Portfolio impact totals are not finite");
+    }
+
+    const roundingTolerance = Math.max(0.10, holdingsCount * 0.01);
+    if (latestPortfolioDailyChange !== null
+        && Math.abs(portfolioImpactToday - latestPortfolioDailyChange) > roundingTolerance) {
+        warnings.push("Sum of holding impacts does not match total_daily_change");
+    }
+
+    return warnings;
 }
 
 function allocationTooltipMetrics(ticker, value) {
@@ -633,8 +680,28 @@ function allocationTooltipMetrics(ticker, value) {
         (sum, h) => sum + allocationImpactForHolding(h),
         0
     );
-    const shareOfMove = Math.abs(portfolioImpactToday) > 0.01
-        ? (impactToday / portfolioImpactToday) * 100
+    const grossPortfolioMove = latestHoldings.reduce(
+        (sum, h) => sum + Math.abs(allocationImpactForHolding(h)),
+        0
+    );
+    const mathWarnings = [
+        ...validateAllocationHoldingMath(holding, impactToday),
+        ...validateAllocationPortfolioMath(portfolioImpactToday, grossPortfolioMove, holdingsCount),
+    ];
+    if (mathWarnings.length) {
+        console.warn("Allocation tooltip math validation failed", {
+            ticker,
+            mathWarnings,
+            holding,
+            impactToday,
+            portfolioImpactToday,
+            latestPortfolioDailyChange,
+            grossPortfolioMove,
+        });
+    }
+
+    const shareOfMove = grossPortfolioMove > 0.01 && !mathWarnings.length
+        ? Math.min(100, (Math.abs(impactToday) / grossPortfolioMove) * 100)
         : null;
     const weightPct = allocationTotal > 0 ? (toNumber(value) / allocationTotal) * 100 : 0;
     const stressValue = toNumber(value) * -0.10;
@@ -648,6 +715,9 @@ function allocationTooltipMetrics(ticker, value) {
         equalWeightRatio: equalWeightValue > 0 ? equalWeightDrift / equalWeightValue : 0,
         impactToday,
         shareOfMove,
+        portfolioImpactToday,
+        grossPortfolioMove,
+        mathWarnings,
         stressValue,
         stressPct,
         weightPct,
@@ -705,7 +775,7 @@ function allocationExternalTooltip({ chart, tooltip }) {
         ? `${formatCurrency(Math.abs(metrics.equalWeightDrift))} more than an even split`
         : `${formatCurrency(Math.abs(metrics.equalWeightDrift))} less than an even split`;
     const todayNote = metrics.shareOfMove !== null
-        ? `${Math.abs(metrics.shareOfMove).toFixed(0)}% of today's portfolio change`
+        ? `${metrics.shareOfMove.toFixed(0)}% of today's absolute move`
         : "Its dollar effect on today's portfolio move";
 
     popover.innerHTML = `
@@ -721,7 +791,7 @@ function allocationExternalTooltip({ chart, tooltip }) {
         <div class="alloc-popover-rows">
             ${allocationInsightRow("How much rides on this?", `${metrics.weightPct.toFixed(1)}% · #${metrics.rank}`, concentrationNote, concentrationTone)}
             ${allocationInsightRow("Did it drive today?", formatSignedCurrency(metrics.impactToday), todayNote, impactTone)}
-            ${allocationInsightRow("What if it drops 10%?", formatSignedCurrency(metrics.stressValue), `${metrics.stressPct.toFixed(1)}% hit to the whole portfolio`, "is-negative")}
+            ${allocationInsightRow("What if it drops 10%?", formatSignedCurrency(metrics.stressValue), `${Math.abs(metrics.stressPct).toFixed(1)}% hit to the whole portfolio`, "is-negative")}
         </div>
     `;
 

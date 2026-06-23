@@ -48,13 +48,13 @@ def add_trade(db, ticker, shares_sold, sale_price, avg_cost):
     db.commit()
 
 
-def quote(ticker, price):
+def quote(ticker, price, day_change=0.0, day_change_pct=0.0):
     return {
         "ticker": ticker,
         "name": f"{ticker} Inc.",
         "current_price": price,
-        "day_change": 0.0,
-        "day_change_pct": 0.0,
+        "day_change": day_change,
+        "day_change_pct": day_change_pct,
     }
 
 
@@ -70,6 +70,24 @@ def test_open_holding_total_pct_uses_current_price(monkeypatch):
     rows, *_ = portfolio_router._compute_portfolio(1, db)
 
     assert row_by_ticker(rows, "OPEN")["total_return_pct"] == 15.0
+
+
+def test_holding_daily_value_change_uses_share_count_times_quote_move(monkeypatch):
+    db = make_db()
+    add_holding(db, "VOO", shares=8.5, avg_cost=400)
+    monkeypatch.setattr(
+        portfolio_router,
+        "get_all_quotes",
+        lambda _tickers: [quote("VOO", 456.70, day_change=-1.32, day_change_pct=-0.29)],
+    )
+
+    rows, total_value, total_daily_change, _ = portfolio_router._compute_portfolio(1, db)
+    row = row_by_ticker(rows, "VOO")
+
+    assert total_value == 3881.95
+    assert row["day_change"] == -1.32
+    assert row["daily_value_change"] == -11.22
+    assert total_daily_change == -11.22
 
 
 def test_partial_sale_total_pct_combines_realized_and_unrealized(monkeypatch):
