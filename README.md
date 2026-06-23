@@ -361,13 +361,10 @@ These checks run on GitHub Actions, so pull requests get the useful red/green li
 
 *No promises. No timeline. It's a side project.*
 
-- [ ] Real-time WebSocket price updates
+- [ ] CSV Uploads and Downloads
 - [ ] Transaction history views
-- [ ] Price alerts
-- [ ] PostgreSQL support for cloud deployments
+- [ ] News Section
 - [ ] AI-powered rebalancing suggestions
-- [ ] Export portfolio to CSV
-- [ ] Cope with market volatility *(stretch goal)*
 
 ---
 
