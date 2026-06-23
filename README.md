@@ -1,118 +1,122 @@
-# FolioSenseAI
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="static/img/brand/folio-orbit-mark-light.svg">
+    <source media="(prefers-color-scheme: light)" srcset="static/img/brand/folio-orbit-mark-dark.svg">
+    <img src="static/img/brand/folio-orbit-mark-dark.svg" alt="FolioSenseAI" width="300"/>
+  </picture>
+</p>
 
-FolioSenseAI helps explain portfolio movement by surfacing market context, news, and AI-generated insights for holdings.
+<h2 align="center">FolioSenseAI</h2>
+<p align="center"><em>Your portfolio's therapist. Explains the red. Won't fix it.</em></p>
 
-## Live Demo
-
-> Deploy link will go here after deployment.
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"/>
+  <img src="https://img.shields.io/badge/FastAPI-0.136-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI"/>
+  <img src="https://img.shields.io/badge/Claude_AI-Anthropic-D4A853?style=flat-square&logo=anthropic&logoColor=white" alt="Claude AI"/>
+  <img src="https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite"/>
+  <img src="https://img.shields.io/badge/Bootstrap-5-7952B3?style=flat-square&logo=bootstrap&logoColor=white" alt="Bootstrap 5"/>
+  <img src="https://img.shields.io/badge/Chart.js-FF6384?style=flat-square&logo=chartdotjs&logoColor=white" alt="Chart.js"/>
+  <img src="https://img.shields.io/badge/version-0.4.1-brightgreen?style=flat-square" alt="Version"/>
+</p>
 
 ---
 
-## What It Does
+> **Because "I don't know why my portfolio is down" is only acceptable once.**
+>
+> FolioSenseAI tracks your holdings, pulls live prices from Yahoo Finance, and asks Claude AI to explain what on earth is happening — market context, sector moves, macro events, analyst takes. All the excuses reasons you need, in one dashboard.
 
-FolioSenseAI tracks a personal portfolio in real time, pulls market data from Yahoo Finance, and uses AI-generated context to help explain what may be moving each holding.
+---
 
-**Default holdings:** NOW · QTUM · VOO · CGDV · IBIT · VT · ITA · IEMG · SETM · WSML
+## 📸 Dashboard
 
-### Dashboard
+<p align="center">
+  <img src="docs/dashboard.png" alt="FolioSenseAI Dashboard" width="850"/>
+  <br/>
+  <sub><em>Numbers blurred to protect the traumatized investor.</em></sub>
+</p>
 
-- Live prices and daily gain/loss for all holdings
-- Total portfolio value and daily P&L
-- Color-coded performance
+> 📌 **To add your screenshot:** Take a screenshot of the running dashboard, blur the dollar amounts using Preview (Mac) or Paint/Greenshot (Windows), save it as `docs/dashboard.png`, and push. The broken image above will thank you.
+
+---
+
+## ✨ Features
+
+### 📊 Live Dashboard
+- Real-time prices and daily gain/loss for all holdings
+- Total portfolio value and daily P&L *(color-coded — green good, red bad, you know the drill)*
 - Allocation, return, and performance-history views
-- Market open/closed indicator with auto-refresh countdown
-- Responsive dashboard UI
+- Market open/closed indicator with auto-refresh countdown — so you can watch it drop in real time
 
-### Portfolio Intelligence
+### 🧠 Portfolio Intelligence *(the whole point)*
+- **Movement explanations** — macro, sector, news, and company context for each holding
+- **Portfolio-level AI analysis** — diversification themes, concentration risks, notable movers
+- **Holding coverage** — ETF sectors, regions, themes, and benchmark context
+- **Analyst recommendations** and ETF quality labels *(take with an appropriate grain of salt)*
 
-- Holding-level movement explanations with market, sector, macro, news, and company context
-- Portfolio-level AI analysis for diversification themes, concentration risks, and notable movers
-- Holding coverage details for ETFs, sectors, regions, themes, and benchmarks
-- Analyst recommendations for stocks and ETF quality labels where available
-
-### Portfolio Management
-
-- Add or remove holdings from the dashboard UI
+### ⚙️ Portfolio Management
+- Add and remove holdings from the UI
 - Update share counts and average cost basis
-- Soft-delete holdings while preserving historical trade data
+- Soft-delete holdings while preserving historical trade data *(because your mistakes deserve to be remembered)*
 
 ---
 
-## Why FolioSenseAI?
+## 🏗️ Tech Stack
 
-FolioSenseAI turns portfolio noise into understandable signals. Instead of only showing what a holding is, it helps explain why it may be moving by connecting price action, market news, and AI-generated context.
+*No blockchain. No NFTs. No regrets.*
 
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|------------|
-| Backend | Python, FastAPI, Uvicorn |
-| Database | SQLite, SQLAlchemy ORM |
-| AI | Anthropic Claude |
-| Market Data | yfinance |
-| Frontend | Bootstrap 5, Chart.js, Vanilla JS |
+| Layer | Technology | Why |
+|-------|------------|-----|
+| 🐍 **Backend** | Python 3.11+ · FastAPI · Uvicorn | Fast, async, and doesn't make you cry |
+| 🗄️ **Database** | SQLite · SQLAlchemy 2.0 · Pydantic v2 | ACID-compliant, unlike your trading decisions |
+| 🤖 **AI** | Anthropic Claude | Smarter than CNBC. Low bar. Cleared it. |
+| 📈 **Market Data** | yfinance · Yahoo Finance | Free real-time data — the only free thing in investing |
+| 🎨 **Frontend** | Bootstrap 5 · Chart.js · Vanilla JS | Zero frontend frameworks harmed in the making |
+| 🔐 **Config** | python-dotenv | Secrets stay secret. Your ticker picks do not. |
 
 ---
 
-## Project Structure
-
-```text
-FolioSenseAI/
-├── app/
-│   ├── main.py                 # FastAPI app, middleware, startup
-│   ├── config.py               # Settings from environment variables
-│   ├── database.py             # SQLAlchemy engine and session
-│   ├── models.py               # Database table definitions
-│   ├── schemas.py              # Pydantic request/response validation
-│   ├── routers/
-│   │   ├── stocks.py           # Live price and market-status endpoints
-│   │   ├── portfolio.py        # Portfolio and holdings endpoints
-│   │   └── ai.py               # AI insight endpoints
-│   └── services/
-│       ├── stock_service.py
-│       ├── ai_service.py
-│       ├── move_explainer.py
-│       ├── holding_intelligence.py
-│       ├── analyst_recommendation.py
-│       ├── etf_quality.py
-│       └── security_type.py
-├── static/
-│   ├── css/style.css
-│   └── js/dashboard.js
-├── templates/
-│   └── index.html
-├── tests/
-├── database/
-├── .env.example
-├── requirements.txt
-└── run.py
-```
-
----
-
-## Local Setup
+## 🚀 Local Setup
 
 ### Prerequisites
 
-- Python 3.11 or newer
-- Git
-- An Anthropic API key for AI features
+You'll need these before anything else:
 
-### 1. Clone and install
+| Requirement | Where to get it |
+|------------|----------------|
+| **Python 3.11+** | [python.org](https://www.python.org/downloads/) |
+| **Git** | [git-scm.com](https://git-scm.com/) |
+| **Anthropic API key** | [console.anthropic.com](https://console.anthropic.com/) |
+
+> 💡 The Anthropic API key costs a little money per AI query — roughly pennies. The AI explanations are cached, so you won't rack up charges just by refreshing.
+
+---
+
+### 🍎 Mac Setup
+
+macOS tends to just work here. Suspiciously well.
+
+**1. Clone the repo**
 
 ```bash
 git clone git@github.com:udhawan97/FolioSenseAI.git
 cd FolioSenseAI
+```
 
+> 💡 If you prefer HTTPS: `git clone https://github.com/udhawan97/FolioSenseAI.git`
+
+**2. Create a virtual environment and install dependencies**
+
+```bash
 python3 -m venv venv
 source venv/bin/activate
-
 pip install -r requirements.txt
 ```
 
-### 2. Configure environment variables
+> 💡 If `python3` isn't found, install via [Homebrew](https://brew.sh/): `brew install python`
+>
+> 💡 You'll know the venv is active when your terminal prompt shows `(venv)`. Don't skip this step — global Python installs are a mess.
+
+**3. Configure environment**
 
 ```bash
 cp .env.example .env
@@ -120,106 +124,210 @@ cp .env.example .env
 
 Open `.env` and fill in your values:
 
-```text
+```env
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
-APP_SECRET_KEY=generate_a_random_string_here
+APP_SECRET_KEY=some_long_random_string_here
 DEBUG=True
 DATABASE_URL=sqlite:///./database/portfolio.db
 ```
 
-### 3. Run the app
+> 💡 Generate a proper secret key in one line:
+> ```bash
+> python3 -c "import secrets; print(secrets.token_hex(32))"
+> ```
+
+**4. Run**
 
 ```bash
 python run.py
 ```
 
-Open [http://localhost:8000](http://localhost:8000).
+Open [http://localhost:8000](http://localhost:8000) — your dashboard awaits.
 
-- API documentation: [http://localhost:8000/docs](http://localhost:8000/docs)
-- Health check: [http://localhost:8000/health](http://localhost:8000/health)
-
-### 4. Seed your portfolio
-
-On first run, call the seed endpoint to create the default portfolio:
+**5. Seed the default portfolio** *(first run only)*
 
 ```bash
 curl -X POST http://localhost:8000/api/portfolio/seed
 ```
 
-Then update share counts and average costs from the **Manage** button on the dashboard.
+Then click **Manage** on the dashboard to update share counts and average costs.
 
 ---
 
-## API Reference
+### 🪟 Windows Setup
+
+Windows is supported. We have feelings about it, but we support it.
+
+**Step 0: Install Python properly**
+
+Download Python from [python.org](https://www.python.org/downloads/). During install, **check "Add Python to PATH"** — this is not optional. If you miss it, uninstall and reinstall. Trust us.
+
+**Option A: Command Prompt or PowerShell**
+
+```cmd
+git clone git@github.com:udhawan97/FolioSenseAI.git
+cd FolioSenseAI
+
+python -m venv venv
+venv\Scripts\activate
+
+pip install -r requirements.txt
+```
+
+> 💡 If PowerShell blocks script execution, run this first:
+> ```powershell
+> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+> ```
+
+**Option B: Git Bash** *(recommended — Unix-like and sane)*
+
+If you installed Git for Windows, Git Bash lets you use the same commands as Mac:
+
+```bash
+git clone git@github.com:udhawan97/FolioSenseAI.git
+cd FolioSenseAI
+
+python -m venv venv
+source venv/Scripts/activate   # Note: "Scripts" not "bin" on Windows
+
+pip install -r requirements.txt
+```
+
+**Configure environment:**
+
+```cmd
+copy .env.example .env
+```
+
+Open `.env` in Notepad, VS Code, or anything that isn't WordPad:
+
+```env
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+APP_SECRET_KEY=some_long_random_string_here
+DEBUG=True
+DATABASE_URL=sqlite:///./database/portfolio.db
+```
+
+> 💡 Generate a secret key in PowerShell:
+> ```powershell
+> python -c "import secrets; print(secrets.token_hex(32))"
+> ```
+
+**Run:**
+
+```cmd
+python run.py
+```
+
+Open [http://localhost:8000](http://localhost:8000).
+
+> ⚠️ **SSL errors?** If yfinance complains about certificates, run: `pip install --upgrade certifi`
+
+---
+
+### 🔗 Useful URLs *(once running)*
+
+| URL | What's there |
+|-----|-------------|
+| `http://localhost:8000` | The dashboard |
+| `http://localhost:8000/docs` | Swagger API docs (surprisingly pretty) |
+| `http://localhost:8000/health` | Health check endpoint |
+
+---
+
+## 📡 API Reference
+
+Full interactive docs at `/docs` when running locally. Here's the cheat sheet:
+
+<details>
+<summary>📈 Market Data</summary>
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/stocks/prices` | Live prices for all holdings |
-| GET | `/api/stocks/price/{ticker}` | Single ticker price |
-| GET | `/api/stocks/history/{ticker}?period=1mo` | Historical OHLCV data |
-| GET | `/api/stocks/market-status` | US market open/closed |
-| GET | `/api/portfolio/holdings` | All active holdings |
-| POST | `/api/portfolio/holdings` | Add a holding |
-| PUT | `/api/portfolio/holdings/{id}` | Update shares/cost |
-| DELETE | `/api/portfolio/holdings/{id}` | Remove a holding |
-| GET | `/api/portfolio/value` | Portfolio value, allocation, and daily P&L |
-| GET | `/api/portfolio/pnl` | Historical return and realized P&L data |
-| GET | `/api/ai/summary/{ticker}` | AI summary for one holding |
-| GET | `/api/ai/summaries/all` | AI summaries for all holdings |
-| GET | `/api/ai/portfolio-insight` | Portfolio-level AI analysis |
-| GET | `/api/ai/explain-move/{ticker}` | Movement explanation for one holding |
-| GET | `/api/ai/explain-moves/all` | Movement explanations for all holdings |
-| GET | `/api/ai/holding-intelligence/all` | Holding coverage and benchmark context |
-| GET | `/api/ai/analyst-recommendations/all` | Analyst recommendations and ETF quality labels |
-| GET | `/api/ai/cache/stats` | Cache stats and estimated cost |
-| DELETE | `/api/ai/cache/clear` | Clear cached summaries |
+| `GET` | `/api/stocks/prices` | Live prices for all holdings |
+| `GET` | `/api/stocks/price/{ticker}` | Single ticker price |
+| `GET` | `/api/stocks/history/{ticker}?period=1mo` | Historical OHLCV data |
+| `GET` | `/api/stocks/market-status` | Is the market open (and punishing you)? |
+
+</details>
+
+<details>
+<summary>💼 Portfolio</summary>
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/portfolio/holdings` | All active holdings |
+| `POST` | `/api/portfolio/holdings` | Add a holding |
+| `PUT` | `/api/portfolio/holdings/{id}` | Update shares/cost |
+| `DELETE` | `/api/portfolio/holdings/{id}` | Remove a holding (touch grass) |
+| `GET` | `/api/portfolio/value` | Portfolio value, allocation, daily P&L |
+| `GET` | `/api/portfolio/pnl` | Historical returns and realized P&L |
+| `POST` | `/api/portfolio/seed` | Seed default holdings (first run) |
+
+</details>
+
+<details>
+<summary>🤖 AI Intelligence</summary>
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/ai/summary/{ticker}` | AI summary for one holding |
+| `GET` | `/api/ai/summaries/all` | AI summaries for all holdings |
+| `GET` | `/api/ai/portfolio-insight` | Portfolio-level AI analysis |
+| `GET` | `/api/ai/explain-move/{ticker}` | Why is this thing moving? |
+| `GET` | `/api/ai/explain-moves/all` | Why is everything moving? |
+| `GET` | `/api/ai/holding-intelligence/all` | Coverage and benchmark context |
+| `GET` | `/api/ai/analyst-recommendations/all` | Analyst takes and ETF quality labels |
+| `GET` | `/api/ai/cache/stats` | Cache stats and estimated API cost |
+| `DELETE` | `/api/ai/cache/clear` | Clear cached summaries |
+
+</details>
 
 ---
 
-## Running Tests
+## 🧪 Tests
 
 ```bash
 python -m pytest tests/ -v
 ```
 
-Tests use mocked external services where practical.
+External services are mocked. *(Real integration tests would cost money. Claude is cheap but not free.)*
 
 ---
 
-## Deployment Notes
-
-The current repository does not include a deployment manifest such as `render.yaml`, `vercel.json`, `netlify.toml`, a `Dockerfile`, or a `Procfile`. For deployment, create the service using the Python/FastAPI start command appropriate for your host, then set the same environment variables used in `.env`.
-
-For Uvicorn-based hosts, the app import path is:
-
-```text
-app.main:app
-```
-
----
-
-## Cost
+## 💰 Cost Breakdown
 
 | Service | Cost |
 |---------|------|
-| yfinance market data | Free |
-| SQLite database | Free |
-| Anthropic Claude | Depends on usage |
-| Hosting | Depends on provider |
+| yfinance market data | 🆓 Free |
+| SQLite database | 🆓 Free |
+| Self-hosted app | 🆓 Free |
+| Anthropic Claude | 💸 ~Pennies per AI query, cached aggressively |
+| Your time reading this README | 💸 Sunk cost |
 
 ---
 
-## Roadmap
+## 🗺️ Roadmap
+
+*No promises. No timeline. It's a side project.*
 
 - [ ] Real-time WebSocket price updates
 - [ ] Transaction history views
 - [ ] Price alerts
-- [ ] PostgreSQL for persistent cloud storage
+- [ ] PostgreSQL support for cloud deployments
 - [ ] AI-powered rebalancing suggestions
 - [ ] Export portfolio to CSV
+- [ ] Cope with market volatility *(stretch goal)*
 
 ---
 
-## License
+## 📄 License
 
-Personal project. Not intended for redistribution or financial advice.
+Personal project. **Not financial advice.** If you make or lose money based on a dashboard you found on GitHub, that's entirely on you. No warranties, express or implied, for your portfolio or your life choices.
+
+---
+
+<p align="center">
+  Built with 🤖 AI, ☕ caffeine, and a concerning interest in watching numbers move.<br/>
+  <a href="https://github.com/udhawan97/FolioSenseAI">⭐ Star this repo</a> if it helped you feel better about your losses.
+</p>
