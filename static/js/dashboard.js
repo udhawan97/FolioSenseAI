@@ -1260,16 +1260,42 @@ function toggleAllocationSort() {
     renderHoldings();
 }
 
+// Move the sliding pill indicator to match the active tab.
+// Uses offsetLeft (relative to track) so it works even when tabs show/hide.
+function syncHvtIndicator() {
+    const track = document.getElementById("holdings-view-tabs");
+    if (!track) return;
+    const indicator = track.querySelector(".hvt-indicator");
+    const activeBtn = track.querySelector(".hvt-tab--active");
+    if (!indicator || !activeBtn) return;
+    const pad = 3; // track padding-left
+    indicator.style.width = activeBtn.offsetWidth + "px";
+    indicator.style.transform = `translateX(${activeBtn.offsetLeft - pad}px)`;
+}
+
+function popHvtCount(el, value) {
+    if (!el) return;
+    const str = String(value);
+    if (el.textContent === str) return;
+    el.textContent = str;
+    el.classList.remove("is-popping");
+    void el.offsetWidth; // force reflow so animation restarts
+    el.classList.add("is-popping");
+}
+
 function setHoldingsFilter(view) {
     if (holdingsViewFilter === view) return;
     holdingsViewFilter = view;
 
-    // Update tab active states
+    // Update tab active states and indicator
     document.querySelectorAll(".hvt-tab").forEach(btn => {
         const isActive = btn.dataset.view === view;
         btn.classList.toggle("hvt-tab--active", isActive);
         btn.setAttribute("aria-pressed", String(isActive));
     });
+    const track = document.getElementById("holdings-view-tabs");
+    if (track) track.dataset.activeView = view;
+    syncHvtIndicator();
 
     // Amber card accent in research mode
     const card = document.getElementById("holdings-card");
@@ -1282,18 +1308,20 @@ function updateHoldingsFilterCounts() {
     const all = latestHoldings.length;
     const research = latestHoldings.filter(h => h.is_watchlist).length;
     const portfolio = all - research;
-    const elAll = document.getElementById("hvt-count-all");
-    const elPortfolio = document.getElementById("hvt-count-portfolio");
-    const elResearch = document.getElementById("hvt-count-research");
-    if (elAll) elAll.textContent = all;
-    if (elPortfolio) elPortfolio.textContent = portfolio;
-    if (elResearch) elResearch.textContent = research;
+    popHvtCount(document.getElementById("hvt-count-all"), all);
+    popHvtCount(document.getElementById("hvt-count-portfolio"), portfolio);
+    popHvtCount(document.getElementById("hvt-count-research"), research);
 
     // Hide research tab entirely if user has no research holdings
     const researchTab = document.querySelector(".hvt-tab[data-view='research']");
-    if (researchTab) researchTab.style.display = research === 0 ? "none" : "";
+    if (researchTab) {
+        const wasHidden = researchTab.style.display === "none";
+        researchTab.style.display = research === 0 ? "none" : "";
+        // Re-sync indicator after tab visibility changes (affects offsets)
+        if (wasHidden !== (research === 0)) syncHvtIndicator();
+    }
 
-    // If current filter is research but user removed all research holdings, reset to all
+    // If current filter is research but user removed all research holdings, reset
     if (holdingsViewFilter === "research" && research === 0) setHoldingsFilter("all");
 }
 
@@ -3050,6 +3078,9 @@ async function initDashboard() {
     initBrandCostCallout();
     initPerformanceTabs();
     initPortfolioManager();
+    // Sync the sliding indicator once layout is settled
+    requestAnimationFrame(syncHvtIndicator);
+    window.addEventListener("resize", syncHvtIndicator, { passive: true });
     await loadPortfolioValue();
     await loadPnl();
     await updateMarketStatus();

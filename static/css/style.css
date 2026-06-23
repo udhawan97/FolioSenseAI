@@ -7420,97 +7420,183 @@ tr.research-holding-row:hover {
 /* ── Holdings View Filter Tabs ───────────────────────────────────────────── */
 .holdings-view-tabs {
     display: flex;
-    background: rgba(255, 255, 255, 0.055);
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 10px;
+    position: relative;
+    background: rgba(255, 255, 255, 0.048);
+    border: 1px solid rgba(255, 255, 255, 0.075);
+    border-radius: 11px;
     padding: 3px;
-    gap: 2px;
+    gap: 0;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.22);
 }
+
+/* GPU-accelerated sliding pill */
+.hvt-indicator {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    bottom: 3px;
+    width: 0; /* set by JS on init and each tab switch */
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.13);
+    box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.4),
+        0 0 0 0.5px rgba(255, 255, 255, 0.14),
+        inset 0 0.5px 0 rgba(255, 255, 255, 0.1);
+    transform: translateX(0);
+    pointer-events: none;
+    will-change: transform, width;
+    transition:
+        transform 230ms cubic-bezier(0.34, 1.15, 0.64, 1),
+        width    230ms cubic-bezier(0.34, 1.15, 0.64, 1),
+        background 200ms ease,
+        box-shadow 200ms ease;
+}
+/* Amber indicator when Research is active */
+.holdings-view-tabs[data-active-view="research"] .hvt-indicator {
+    background: rgba(255, 193, 7, 0.22);
+    box-shadow:
+        0 1px 4px rgba(255, 193, 7, 0.28),
+        0 0 10px rgba(255, 193, 7, 0.07),
+        0 0 0 0.5px rgba(255, 193, 7, 0.38),
+        inset 0 0.5px 0 rgba(255, 255, 255, 0.07);
+}
+
 .hvt-tab {
+    position: relative;
+    z-index: 1;
     background: transparent;
     border: none;
-    color: var(--text-tertiary);
-    border-radius: 7px;
-    padding: 4px 10px;
-    font-size: 0.76rem;
+    color: rgba(255, 255, 255, 0.36);
+    border-radius: 8px;
+    padding: 5px 11px;
+    font-size: 0.75rem;
     font-weight: 500;
     cursor: pointer;
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 5px;
-    transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+    transition: color 0.15s ease;
     white-space: nowrap;
     line-height: 1;
+    flex: 1;
+    user-select: none;
+    -webkit-user-select: none;
 }
 .hvt-tab:hover:not(.hvt-tab--active) {
-    color: var(--text-primary);
-    background: rgba(255, 255, 255, 0.07);
+    color: rgba(255, 255, 255, 0.62);
 }
 .hvt-tab--active {
-    background: rgba(255, 255, 255, 0.13);
-    color: #fff;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3), 0 0 0 0.5px rgba(255,255,255,0.12);
+    color: rgba(255, 255, 255, 0.96);
+    font-weight: 600;
 }
 .hvt-tab[data-view="research"].hvt-tab--active {
-    background: rgba(255, 193, 7, 0.22);
-    color: #ffc107;
-    box-shadow: 0 1px 4px rgba(255, 193, 7, 0.2), 0 0 0 0.5px rgba(255,193,7,0.3);
+    color: #ffd54f;
 }
+
+/* Icon: scale up when active */
 .hvt-icon {
-    font-size: .78rem;
-    opacity: .85;
+    font-size: 0.78rem;
+    flex-shrink: 0;
+    transition: transform 250ms cubic-bezier(0.34, 1.15, 0.64, 1), opacity 0.15s ease;
+    opacity: 0.7;
 }
+.hvt-tab--active .hvt-icon {
+    transform: scale(1.18);
+    opacity: 1;
+}
+
+/* Count pill */
 .hvt-count {
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.1);
     border-radius: 20px;
-    padding: 1px 6px;
-    font-size: 0.68rem;
-    font-weight: 600;
-    min-width: 18px;
+    padding: 1.5px 5px;
+    font-size: 0.63rem;
+    font-weight: 700;
+    min-width: 16px;
     text-align: center;
+    letter-spacing: 0.01em;
+    display: inline-block;
     transition: background 0.18s ease;
 }
 .hvt-tab--active .hvt-count {
     background: rgba(255, 255, 255, 0.22);
 }
 .hvt-tab[data-view="research"].hvt-tab--active .hvt-count {
-    background: rgba(255, 193, 7, 0.3);
+    background: rgba(255, 193, 7, 0.32);
 }
 .hvt-tab:not(.hvt-tab--active) .hvt-count {
-    opacity: .7;
+    opacity: 0.6;
 }
-/* Research banner shown above table when in research filter */
+
+/* Count number pop when it updates */
+@keyframes hvt-count-pop {
+    0%   { transform: scale(1); }
+    45%  { transform: scale(1.35); }
+    100% { transform: scale(1); }
+}
+.hvt-count.is-popping {
+    animation: hvt-count-pop 280ms cubic-bezier(0.34, 1.2, 0.64, 1);
+}
+
+/* Research banner above table in research-filter mode */
 .research-filter-banner {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 8px 14px;
-    background: rgba(255, 193, 7, 0.07);
-    border-bottom: 1px solid rgba(255, 193, 7, 0.12);
-    font-size: .78rem;
-    color: rgba(255, 193, 7, 0.8);
+    background: rgba(255, 193, 7, 0.065);
+    border-bottom: 1px solid rgba(255, 193, 7, 0.11);
+    font-size: .77rem;
+    color: rgba(255, 193, 7, 0.75);
+    letter-spacing: 0.01em;
 }
 .research-filter-banner i {
     font-size: .85rem;
-    opacity: .9;
+    opacity: .85;
 }
 
+/* Light theme overrides */
 [data-bs-theme="light"] .holdings-view-tabs {
-    background: rgba(0,0,0,0.05);
-    border-color: rgba(0,0,0,0.1);
+    background: rgba(0, 0, 0, 0.045);
+    border-color: rgba(0, 0, 0, 0.1);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.07);
+}
+[data-bs-theme="light"] .hvt-tab {
+    color: rgba(0, 0, 0, 0.42);
+}
+[data-bs-theme="light"] .hvt-tab:hover:not(.hvt-tab--active) {
+    color: rgba(0, 0, 0, 0.7);
 }
 [data-bs-theme="light"] .hvt-tab--active {
+    color: rgba(0, 0, 0, 0.88);
+}
+[data-bs-theme="light"] .hvt-indicator {
     background: #fff;
-    color: #111;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+    box-shadow:
+        0 1px 4px rgba(0, 0, 0, 0.14),
+        0 0 0 0.5px rgba(0, 0, 0, 0.06);
+}
+[data-bs-theme="light"] .holdings-view-tabs[data-active-view="research"] .hvt-indicator {
+    background: rgba(200, 130, 0, 0.11);
+    box-shadow:
+        0 1px 4px rgba(200, 130, 0, 0.2),
+        0 0 0 0.5px rgba(200, 130, 0, 0.28);
 }
 [data-bs-theme="light"] .hvt-tab[data-view="research"].hvt-tab--active {
-    background: rgba(200,130,0,0.12);
     color: #8a5600;
-    box-shadow: 0 1px 4px rgba(200,130,0,0.18);
+}
+[data-bs-theme="light"] .hvt-count {
+    background: rgba(0, 0, 0, 0.08);
+}
+[data-bs-theme="light"] .hvt-tab--active .hvt-count {
+    background: rgba(0, 0, 0, 0.13);
+}
+[data-bs-theme="light"] .hvt-tab[data-view="research"].hvt-tab--active .hvt-count {
+    background: rgba(200, 130, 0, 0.18);
 }
 [data-bs-theme="light"] .research-filter-banner {
-    background: rgba(200,130,0,0.07);
-    border-bottom-color: rgba(200,130,0,0.15);
-    color: rgba(150, 90, 0, 0.9);
+    background: rgba(200, 130, 0, 0.07);
+    border-bottom-color: rgba(200, 130, 0, 0.15);
+    color: rgba(140, 85, 0, 0.9);
 }
