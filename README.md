@@ -27,15 +27,14 @@
 
 ---
 
-## 📸 Dashboard
+## 📸 Marketing
 
 <p align="center">
   <img src="docs/dashboard.png" alt="FolioSenseAI Dashboard" width="850"/>
   <br/>
-  <sub><em>Numbers blurred to protect the traumatized investor.</em></sub>
+  <sub><em>Numbers are fake to protect the traumatized investor.</em></sub>
 </p>
 
-> 📌 **To add your screenshot:** Take a screenshot of the running dashboard, blur the dollar amounts using Preview (Mac) or Paint/Greenshot (Windows), save it as `docs/dashboard.png`, and push. The broken image above will thank you.
 
 ---
 
