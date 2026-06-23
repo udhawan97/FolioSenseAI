@@ -2,23 +2,14 @@ import logging
 from typing import Optional
 import yfinance as yf
 
+from app.config import settings
 from app.services.security_type import classify_security
 
 logger = logging.getLogger(__name__)
 
-# Tickers fetched when no specific list is provided
-DEFAULT_HOLDINGS: list[str] = [
-    "NOW",
-    "QTUM",
-    "VOO",
-    "CGDV",
-    "IBIT",
-    "VT",
-    "ITA",
-    "IEMG",
-    "SETM",
-    "WSML",
-]
+# Tickers fetched when no specific list is provided.
+# Configure with DEFAULT_HOLDINGS=VOO,QQQ,... in .env.
+DEFAULT_HOLDINGS: list[str] = settings.DEFAULT_HOLDINGS
 
 
 def get_stock_data(ticker: str) -> dict:

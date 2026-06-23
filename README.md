@@ -98,11 +98,11 @@ macOS tends to just work here. Suspiciously well.
 **1. Clone the repo**
 
 ```bash
-git clone git@github.com:udhawan97/FolioSenseAI.git
+git clone git@github.com:<your-user>/FolioSenseAI.git
 cd FolioSenseAI
 ```
 
-> 💡 If you prefer HTTPS: `git clone https://github.com/udhawan97/FolioSenseAI.git`
+> 💡 If you prefer HTTPS: `git clone https://github.com/<your-user>/FolioSenseAI.git`
 
 **2. Create a virtual environment and install dependencies**
 
@@ -126,9 +126,11 @@ Open `.env` and fill in your values:
 
 ```env
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
-APP_SECRET_KEY=some_long_random_string_here
+SECRET_KEY=some_long_random_string_here
 DEBUG=True
 DATABASE_URL=sqlite:///./database/portfolio.db
+CORS_ALLOWED_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
+DEFAULT_HOLDINGS=
 ```
 
 > 💡 Generate a proper secret key in one line:
@@ -144,13 +146,13 @@ python run.py
 
 Open [http://localhost:8000](http://localhost:8000) — your dashboard awaits.
 
-**5. Seed the default portfolio** *(first run only)*
+**5. Create your local portfolio** *(first run only)*
 
 ```bash
 curl -X POST http://localhost:8000/api/portfolio/seed
 ```
 
-Then click **Manage** on the dashboard to update share counts and average costs.
+This creates an empty local portfolio by default. To seed starter tickers without committing personal holdings, set `DEFAULT_HOLDINGS=VOO,QQQ,BND` in your own `.env`, then run the seed command.
 
 ---
 
@@ -165,7 +167,7 @@ Download Python from [python.org](https://www.python.org/downloads/). During ins
 **Option A: Command Prompt or PowerShell**
 
 ```cmd
-git clone git@github.com:udhawan97/FolioSenseAI.git
+git clone git@github.com:<your-user>/FolioSenseAI.git
 cd FolioSenseAI
 
 python -m venv venv
@@ -184,7 +186,7 @@ pip install -r requirements.txt
 If you installed Git for Windows, Git Bash lets you use the same commands as Mac:
 
 ```bash
-git clone git@github.com:udhawan97/FolioSenseAI.git
+git clone git@github.com:<your-user>/FolioSenseAI.git
 cd FolioSenseAI
 
 python -m venv venv
@@ -203,9 +205,11 @@ Open `.env` in Notepad, VS Code, or anything that isn't WordPad:
 
 ```env
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
-APP_SECRET_KEY=some_long_random_string_here
+SECRET_KEY=some_long_random_string_here
 DEBUG=True
 DATABASE_URL=sqlite:///./database/portfolio.db
+CORS_ALLOWED_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
+DEFAULT_HOLDINGS=
 ```
 
 > 💡 Generate a secret key in PowerShell:
@@ -232,6 +236,19 @@ Open [http://localhost:8000](http://localhost:8000).
 | `http://localhost:8000` | The dashboard |
 | `http://localhost:8000/docs` | Swagger API docs (surprisingly pretty) |
 | `http://localhost:8000/health` | Health check endpoint |
+
+---
+
+## 🔐 Clean-Slate Fork Safety
+
+This repo is designed so forks start without personal portfolio data:
+
+- `.env` stays local and is ignored by Git.
+- SQLite databases and database backups are ignored.
+- `POST /api/portfolio/seed` creates an empty portfolio unless you set `DEFAULT_HOLDINGS` in your own `.env`.
+- `CORS_ALLOWED_ORIGINS` defaults to local app origins instead of `*`.
+
+If you previously committed a real database backup, delete it from the current tree and purge it from Git history before treating the public repo as clean.
 
 ---
 
@@ -262,7 +279,7 @@ Full interactive docs at `/docs` when running locally. Here's the cheat sheet:
 | `DELETE` | `/api/portfolio/holdings/{id}` | Remove a holding (touch grass) |
 | `GET` | `/api/portfolio/value` | Portfolio value, allocation, daily P&L |
 | `GET` | `/api/portfolio/pnl` | Historical returns and realized P&L |
-| `POST` | `/api/portfolio/seed` | Seed default holdings (first run) |
+| `POST` | `/api/portfolio/seed` | Create the local portfolio and optional configured starter holdings |
 
 </details>
 
@@ -329,5 +346,5 @@ Personal project. **Not financial advice.** If you make or lose money based on a
 
 <p align="center">
   Built with 🤖 AI, ☕ caffeine, and a concerning interest in watching numbers move.<br/>
-  <a href="https://github.com/udhawan97/FolioSenseAI">⭐ Star this repo</a> if it helped you feel better about your losses.
+  ⭐ Star this repo if it helped you feel better about your losses.
 </p>

@@ -1,7 +1,13 @@
 # === SECRETS — NEVER COMMIT ===
 .env
+.env.*
+!.env.example
 *.key
 *.pem
+*.p12
+*.pfx
+*.crt
+*.csr
  
 # === Python ===
 __pycache__/
@@ -20,7 +26,13 @@ env/
  
 # === Database ===
 *.db
+*.db-*
+*.db.*
 *.sqlite3
+*.sqlite
+database/*.bak
+database/*.backup
+!database/.gitkeep
  
 # === OS Files ===
 .DS_Store

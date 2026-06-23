@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from app.routers import stocks, portfolio, ai
+from app.config import settings
 from app.database import engine
 from app import models
 
@@ -26,9 +27,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Allow requests from any origin — required so browsers can call our API
-app.add_middleware(CORSMiddleware, allow_origins=["*"],
-                   allow_methods=["*"], allow_headers=["*"])
+# Allow the local dashboard to call the API without exposing it to every origin.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ALLOWED_ORIGINS,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Serve static files (CSS, JS, images) from the /static folder
 # Files at static/css/style.css → URL: /static/css/style.css

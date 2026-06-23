@@ -363,7 +363,7 @@ async def remove_holding(holding_id: int, db: Session = Depends(get_db)):
 @router.post("/seed")
 async def seed_portfolio(db: Session = Depends(get_db)):
     """
-    One-time setup: create the default portfolio and populate it with all default holdings.
+    One-time setup: create the default portfolio and optional configured holdings.
     Safe to call repeatedly — returns early if the portfolio already exists.
     """
     # Don't seed again if a portfolio with this name already exists
@@ -371,9 +371,7 @@ async def seed_portfolio(db: Session = Depends(get_db)):
     if existing:
         return {"message": "Already seeded", "portfolio_id": existing.id}
 
-    portfolio = Portfolio(
-        name="My Portfolio", description="Personal stock and ETF portfolio"
-    )
+    portfolio = Portfolio(name="My Portfolio", description="Local portfolio")
     db.add(portfolio)
     db.flush()  # Write to DB to get the generated ID, but don't commit yet
 

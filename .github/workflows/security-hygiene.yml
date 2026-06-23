@@ -1,0 +1,23 @@
+name: Security Hygiene
+
+on: [push, pull_request]
+
+jobs:
+  repository-hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Block local secrets and generated state
+        run: |
+          set -euo pipefail
+          blocked="$(
+            git ls-files \
+              | grep -E '(^|/)(\.env($|\.)|\.DS_Store$|Thumbs\.db$|.*\.(db|sqlite|sqlite3|bak|backup)$|.*\.db(-|\.))' \
+              | grep -Ev '(^|/)\.env\.example$' \
+              || true
+          )"
+          if [ -n "$blocked" ]; then
+            echo "The following local/generated files are tracked and must be removed:"
+            echo "$blocked"
+            exit 1
+          fi

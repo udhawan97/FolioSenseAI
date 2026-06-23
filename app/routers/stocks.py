@@ -4,6 +4,7 @@ import pytz
 import yfinance as yf
 from fastapi import APIRouter, HTTPException, Query
 from app.services.stock_service import (
+    DEFAULT_HOLDINGS,
     get_stock_data,
     get_all_quotes,
     get_historical_prices,
@@ -30,7 +31,7 @@ router = APIRouter(prefix="/api/stocks", tags=["stocks"])
 
 @router.get("/prices")
 async def get_all_prices():
-    """Return live quotes for all default holdings."""
+    """Return live quotes for configured default holdings."""
     quotes = get_all_quotes()
     return {"quotes": quotes, "count": len(quotes)}
 
@@ -51,16 +52,20 @@ async def get_price(ticker: str):
 
 @router.get("/history/batch")
 async def get_batch_history(
-    tickers: str = "NOW,QTUM,VOO,CGDV,IBIT,VT,ITA,IEMG,SETM,WSML",
+    tickers: str | None = None,
     period: str = "1mo"
 ):
     """
     Fetch historical prices for multiple tickers at once.
-    tickers: comma-separated list
+    tickers: comma-separated list. Defaults to configured DEFAULT_HOLDINGS.
     period: 1d, 5d, 1mo, 3mo, 6mo, 1y
     Example: GET /api/stocks/history/batch?period=1mo
     """
-    ticker_list = [t.strip().upper() for t in tickers.split(",")]
+    ticker_list = (
+        [t.strip().upper() for t in tickers.split(",") if t.strip()]
+        if tickers
+        else DEFAULT_HOLDINGS
+    )
     result = {}
     for ticker in ticker_list:
         result[ticker] = get_historical_prices(ticker, period)

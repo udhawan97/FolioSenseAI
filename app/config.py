@@ -6,6 +6,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _csv_env(name: str, default: str = "", uppercase: bool = False) -> list[str]:
+    """Parse comma-separated environment values into normalized non-empty items."""
+    raw = os.getenv(name, default)
+    items = [item.strip() for item in raw.split(",") if item.strip()]
+    return [item.upper() for item in items] if uppercase else items
+
+
 class Settings:
     """
     Central place for all app configuration.
@@ -18,17 +25,23 @@ class Settings:
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
     # When DEBUG=True, SQLAlchemy prints every SQL query to the console
     DEBUG: bool = os.getenv("DEBUG", "True") == "True"
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "change-me-in-production")
+    SECRET_KEY: str = (
+        os.getenv("SECRET_KEY")
+        or os.getenv("APP_SECRET_KEY")
+        or "change-me-in-production"
+    )
+    CORS_ALLOWED_ORIGINS: list[str] = _csv_env(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:8000,http://127.0.0.1:8000",
+    )
     APP_NAME: str = "FolioSenseAI"
     APP_DESCRIPTION: str = (
         "FolioSenseAI helps explain portfolio movement by surfacing market context, "
         "news, and AI-generated insights for holdings."
     )
-    # Default stock tickers pre-loaded when seeding the portfolio for the first time
-    DEFAULT_HOLDINGS: list[str] = [
-        "NOW", "QTUM", "VOO", "CGDV", "IBIT",
-        "VT", "ITA", "IEMG", "SETM", "WSML",
-    ]
+    # Optional comma-separated tickers pre-loaded by POST /api/portfolio/seed.
+    # Empty by default so forks do not inherit anyone's personal portfolio.
+    DEFAULT_HOLDINGS: list[str] = _csv_env("DEFAULT_HOLDINGS", uppercase=True)
 
 
 # Single shared settings object — import this everywhere instead of creating Settings()
