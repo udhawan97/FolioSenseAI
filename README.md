@@ -82,9 +82,17 @@
 
 ## 🚀 Local Setup
 
-### Fast Install
+### Before You Start
 
-You'll need **Python 3.11+** from [python.org](https://www.python.org/downloads/). On Windows, check **Add Python to PATH** during install.
+You do not need to be a developer to run FolioSenseAI locally. Think of this like installing a small private dashboard on your own computer:
+
+- Install **Python 3.11 or newer** from [python.org](https://www.python.org/downloads/). On Windows, make sure **Add Python to PATH** is checked during install.
+- Use **Terminal** on Mac or Linux. Use **PowerShell** on Windows.
+- Copy and paste one command block at a time. If a prompt asks for an Anthropic API key, paste it or press **Enter** to skip AI features for now.
+- Keep the Terminal or PowerShell window open while using the app. Closing it stops the local server.
+- The dashboard runs only on your computer at `http://localhost:8000`; it is not publishing your portfolio to the internet.
+
+### Fast Install
 
 The Anthropic API key is optional. Without it, FolioSenseAI still runs with live market data and portfolio tracking; AI explanations stay disabled until you add a key from [console.anthropic.com](https://console.anthropic.com/).
 
@@ -112,6 +120,16 @@ The setup script creates the virtual environment, installs dependencies, creates
 
 Open [http://localhost:8000](http://localhost:8000). Your local portfolio is created automatically the first time the dashboard asks for data.
 
+### What Success Looks Like
+
+When setup works, your Terminal or PowerShell window will say:
+
+```text
+Starting FolioSenseAI at http://localhost:8000
+```
+
+Leave that window running, then open [http://localhost:8000](http://localhost:8000) in Chrome, Edge, Safari, or Firefox.
+
 ### Starting Later
 
 After the first install, use the lighter start script:
@@ -135,6 +153,18 @@ ANTHROPIC_API_KEY=your_anthropic_api_key_here
 ```
 
 The API key costs a little money per AI query, roughly pennies. AI explanations are cached, so refreshing the dashboard does not keep spending.
+
+### Quick Fixes
+
+| If you see this | Try this |
+|-----------------|----------|
+| `Python 3.11+ is required` | Install the latest Python from [python.org](https://www.python.org/downloads/), then close and reopen Terminal or PowerShell. |
+| PowerShell blocks the script | Run `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`, then run the setup command again. |
+| `Permission denied` on Mac/Linux | Run `chmod +x scripts/setup.sh scripts/start.sh`, then try `./scripts/setup.sh` again. |
+| Browser says the site cannot be reached | Make sure the Terminal or PowerShell window is still running and shows `http://localhost:8000`. |
+| Port `8000` is already in use | Close the other local app using that port, or stop it and run the start script again. |
+| AI features are disabled | Add `ANTHROPIC_API_KEY=your_key_here` to `.env`, save it, then restart the app. |
+| Market data looks delayed or unavailable | Wait a minute and refresh. Yahoo Finance data can be delayed, rate-limited, or unavailable outside market hours. |
 
 ### Developer Setup
 
