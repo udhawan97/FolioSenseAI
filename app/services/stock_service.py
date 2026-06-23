@@ -151,7 +151,7 @@ def get_historical_prices(ticker: str, period: str = "1mo") -> list[dict]:
     """
     Return daily OHLCV (open/high/low/close/volume) data for a ticker.
 
-    period examples: "1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "ytd"
+    period examples: "1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"
     Returns an empty list if the data cannot be fetched.
     """
     try:

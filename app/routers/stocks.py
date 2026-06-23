@@ -59,7 +59,7 @@ async def get_batch_history(
     """
     Fetch historical prices for multiple tickers at once.
     tickers: comma-separated list. Defaults to configured DEFAULT_HOLDINGS.
-    period: 1d, 5d, 1mo, 3mo, 6mo, 1y
+    period: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max
     Example: GET /api/stocks/history/batch?period=1mo
     """
     ticker_list = (

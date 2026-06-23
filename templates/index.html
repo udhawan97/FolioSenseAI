@@ -20,7 +20,7 @@
     <link rel="apple-touch-icon" href="/static/img/brand/folio-orbit-icon-1024.png">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="/static/css/style.css?v=53" rel="stylesheet">
+    <link href="/static/css/style.css?v=54" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -438,7 +438,15 @@
                                 </button>
                             </li>
                         </ul>
-                        <button class="tip-trigger ms-auto"
+                        <div class="performance-range-tabs ms-auto" id="performance-range-tabs"
+                             role="group" aria-label="Performance chart range" data-active-range="max">
+                            <button class="performance-range-btn" type="button" data-range="week" aria-pressed="false">1W</button>
+                            <button class="performance-range-btn" type="button" data-range="month" aria-pressed="false">1M</button>
+                            <button class="performance-range-btn" type="button" data-range="year" aria-pressed="false">1Y</button>
+                            <button class="performance-range-btn" type="button" data-range="threeYears" aria-pressed="false">3Y</button>
+                            <button class="performance-range-btn is-active" type="button" data-range="max" aria-pressed="true">Max</button>
+                        </div>
+                        <button class="tip-trigger"
                             data-tip-title="Performance History"
                             data-tip-body="Track your portfolio's total return over time. The Realized gains tab shows closed trades with sale price, average cost basis, and net P&L."
                             data-tip-hint="Visit daily to grow this chart"
@@ -664,7 +672,7 @@
     </div><!-- /container -->
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <script defer src="/static/js/dashboard.js?v=57"></script>
+    <script defer src="/static/js/dashboard.js?v=58"></script>
 
     <!-- Tip Popover (singleton) -->
     <div id="tip-popover" role="tooltip" aria-hidden="true"></div>

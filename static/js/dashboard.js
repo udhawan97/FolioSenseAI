@@ -51,6 +51,15 @@ const TREND_DAYS = 7;
 const THEME_KEY = "foliosense-theme";
 const TEXT_SIZE_KEY = "foliosense-text-size";
 const DASHBOARD_PET_KEY = "foliosense-dashboard-pet-visible";
+const PERFORMANCE_RANGE_KEY = "foliosense-performance-range";
+
+const PERFORMANCE_RANGES = {
+    week:       { label: "1W",  days: 7,    marketPeriod: "5d" },
+    month:      { label: "1M",  days: 30,   marketPeriod: "1mo" },
+    year:       { label: "1Y",  days: 365,  marketPeriod: "1y" },
+    threeYears: { label: "3Y",  days: 1095, marketPeriod: "5y" },
+    max:        { label: "Max", days: null, marketPeriod: "max" },
+};
 
 const currentTheme = () =>
     document.documentElement.dataset.bsTheme === "light" ? "light" : "dark";
@@ -197,13 +206,55 @@ function initTextSizeToggle() {
 
 function initPerformanceTabs() {
     const perfTab = document.getElementById("performance-history-tab");
-    if (!perfTab) return;
-
-    perfTab.addEventListener("shown.bs.tab", () => {
+    if (perfTab) perfTab.addEventListener("shown.bs.tab", () => {
         if (!pnlChart) return;
         pnlChart.resize();
         pnlChart.update("none");
     });
+
+    initPerformanceRangeControls();
+}
+
+function normalizePerformanceRange(range) {
+    return PERFORMANCE_RANGES[range] ? range : "max";
+}
+
+function initialPerformanceRange() {
+    try {
+        return normalizePerformanceRange(localStorage.getItem(PERFORMANCE_RANGE_KEY));
+    } catch (_) {
+        return "max";
+    }
+}
+
+function initPerformanceRangeControls() {
+    const group = document.getElementById("performance-range-tabs");
+    if (!group) return;
+    performanceRange = initialPerformanceRange();
+    updatePerformanceRangeControls();
+    group.querySelectorAll("[data-range]").forEach(button => {
+        button.addEventListener("click", () => setPerformanceRange(button.dataset.range));
+    });
+}
+
+function updatePerformanceRangeControls() {
+    const group = document.getElementById("performance-range-tabs");
+    if (!group) return;
+    group.dataset.activeRange = performanceRange;
+    group.querySelectorAll("[data-range]").forEach(button => {
+        const isActive = button.dataset.range === performanceRange;
+        button.classList.toggle("is-active", isActive);
+        button.setAttribute("aria-pressed", String(isActive));
+    });
+}
+
+function setPerformanceRange(range) {
+    const next = normalizePerformanceRange(range);
+    if (next === performanceRange) return;
+    performanceRange = next;
+    try { localStorage.setItem(PERFORMANCE_RANGE_KEY, next); } catch (_) {}
+    updatePerformanceRangeControls();
+    renderCurrentPerformanceChart();
 }
 
 // Apple-inspired vivid palette: high-chroma hues with enough separation for quick scanning.
@@ -1350,6 +1401,11 @@ function renderTotalReturn(data) {
 
 
 let pnlChart = null;
+let performanceRange = "max";
+let latestPnlHistory = [];
+let latestPnlHasUserData = false;
+let latestPnlIsStale = false;
+let latestPnlStaleDays = 0;
 
 async function loadPnl() {
     try {
@@ -1365,21 +1421,41 @@ async function loadPnl() {
         const hoursOld = lastDate ? (Date.now() - lastDate.getTime()) / 3_600_000 : Infinity;
         const isStale = hoursOld > 24;
 
-        if (!hasUserData) {
-            updatePerfCallout("nodata");
-            await loadMarketReferenceChart();
-        } else if (isStale) {
-            updatePerfCallout("stale", Math.floor(hoursOld / 24));
-            renderPnlChart(history);
-        } else {
-            hidePerfCallout();
-            renderPnlChart(history);
-        }
+        latestPnlHistory = history;
+        latestPnlHasUserData = hasUserData;
+        latestPnlIsStale = isStale;
+        latestPnlStaleDays = Math.floor(hoursOld / 24);
+        await renderCurrentPerformanceChart();
 
         renderRealizedTable(data.trades || []);
     } catch (err) {
         console.warn("Unable to load P&L:", err);
     }
+}
+
+async function renderCurrentPerformanceChart() {
+    if (!latestPnlHasUserData) {
+        updatePerfCallout("nodata");
+        await loadMarketReferenceChart(performanceRange);
+        return;
+    }
+    if (latestPnlIsStale) {
+        updatePerfCallout("stale", latestPnlStaleDays);
+    } else {
+        hidePerfCallout();
+    }
+    renderPnlChart(filterHistoryForPerformanceRange(latestPnlHistory, performanceRange));
+}
+
+function filterHistoryForPerformanceRange(history, rangeKey = performanceRange) {
+    const rows = (history || []).filter(row => row?.date);
+    const config = PERFORMANCE_RANGES[normalizePerformanceRange(rangeKey)];
+    if (!config?.days || rows.length < 2) return rows;
+
+    const end = new Date(`${rows[rows.length - 1].date}T12:00:00`);
+    const cutoff = new Date(end);
+    cutoff.setDate(cutoff.getDate() - config.days);
+    return rows.filter(row => new Date(`${row.date}T12:00:00`) >= cutoff);
 }
 
 function updatePerfCallout(type, daysDiff = 0) {
@@ -1405,19 +1481,26 @@ function hidePerfCallout() {
     if (el) el.style.display = "none";
 }
 
-async function loadMarketReferenceChart() {
+async function loadMarketReferenceChart(rangeKey = performanceRange) {
     try {
-        const params = new URLSearchParams({ tickers: "SPY", period: "1mo" });
+        const config = PERFORMANCE_RANGES[normalizePerformanceRange(rangeKey)];
+        const params = new URLSearchParams({ tickers: "SPY", period: config.marketPeriod });
         const res = await fetch(`/api/stocks/history/batch?${params}`);
         if (!res.ok) return;
         const data = await res.json();
-        const hist = (data.data?.SPY || []).filter(h => h.close > 0);
-        if (hist.length < 2) return;
-        renderPnlChartMarketRef(hist);
+        const hist = filterHistoryForPerformanceRange(
+            (data.data?.SPY || []).filter(h => h.close > 0),
+            rangeKey,
+        );
+        if (hist.length < 2) {
+            if (pnlChart) { pnlChart.destroy(); pnlChart = null; }
+            return;
+        }
+        renderPnlChartMarketRef(hist, config.label);
     } catch (e) { /* silent */ }
 }
 
-function renderPnlChartMarketRef(history) {
+function renderPnlChartMarketRef(history, rangeLabel = PERFORMANCE_RANGES[performanceRange].label) {
     const canvas = document.getElementById("pnl-chart");
     if (!canvas) return;
     if (pnlChart) { pnlChart.destroy(); pnlChart = null; }
@@ -1458,7 +1541,7 @@ function renderPnlChartMarketRef(history) {
                 tooltip: {
                     ...tooltipOptions(),
                     callbacks: {
-                        label: (item) => `S&P 500 (30d): ${item.raw >= 0 ? "+" : ""}${item.raw.toFixed(2)}%`,
+                        label: (item) => `S&P 500 (${rangeLabel}): ${item.raw >= 0 ? "+" : ""}${item.raw.toFixed(2)}%`,
                     }
                 }
             },
@@ -1476,11 +1559,16 @@ function renderPnlChartMarketRef(history) {
             }
         }
     });
+    pnlChart.$chartMode = "marketRef";
 }
 
 function renderPnlChart(history) {
     const canvas = document.getElementById("pnl-chart");
     if (!canvas) return;
+    if (pnlChart?.$chartMode === "marketRef") {
+        pnlChart.destroy();
+        pnlChart = null;
+    }
 
     const labels = history.map(h => h.date);
     const values = history.map(h => toNumber(h.total_return));
@@ -1499,6 +1587,9 @@ function renderPnlChart(history) {
         pnlChart.data.datasets[0].data = values;
         pnlChart.data.datasets[0].borderColor = line;
         pnlChart.data.datasets[0].backgroundColor = fill;
+        pnlChart.data.datasets[0].borderDash = [];
+        pnlChart.data.datasets[0].pointRadius = values.length < 2 ? 3 : 0;
+        pnlChart.data.datasets[0].pointHoverRadius = values.length < 2 ? 4 : 4;
         pnlChart.update();
         return;
     }
@@ -1514,7 +1605,7 @@ function renderPnlChart(history) {
                 borderWidth: 2,
                 fill: true,
                 tension: 0.35,
-                pointRadius: 0,
+                pointRadius: values.length < 2 ? 3 : 0,
                 pointHoverRadius: 4,
                 pointHoverBackgroundColor: line,
             }]
@@ -1546,6 +1637,7 @@ function renderPnlChart(history) {
             }
         }
     });
+    pnlChart.$chartMode = "portfolio";
 }
 
 function renderRealizedTable(trades) {
