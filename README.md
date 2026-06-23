@@ -249,11 +249,12 @@ pip install --upgrade certifi
 
 ## 🪄 What's New In v1.3
 
-- Added **Portfolio Butler**, a living bottom-right dashboard companion with a subtle top-bar toggle.
-- Holding rows now trigger tiered, witty reactions based on daily move size: low, medium, and large gains or losses.
-- Holding Intel now shows a polished bottom-right texting animation while Claude works, while the table overlay keeps its clean scan/loading treatment.
-- Improved pet performance by keeping reactions local, deterministic, and animation-light with transform/opacity-based motion.
-- Refined dashboard copy and visual details around AI loading, cache-busted static assets, and interaction states.
+- Added **Portfolio Butler**, a bottom-right dashboard companion with a polished top-bar toggle and market-aware reactions.
+- Holding rows now trigger tiered reactions for low, medium, and large daily gains or losses, keeping the dashboard more alive without sending extra AI requests.
+- Holding Intel now shows a bottom-right Claude texting animation while analysis runs, paired with the existing table scan/loading treatment.
+- Refined AI loading states, cache-busted static assets, dashboard copy, and interaction details across the main UI.
+- Tightened clean-fork defaults, local setup guidance, and CI coverage for tests, pylint, CodeQL, dependency audit, and repository hygiene.
+- Updated API metadata for the v1.3 release.
 
 ---
 
