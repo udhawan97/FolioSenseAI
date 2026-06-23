@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite"/>
   <img src="https://img.shields.io/badge/Bootstrap-5-7952B3?style=flat-square&logo=bootstrap&logoColor=white" alt="Bootstrap 5"/>
   <img src="https://img.shields.io/badge/Chart.js-FF6384?style=flat-square&logo=chartdotjs&logoColor=white" alt="Chart.js"/>
-  <img src="https://img.shields.io/badge/release-v1.1-brightgreen?style=flat-square" alt="Release v1.1"/>
+  <img src="https://img.shields.io/badge/release-v1.2-brightgreen?style=flat-square" alt="Release v1.2"/>
 </p>
 
 <p align="center">
@@ -53,7 +53,7 @@
 - Market open/closed indicator with auto-refresh countdown — so you can watch it drop in real time
 
 ### 🧠 Portfolio Intelligence *(the whole point)*
-- **Movement explanations** — macro, sector, news, and company context for each holding
+- **Movement explanations** — macro, sector, benchmark, volume, earnings, and company context for each holding
 - **Portfolio-level AI analysis** — diversification themes, concentration risks, notable movers
 - **Holding coverage** — ETF sectors, regions, themes, and benchmark context
 - **Analyst recommendations** and ETF quality labels *(take with an appropriate grain of salt)*
@@ -88,23 +88,23 @@ You'll need **Python 3.11+** from [python.org](https://www.python.org/downloads/
 
 The Anthropic API key is optional. Without it, FolioSenseAI still runs with live market data and portfolio tracking; AI explanations stay disabled until you add a key from [console.anthropic.com](https://console.anthropic.com/).
 
-These commands install the GitHub release [v1.1](https://github.com/udhawan97/FolioSenseAI/releases/tag/release-v1.1).
+These commands install the GitHub release [v1.2](https://github.com/udhawan97/FolioSenseAI/releases/tag/release-v1.2).
 
 **Mac / Linux**
 
 ```bash
-curl -L -o FolioSenseAI-v1.1.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v1.1.zip
-unzip FolioSenseAI-v1.1.zip
-cd FolioSenseAI-release-v1.1
+curl -L -o FolioSenseAI-v1.2.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v1.2.zip
+unzip FolioSenseAI-v1.2.zip
+cd FolioSenseAI-release-v1.2
 ./scripts/setup.sh
 ```
 
 **Windows PowerShell**
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v1.1.zip" -OutFile "FolioSenseAI-v1.1.zip"
-Expand-Archive -Path "FolioSenseAI-v1.1.zip" -DestinationPath .
-cd FolioSenseAI-release-v1.1
+Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v1.2.zip" -OutFile "FolioSenseAI-v1.2.zip"
+Expand-Archive -Path "FolioSenseAI-v1.2.zip" -DestinationPath .
+cd FolioSenseAI-release-v1.2
 .\scripts\setup.ps1
 ```
 
@@ -179,6 +179,14 @@ pip install --upgrade certifi
 | `http://localhost:8000` | The dashboard |
 | `http://localhost:8000/docs` | Swagger API docs (surprisingly pretty) |
 | `http://localhost:8000/health` | Health check endpoint |
+
+---
+
+## 🪄 What's New In v1.2
+
+- Cleaner move explanations for individual stocks: the dashboard no longer shows generic "news activity" unless article evidence is actually surfaced.
+- Stronger holding-specific attribution using market, sector, benchmark, volume, and earnings context.
+- Regression coverage for stock move explanations so unsupported catalyst claims stay out of the UI.
 
 ---
 
