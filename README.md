@@ -19,6 +19,12 @@
   <img src="https://img.shields.io/badge/version-0.4.1-brightgreen?style=flat-square" alt="Version"/>
 </p>
 
+<p align="center">
+  <a href="https://github.com/udhawan97/FolioSenseAI/actions/workflows/ci.yml"><img src="https://github.com/udhawan97/FolioSenseAI/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+  <a href="https://github.com/udhawan97/FolioSenseAI/actions/workflows/pylint.yml"><img src="https://github.com/udhawan97/FolioSenseAI/actions/workflows/pylint.yml/badge.svg" alt="Pylint"/></a>
+  <a href="https://github.com/udhawan97/FolioSenseAI/actions/workflows/codeql.yml"><img src="https://github.com/udhawan97/FolioSenseAI/actions/workflows/codeql.yml/badge.svg" alt="CodeQL"/></a>
+</p>
+
 ---
 
 > **Because "I don't know why my portfolio is down" is only acceptable once.**
@@ -308,6 +314,24 @@ python -m pytest tests/ -v
 ```
 
 External services are mocked. *(Real integration tests would cost money. Claude is cheap but not free.)*
+
+---
+
+## 🛡️ GitHub Checks
+
+The repo now has a tiny robot compliance department. It does not wear a tie, but it will absolutely block nonsense.
+
+| Check | What it does | Vibe |
+|-------|--------------|------|
+| **CI** | Installs dependencies, compiles Python, imports the FastAPI app, and runs the test suite on Python 3.11 and 3.12 | Makes sure the app still has a pulse |
+| **Pylint** | Runs static analysis on pull requests and pushes to `main` | Complains professionally |
+| **Dependency Audit** | Uses `pip-audit` against `requirements.txt` | Checks whether a package has entered its villain era |
+| **Dependency Review** | Reviews dependency changes in pull requests and fails on moderate-or-worse known vulnerabilities | Stops suspicious packages at the door |
+| **CodeQL** | Runs GitHub code scanning for Python security and quality issues | Reads the code like it has trust issues |
+| **Security Hygiene** | Blocks local secrets, databases, backups, and OS confetti from being tracked | Protects you from committing your digital laundry |
+| **Dependabot** | Checks Python packages and GitHub Actions monthly | Gently nags the dependencies into the present |
+
+These checks run on GitHub Actions, so pull requests get the useful red/green lights before anything lands on `main`. If a check fails, read the log before blaming the market. The market is innocent this time. Probably.
 
 ---
 
