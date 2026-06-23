@@ -1493,6 +1493,39 @@ table tbody tr:hover {
     animation: apple-icon-breathe 2.2s ease-in-out infinite;
 }
 
+@keyframes aiTextingLift {
+    0%, 100% { opacity: 0.94; transform: translate3d(0, 0, 0) rotate(-2deg); }
+    36%      { opacity: 1; transform: translate3d(1px, -3px, 0) rotate(1deg); }
+    72%      { opacity: 0.98; transform: translate3d(0, -1px, 0) rotate(-1deg); }
+}
+
+@keyframes aiTextMessageOut {
+    0%   { opacity: 0; transform: translate3d(9px, 8px, 0) scale(0.82); }
+    14%, 100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@keyframes aiTextMessageIn {
+    0%, 28% { opacity: 0; transform: translate3d(-7px, 5px, 0) scale(0.86); }
+    43%, 100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@keyframes aiTextTypingBubble {
+    0%, 52% { opacity: 0; transform: translate3d(-6px, 5px, 0) scale(0.86); }
+    66%, 92% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+    100% { opacity: 0; transform: translate3d(0, 2px, 0) scale(0.96); }
+}
+
+@keyframes aiTextTypingDot {
+    0%, 60%, 100% { opacity: 0.34; transform: translateY(0); }
+    30% { opacity: 1; transform: translateY(-2px); }
+}
+
+@keyframes aiTextSendPing {
+    0%, 12% { opacity: 0; transform: scale(0.45); }
+    18% { opacity: 0.72; }
+    42%, 100% { opacity: 0; transform: scale(2.8); }
+}
+
 @keyframes apple-icon-breathe {
     0%, 100% { opacity: 0.9;  transform: scale(1); }
     50%       { opacity: 1;   transform: scale(1.035); }
@@ -5347,6 +5380,499 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
     100% { opacity: 0; transform: translateX(75%); }
 }
 
+/* ── Top-bar pet launcher ───────────────────────────────────────────────── */
+.pet-nav-toggle {
+    position: relative;
+    width: 34px;
+    height: 34px;
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 34px;
+    border: 1px solid var(--hairline);
+    border-radius: 999px;
+    color: var(--text-secondary);
+    background: var(--control-bg);
+    box-shadow:
+        0 10px 22px -18px rgba(0, 0, 0, 0.64),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+        color 0.2s var(--ease),
+        background 0.2s var(--ease),
+        border-color 0.2s var(--ease),
+        transform 0.24s var(--spring);
+}
+
+.pet-nav-toggle::after {
+    content: "";
+    position: absolute;
+    right: 7px;
+    top: 7px;
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--accent-green);
+    opacity: 0;
+    transform: scale(0.72);
+    transition: opacity 0.18s var(--ease), transform 0.2s var(--spring);
+}
+
+.pet-nav-toggle[aria-pressed="true"] {
+    color: var(--brand-cyan);
+    background: var(--control-hover);
+    border-color: var(--hairline-hover);
+}
+
+.pet-nav-toggle[aria-pressed="true"]::after {
+    opacity: 0.86;
+    transform: scale(1);
+}
+
+.pet-nav-toggle:hover,
+.pet-nav-toggle:focus-visible {
+    color: var(--text-primary);
+    background: var(--control-hover);
+    border-color: var(--hairline-hover);
+    transform: translateY(-2px);
+}
+
+.pet-nav-toggle:active {
+    transform: translateY(0) scale(0.96);
+}
+
+.pet-nav-toggle:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 3px;
+}
+
+/* ── Living dashboard pet ───────────────────────────────────────────────── */
+body > .dashboard-pet {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    z-index: 1040;
+    display: grid;
+    grid-template-columns: minmax(0, 270px) 58px;
+    align-items: end;
+    gap: 10px;
+    max-width: calc(100vw - 28px);
+    transform: translateY(0) scale(1);
+    transform-origin: bottom right;
+    opacity: 1;
+    pointer-events: auto;
+    contain: layout style;
+    overflow: visible;
+    backface-visibility: hidden;
+    will-change: opacity, transform;
+    transition:
+        opacity 0.22s var(--ease),
+        transform 0.32s var(--spring);
+}
+
+.dashboard-pet.is-hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(18px) scale(0.88);
+}
+
+.dashboard-pet-bubble {
+    position: relative;
+    min-height: 82px;
+    padding: 0.78rem 0.92rem;
+    border: 1px solid var(--hairline);
+    border-radius: 16px 16px 5px 16px;
+    color: var(--text-primary);
+    background:
+        linear-gradient(145deg, rgba(111, 214, 240, 0.10), rgba(151, 172, 236, 0.07)),
+        var(--popover-surface);
+    box-shadow:
+        var(--shadow-float),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+    transform: translateY(0);
+    contain: paint;
+    backface-visibility: hidden;
+    will-change: transform;
+    animation: petBubbleFloat 5.6s ease-in-out infinite;
+}
+
+.dashboard-pet-bubble::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(110deg, transparent 0%, rgba(255, 255, 255, 0.10) 42%, transparent 70%);
+    opacity: 0;
+    transform: translateX(-80%);
+    pointer-events: none;
+    will-change: opacity, transform;
+}
+
+.dashboard-pet-bubble.is-talking::before {
+    animation: petBubbleSheen 0.76s var(--ease) both;
+}
+
+.dashboard-pet-bubble::after {
+    content: "";
+    position: absolute;
+    right: -7px;
+    bottom: 16px;
+    width: 14px;
+    height: 14px;
+    border-right: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--hairline);
+    background: var(--popover-surface);
+    transform: rotate(-45deg);
+}
+
+.dashboard-pet-kicker {
+    display: block;
+    margin-bottom: 0.32rem;
+    color: var(--brand-cyan);
+    font-size: 0.56rem;
+    font-weight: 760;
+    letter-spacing: 0;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+.dashboard-pet-quote {
+    display: block;
+    color: var(--text-primary);
+    font-size: 0.78rem;
+    font-weight: 620;
+    line-height: 1.35;
+}
+
+.dashboard-pet-orb {
+    border: 1px solid var(--hairline);
+    color: var(--text-primary);
+    background: var(--popover-surface);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.dashboard-pet-orb {
+    position: relative;
+    width: 58px;
+    height: 58px;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    overflow: visible;
+    box-shadow:
+        0 20px 34px -22px rgba(111, 214, 240, 0.65),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    isolation: isolate;
+    backface-visibility: hidden;
+    will-change: transform;
+    transition:
+        transform 0.24s var(--spring),
+        border-color 0.2s var(--ease);
+}
+
+.dashboard-pet-orb::before {
+    content: "";
+    position: absolute;
+    inset: -9px;
+    z-index: -1;
+    border-radius: inherit;
+    background:
+        radial-gradient(circle, rgba(111, 214, 240, 0.28), transparent 66%),
+        radial-gradient(circle at 70% 30%, rgba(151, 172, 236, 0.24), transparent 58%);
+    opacity: 0.58;
+    transform: scale(0.88);
+    pointer-events: none;
+    will-change: opacity, transform;
+    animation: petOrbGlow 3.8s ease-in-out infinite;
+}
+
+.dashboard-pet-texting {
+    position: absolute;
+    right: -3px;
+    top: -74px;
+    width: 66px;
+    height: 60px;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 30;
+    transform: translate3d(0, 8px, 0) scale(0.92) rotate(-2deg);
+    transform-origin: 50% 100%;
+    transition:
+        opacity 0.22s var(--ease),
+        transform 0.28s var(--spring);
+    will-change: opacity, transform;
+}
+
+.dashboard-pet.is-texting:not(.is-hidden) .dashboard-pet-texting {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1) rotate(-2deg);
+    animation: aiTextingLift 3.4s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+
+.dashboard-pet-phone {
+    position: absolute;
+    inset: 0;
+    display: block;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 18px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.07)),
+        rgba(18, 18, 24, 0.84);
+    box-shadow:
+        0 18px 34px -20px rgba(0, 0, 0, 0.68),
+        inset 0 1px 0 rgba(255, 255, 255, 0.16);
+    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    overflow: hidden;
+}
+
+.dashboard-pet-phone-notch {
+    position: absolute;
+    left: 50%;
+    top: 5px;
+    width: 18px;
+    height: 3px;
+    border-radius: 999px;
+    background: rgba(235, 235, 245, 0.22);
+    transform: translateX(-50%);
+}
+
+.dashboard-pet-message,
+.dashboard-pet-typing {
+    position: absolute;
+    display: block;
+    border-radius: 999px;
+}
+
+.dashboard-pet-message-out {
+    right: 8px;
+    top: 17px;
+    width: 33px;
+    height: 13px;
+    background: linear-gradient(135deg, #0a84ff, #5ac8fa);
+    opacity: 0;
+    will-change: opacity, transform;
+}
+
+.dashboard-pet-message-in {
+    left: 8px;
+    top: 33px;
+    width: 27px;
+    height: 12px;
+    background: rgba(235, 235, 245, 0.20);
+    opacity: 0;
+    will-change: opacity, transform;
+}
+
+.dashboard-pet-typing {
+    left: 8px;
+    bottom: 8px;
+    width: 31px;
+    height: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    background: rgba(235, 235, 245, 0.16);
+    opacity: 0;
+    will-change: opacity, transform;
+}
+
+.dashboard-pet-typing span {
+    width: 3.5px;
+    height: 3.5px;
+    border-radius: 50%;
+    background: rgba(235, 235, 245, 0.72);
+}
+
+.dashboard-pet.is-texting:not(.is-hidden) .dashboard-pet-message-out {
+    animation: aiTextMessageOut 3.4s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+
+.dashboard-pet.is-texting:not(.is-hidden) .dashboard-pet-message-in {
+    animation: aiTextMessageIn 3.4s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+
+.dashboard-pet.is-texting:not(.is-hidden) .dashboard-pet-typing {
+    animation: aiTextTypingBubble 3.4s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+
+.dashboard-pet.is-texting:not(.is-hidden) .dashboard-pet-typing span {
+    animation: aiTextTypingDot 1.05s ease-in-out infinite;
+}
+
+.dashboard-pet.is-texting:not(.is-hidden) .dashboard-pet-typing span:nth-child(2) { animation-delay: 0.12s; }
+.dashboard-pet.is-texting:not(.is-hidden) .dashboard-pet-typing span:nth-child(3) { animation-delay: 0.24s; }
+
+.dashboard-pet-send-ping {
+    position: absolute;
+    left: -4px;
+    top: 35px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1px solid rgba(10, 132, 255, 0.52);
+    opacity: 0;
+    transform: scale(0.55);
+    will-change: opacity, transform;
+}
+
+.dashboard-pet.is-texting:not(.is-hidden) .dashboard-pet-send-ping {
+    animation: aiTextSendPing 3.4s ease-out infinite;
+}
+
+.dashboard-pet.is-texting:not(.is-hidden) .dashboard-pet-send-ping-two {
+    animation-delay: 0.22s;
+}
+
+[data-bs-theme="light"] .dashboard-pet-phone {
+    border-color: rgba(0, 0, 0, 0.09);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.90), rgba(255, 255, 255, 0.72)),
+        rgba(255, 255, 255, 0.86);
+    box-shadow:
+        0 16px 30px -22px rgba(0, 0, 0, 0.32),
+        inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+[data-bs-theme="light"] .dashboard-pet-phone-notch {
+    background: rgba(60, 60, 67, 0.18);
+}
+
+[data-bs-theme="light"] .dashboard-pet-message-in,
+[data-bs-theme="light"] .dashboard-pet-typing {
+    background: rgba(60, 60, 67, 0.12);
+}
+
+[data-bs-theme="light"] .dashboard-pet-typing span {
+    background: rgba(60, 60, 67, 0.58);
+}
+
+.dashboard-pet-orb:hover,
+.dashboard-pet-orb:focus-visible {
+    border-color: var(--hairline-hover);
+    box-shadow:
+        0 20px 38px -18px rgba(111, 214, 240, 0.72),
+        inset 0 1px 0 rgba(255, 255, 255, 0.10);
+}
+
+.dashboard-pet-orb:hover,
+.dashboard-pet-orb:focus-visible {
+    transform: translateY(-3px) scale(1.03);
+}
+
+.dashboard-pet-orb:active {
+    transform: translateY(0) scale(0.95);
+}
+
+.dashboard-pet-orb:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 3px;
+}
+
+.dashboard-pet-icon-shell {
+    position: relative;
+    z-index: 1;
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.055);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.dashboard-pet-icon-shell img {
+    width: 31px;
+    height: 31px;
+    display: block;
+    animation: petIconNod 4.6s ease-in-out infinite;
+}
+
+.dashboard-pet-status {
+    position: absolute;
+    z-index: 2;
+    right: 7px;
+    top: 8px;
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: var(--accent-green);
+    box-shadow: 0 0 0 4px rgba(48, 209, 88, 0.13);
+    animation: petStatusPulse 2.2s ease-in-out infinite;
+}
+
+[data-bs-theme="light"] .dashboard-pet-bubble,
+[data-bs-theme="light"] .dashboard-pet-bubble::after,
+[data-bs-theme="light"] .dashboard-pet-orb {
+    background: rgba(255, 255, 255, 0.96);
+}
+
+@keyframes petBubbleFloat {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-4px); }
+}
+
+@keyframes petBubbleSheen {
+    0% { opacity: 0; transform: translateX(-80%); }
+    38% { opacity: 1; }
+    100% { opacity: 0; transform: translateX(80%); }
+}
+
+@keyframes petOrbGlow {
+    0%, 100% { opacity: 0.48; transform: scale(0.88); }
+    50%      { opacity: 0.78; transform: scale(1); }
+}
+
+@keyframes petIconNod {
+    0%, 100% { transform: rotate(0deg) translateY(0); }
+    35%      { transform: rotate(-4deg) translateY(-1px); }
+    48%      { transform: rotate(4deg) translateY(0); }
+    62%      { transform: rotate(0deg) translateY(-1px); }
+}
+
+@keyframes petStatusPulse {
+    0%, 100% { opacity: 0.75; transform: scale(0.86); }
+    50%      { opacity: 1; transform: scale(1.08); }
+}
+
+@media (max-width: 575.98px) {
+    body > .dashboard-pet {
+        right: 12px;
+        bottom: 12px;
+        grid-template-columns: minmax(0, calc(100vw - 96px)) 52px;
+        gap: 8px;
+    }
+
+    .dashboard-pet-bubble {
+        min-height: 72px;
+        padding: 0.66rem 0.76rem;
+        border-radius: 14px 14px 5px 14px;
+    }
+
+    .dashboard-pet-quote {
+        font-size: 0.72rem;
+        line-height: 1.32;
+    }
+
+    .dashboard-pet-orb {
+        width: 52px;
+        height: 52px;
+    }
+
+    .dashboard-pet-icon-shell {
+        width: 38px;
+        height: 38px;
+    }
+
+    .dashboard-pet-icon-shell img {
+        width: 28px;
+        height: 28px;
+    }
+
+}
+
 /* ── Keyboard shortcut overlay ──────────────────────────────────────────── */
 #kbd-overlay {
     position: fixed;
@@ -6686,6 +7212,11 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
     .brand-lockup.is-intro-playing .brand-character::after,
     .brand-lockup.is-intro-playing .brand-icon,
     .brand-intro-callout,
+    .dashboard-pet-bubble,
+    .dashboard-pet-bubble.is-talking::before,
+    .dashboard-pet-orb,
+    .dashboard-pet-icon-shell img,
+    .dashboard-pet-status,
     .ai-agent-status.is-ready,
     .ai-agent-status.is-ready::before,
     .ai-agent-status.is-ready::after,
@@ -6759,6 +7290,7 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
     .alloc-popover,
     .brand-lockup,
     .brand-intro-callout,
+    .dashboard-pet,
     #allocation-chart,
     .btn-holding-intel,
     .btn-refresh-data {

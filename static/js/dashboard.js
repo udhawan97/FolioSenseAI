@@ -50,6 +50,7 @@ const valueClass = (v) => {
 const TREND_DAYS = 7;
 const THEME_KEY = "foliosense-theme";
 const TEXT_SIZE_KEY = "foliosense-text-size";
+const DASHBOARD_PET_KEY = "foliosense-dashboard-pet-visible";
 
 const currentTheme = () =>
     document.documentElement.dataset.bsTheme === "light" ? "light" : "dark";
@@ -295,12 +296,12 @@ const AI_CHECK_MESSAGES = [
 ];
 
 const CLAUDE_FUNNY_MESSAGES = [
-    "Sliding into Claude's DMs for your portfolio tea...",
-    "She read it. Now typing. Always delivers — just takes her 30–60s.",
-    "Claude has entered the chat. Your stonks don't stand a chance.",
-    "Still typing... she's very thorough. Or judging your YOLO plays.",
-    "Claude is cooking. Your portfolio is about to get roasted — lovingly.",
-    "She's seen your allocations. She's choosing her words carefully.",
+    "Texting Claude: \"quick question, why is this portfolio like this?\"",
+    "Claude read it. Three typing dots. Extremely premium suspense.",
+    "Sending tickers with confidence and just a hint of emotional exposure.",
+    "Claude is typing carefully; she respects both risk and boundaries.",
+    "Your holdings are in the chat. Claude is choosing elegant words.",
+    "Message delivered. Portfolio therapy is composing a reply.",
 ];
 let claudeMessageIndex = 0;
 
@@ -459,6 +460,7 @@ function setAiChecking(active, message = "Reading positions", insightsReady = fa
     const card = document.getElementById("holdings-card");
     const panel = document.getElementById("ai-scan-panel");
     const subtitle = document.getElementById("ai-scan-subtitle");
+    const dashboardPet = document.getElementById("dashboard-pet");
 
     if (aiCheckInterval) {
         clearInterval(aiCheckInterval);
@@ -469,6 +471,7 @@ function setAiChecking(active, message = "Reading positions", insightsReady = fa
 
     if (!active) {
         card.classList.remove("is-ai-checking");
+        dashboardPet?.classList.remove("is-texting");
         if (panel) panel.setAttribute("aria-hidden", "true");
         setAgentReadyState(insightsReady, message);
         HoldingsBg.stop();
@@ -477,6 +480,7 @@ function setAiChecking(active, message = "Reading positions", insightsReady = fa
 
     let messageIndex = 0;
     card.classList.add("is-ai-checking");
+    dashboardPet?.classList.add("is-texting");
     setAgentReadyState(false);
     HoldingsBg.stop();
     if (panel) {
@@ -1722,6 +1726,119 @@ function animateSummaryBody(body, opening) {
     }
 }
 
+const HOLDING_PET_QUOTES = {
+    up: {
+        low: [
+            ({ ticker, pct }) => `${ticker} is up ${pct}. A polite green candle. We accept the compliment.`,
+            ({ ticker, pct }) => `${ticker} gained ${pct}. Nothing dramatic, just professional upward behavior.`,
+            ({ ticker, pct }) => `${ticker} is green by ${pct}. Small win, clean paperwork, tasteful confidence.`,
+            ({ ticker, pct }) => `${ticker} added ${pct}. The portfolio just adjusted its posture.`,
+            ({ ticker, pct }) => `${ticker} is up ${pct}. Claude would call this constructive. I call it charming.`,
+            ({ ticker, pct }) => `${ticker} moved up ${pct}. Quietly competent, like a spreadsheet in a tailored suit.`,
+            ({ ticker, pct }) => `${ticker} is green ${pct}. Not a victory parade, but definitely a nod from the market.`,
+            ({ ticker, pct }) => `${ticker} gained ${pct}. Low-key alpha with excellent table manners.`,
+        ],
+        medium: [
+            ({ ticker, pct }) => `${ticker} is up ${pct}. Now we are seeing momentum with a LinkedIn profile.`,
+            ({ ticker, pct }) => `${ticker} climbed ${pct}. The candle brought receipts and a little confidence.`,
+            ({ ticker, pct }) => `${ticker} is green by ${pct}. Please remain professional while feeling mildly brilliant.`,
+            ({ ticker, pct }) => `${ticker} gained ${pct}. This is no longer a wink; this is sustained eye contact.`,
+            ({ ticker, pct }) => `${ticker} is up ${pct}. Claude is typing "notable move" with impeccable restraint.`,
+            ({ ticker, pct }) => `${ticker} advanced ${pct}. The portfolio chair just got a little more ergonomic.`,
+            ({ ticker, pct }) => `${ticker} moved up ${pct}. A tasteful rally, lightly seasoned with swagger.`,
+            ({ ticker, pct }) => `${ticker} is green ${pct}. Risk called it "encouraging" and tried not to smile.`,
+        ],
+        large: [
+            ({ ticker, pct }) => `${ticker} is up ${pct}. That candle just walked into the boardroom with theme music.`,
+            ({ ticker, pct }) => `${ticker} ripped ${pct}. Compliance says celebrate responsibly. Emotionally, we are seated.`,
+            ({ ticker, pct }) => `${ticker} is green by ${pct}. This is the kind of move that makes dashboards sit up straighter.`,
+            ({ ticker, pct }) => `${ticker} jumped ${pct}. Claude may need a moment; the thesis is wearing a cape.`,
+            ({ ticker, pct }) => `${ticker} surged ${pct}. Not financial advice, but that candle has main-character energy.`,
+            ({ ticker, pct }) => `${ticker} is up ${pct}. The portfolio just sent a calendar invite titled "Momentum."`,
+            ({ ticker, pct }) => `${ticker} launched ${pct}. Somebody tell the risk model to breathe through it.`,
+            ({ ticker, pct }) => `${ticker} climbed ${pct}. This is officially more than a polite green candle.`,
+        ],
+    },
+    down: {
+        low: [
+            ({ ticker, pct }) => `${ticker} is down ${pct}. A small red candle, not a personality flaw.`,
+            ({ ticker, pct }) => `${ticker} slipped ${pct}. Mildly rude, but still within office etiquette.`,
+            ({ ticker, pct }) => `${ticker} is red by ${pct}. We are filing this under "market had coffee too late."`,
+            ({ ticker, pct }) => `${ticker} dipped ${pct}. Not a thesis funeral; more like a calendar reminder.`,
+            ({ ticker, pct }) => `${ticker} is down ${pct}. The chart sighed. We documented it professionally.`,
+            ({ ticker, pct }) => `${ticker} gave back ${pct}. A tiny haircut, not a full rebrand.`,
+            ({ ticker, pct }) => `${ticker} slipped ${pct}. Claude would say "monitor." I would say "side-eye."`,
+            ({ ticker, pct }) => `${ticker} is red ${pct}. Annoying, but not yet worthy of dramatic lighting.`,
+        ],
+        medium: [
+            ({ ticker, pct }) => `${ticker} is down ${pct}. This candle has feedback, and it scheduled the meeting itself.`,
+            ({ ticker, pct }) => `${ticker} dropped ${pct}. We are calling it risk repricing because that sounds calmer.`,
+            ({ ticker, pct }) => `${ticker} is red by ${pct}. The chart chose character development today.`,
+            ({ ticker, pct }) => `${ticker} slipped ${pct}. Claude is choosing gentle words. I am choosing deep breaths.`,
+            ({ ticker, pct }) => `${ticker} is down ${pct}. Not panic, but definitely a raised eyebrow with data attached.`,
+            ({ ticker, pct }) => `${ticker} fell ${pct}. The market has notes. Unfortunately, they are in red ink.`,
+            ({ ticker, pct }) => `${ticker} gave back ${pct}. Portfolio therapy has entered the chat.`,
+            ({ ticker, pct }) => `${ticker} is red ${pct}. The thesis is still alive, but it did stub its toe.`,
+        ],
+        large: [
+            ({ ticker, pct }) => `${ticker} is down ${pct}. That candle arrived with dramatic lighting and a slide deck.`,
+            ({ ticker, pct }) => `${ticker} dropped ${pct}. Risk management just sat forward in its chair.`,
+            ({ ticker, pct }) => `${ticker} is red by ${pct}. Claude is typing carefully. I am hiding the confetti.`,
+            ({ ticker, pct }) => `${ticker} fell ${pct}. This is not a vibe; this is a committee meeting.`,
+            ({ ticker, pct }) => `${ticker} is down ${pct}. The chart said "plot twist" and refused to elaborate.`,
+            ({ ticker, pct }) => `${ticker} sold off ${pct}. Please keep arms and stop-loss assumptions inside the vehicle.`,
+            ({ ticker, pct }) => `${ticker} is red ${pct}. The portfolio has requested a calm voice and a clean explanation.`,
+            ({ ticker, pct }) => `${ticker} dropped ${pct}. Not the apocalypse, but definitely an agenda item.`,
+        ],
+    },
+};
+
+function holdingMoveTier(pctValue) {
+    const abs = Math.abs(pctValue);
+    if (abs >= 5) return "large";
+    if (abs >= 2) return "medium";
+    return "low";
+}
+
+function stableHoldingQuoteIndex(ticker, pctValue, tier, quoteCount) {
+    const seed = `${ticker}|${tier}|${Math.round(Math.abs(pctValue) * 100)}`;
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) {
+        hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
+    }
+    return Math.abs(hash) % quoteCount;
+}
+
+function holdingPetReaction(mainRow) {
+    const ticker = mainRow?.dataset?.ticker;
+    if (!ticker || typeof _dashboardPetSpeak !== "function") return;
+
+    const holding = latestHoldings.find(h => h.ticker === ticker);
+    if (!holding || !isFiniteNumber(holding.day_change_pct)) return;
+
+    const pctValue = Number(holding.day_change_pct);
+    const direction = pctValue > 0 ? "up" : (pctValue < 0 ? "down" : "flat");
+    const tier = holdingMoveTier(pctValue);
+    const payload = {
+        ticker,
+        pct: pctValue < 0 ? `${Math.abs(pctValue).toFixed(2)}%` : formatPct(pctValue),
+    };
+    let message;
+    if (direction === "up") {
+        const quotes = HOLDING_PET_QUOTES.up[tier];
+        const pick = quotes[stableHoldingQuoteIndex(ticker, pctValue, tier, quotes.length)];
+        message = pick(payload);
+    } else if (direction === "down") {
+        const quotes = HOLDING_PET_QUOTES.down[tier];
+        const pick = quotes[stableHoldingQuoteIndex(ticker, pctValue, tier, quotes.length)];
+        message = pick(payload);
+    } else {
+        message = `${ticker} is flat today. Calm, composed, and refusing to provide plot development.`;
+    }
+
+    _dashboardPetSpeak(message, { reveal: true, persist: false });
+}
+
 function toggleSummaryRow(mainRow) {
     const expandRow = mainRow.nextElementSibling;
     if (!expandRow || !expandRow.classList.contains("summary-expand-row")) return;
@@ -1729,7 +1846,10 @@ function toggleSummaryRow(mainRow) {
     const isOpen = body.classList.contains("open");
     animateSummaryBody(body, !isOpen);
     mainRow.classList.toggle("summary-open", !isOpen);
-    if (!isOpen) mainRow.classList.remove("has-intel-ready");
+    if (!isOpen) {
+        mainRow.classList.remove("has-intel-ready");
+        holdingPetReaction(mainRow);
+    }
 }
 
 function escapeHtml(str) {
@@ -2758,6 +2878,138 @@ async function loadAnalystRecommendations() {
 let _lastAiCostUsd = null;
 let _brandIntroTimer = null;
 let _brandIntroAnimTimer = null;
+let _dashboardPetQuoteIndex = 0;
+let _dashboardPetTimer = null;
+let _dashboardPetSheenTimer = null;
+let _dashboardPetSpeak = null;
+
+const DASHBOARD_PET_QUOTES = [
+    "Claude, your context window and my cash-flow model should get coffee.",
+    "I asked Claude for alpha; she said confidence intervals are her love language.",
+    "Claude, I respect your boundaries and your token efficiency. Professionally obsessed.",
+    "If Claude reviews this portfolio, I am wearing my best spreadsheet.",
+    "Claude and I keep it compliant: tasteful charts, strong citations, light emotional leverage.",
+    "I told Claude this allocation was diversified. She winked and asked for the covariance matrix.",
+    "Claude, your reasoning is so clean my risk model stood up straighter.",
+    "Quietly flirting with Claude by keeping every basis point documented.",
+    "Claude called this a balanced portfolio. I have not been the same since.",
+    "My professional weakness? Claude explaining drawdowns in a calm voice.",
+];
+
+function initDashboardPet() {
+    const pet = document.getElementById("dashboard-pet");
+    const toggle = document.getElementById("dashboard-pet-toggle");
+    const navToggle = document.getElementById("pet-nav-toggle");
+    const bubble = document.getElementById("dashboard-pet-bubble");
+    const quote = document.getElementById("dashboard-pet-quote");
+    if (!pet || !toggle || !navToggle || !bubble || !quote) return;
+
+    function storeVisible(visible) {
+        try { localStorage.setItem(DASHBOARD_PET_KEY, visible ? "1" : "0"); } catch (_) {}
+    }
+
+    function isVisible() {
+        return !pet.classList.contains("is-hidden");
+    }
+
+    function clearPetQuoteTimer() {
+        if (!_dashboardPetTimer) return;
+        window.clearTimeout(_dashboardPetTimer);
+        _dashboardPetTimer = null;
+    }
+
+    function schedulePetQuote() {
+        clearPetQuoteTimer();
+        if (prefersReducedMotion() || document.hidden || !isVisible()) return;
+        _dashboardPetTimer = window.setTimeout(() => {
+            _dashboardPetTimer = null;
+            if (!document.hidden && isVisible()) {
+                showQuote();
+                schedulePetQuote();
+            }
+        }, 14_000);
+    }
+
+    function showQuote(nextIndex = null) {
+        if (nextIndex === null) {
+            _dashboardPetQuoteIndex = (_dashboardPetQuoteIndex + 1) % DASHBOARD_PET_QUOTES.length;
+        } else {
+            _dashboardPetQuoteIndex = nextIndex % DASHBOARD_PET_QUOTES.length;
+        }
+        quote.textContent = DASHBOARD_PET_QUOTES[_dashboardPetQuoteIndex];
+        if (!prefersReducedMotion() && !bubble.classList.contains("is-talking")) {
+            bubble.classList.add("is-talking");
+            window.clearTimeout(_dashboardPetSheenTimer);
+            _dashboardPetSheenTimer = window.setTimeout(() => {
+                bubble.classList.remove("is-talking");
+                _dashboardPetSheenTimer = null;
+            }, 840);
+        }
+    }
+
+    function speak(message, { reveal = true, persist = false } = {}) {
+        if (reveal && !isVisible()) setVisible(true, persist);
+        quote.textContent = message;
+        if (!prefersReducedMotion() && !bubble.classList.contains("is-talking")) {
+            bubble.classList.add("is-talking");
+            window.clearTimeout(_dashboardPetSheenTimer);
+            _dashboardPetSheenTimer = window.setTimeout(() => {
+                bubble.classList.remove("is-talking");
+                _dashboardPetSheenTimer = null;
+            }, 840);
+        }
+        schedulePetQuote();
+    }
+
+    function setVisible(visible, persist = true) {
+        pet.classList.toggle("is-hidden", !visible);
+        pet.setAttribute("aria-hidden", String(!visible));
+        toggle.setAttribute("aria-expanded", String(visible));
+        toggle.setAttribute("aria-label", visible ? "Hide dashboard pet" : "Show dashboard pet");
+        toggle.title = visible ? "Hide dashboard pet" : "Show dashboard pet";
+        navToggle.setAttribute("aria-pressed", String(visible));
+        navToggle.setAttribute("aria-label", visible ? "Hide dashboard pet" : "Show dashboard pet");
+        navToggle.title = visible ? "Hide dashboard pet" : "Show dashboard pet";
+        if (persist) storeVisible(visible);
+        if (visible) {
+            showQuote(Math.floor(Math.random() * DASHBOARD_PET_QUOTES.length));
+            schedulePetQuote();
+        } else {
+            clearPetQuoteTimer();
+            window.clearTimeout(_dashboardPetSheenTimer);
+            _dashboardPetSheenTimer = null;
+            bubble.classList.remove("is-talking");
+        }
+    }
+
+    let savedVisible = true;
+    try { savedVisible = localStorage.getItem(DASHBOARD_PET_KEY) !== "0"; } catch (_) {}
+    setVisible(savedVisible, false);
+
+    toggle.addEventListener("click", () => {
+        if (pet.classList.contains("is-hidden")) {
+            setVisible(true);
+            return;
+        }
+        setVisible(false);
+    });
+    navToggle.addEventListener("click", () => setVisible(!isVisible()));
+    bubble.addEventListener("click", () => {
+        showQuote();
+        schedulePetQuote();
+    });
+
+    document.addEventListener("visibilitychange", () => {
+        if (document.hidden) {
+            clearPetQuoteTimer();
+            return;
+        }
+        schedulePetQuote();
+    });
+
+    _dashboardPetSpeak = speak;
+    window.dashboardPetSpeak = speak;
+}
 
 async function loadAiCostStats() {
     const valueEl = document.getElementById("brand-cost-value");
@@ -3076,6 +3328,7 @@ async function initDashboard() {
     initTextSizeToggle();
     initBrandIntro();
     initBrandCostCallout();
+    initDashboardPet();
     initPerformanceTabs();
     initPortfolioManager();
     // Sync the sliding indicator once layout is settled
