@@ -1998,27 +1998,29 @@ table tbody tr:hover {
 }
 .form-control::placeholder { color: var(--text-tertiary) !important; }
 
-/* ── Portfolio manager — fixed top overlay ───────────────────────────────── */
+/* ── Portfolio manager — modal overlay ───────────────────────────────────── */
 body > .portfolio-manager-popover {
     position: fixed;
-    top: calc(76px + env(safe-area-inset-top));
-    right: clamp(0.75rem, 2.5vw, 2rem);
-    width: min(1080px, calc(100vw - 1.5rem));
-    max-height: calc(100dvh - 92px - env(safe-area-inset-top));
+    inset: 0;
     z-index: 12000;
-    opacity: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: calc(72px + env(safe-area-inset-top)) 1rem 1.5rem;
+    background: rgba(0, 0, 0, 0);
+    backdrop-filter: blur(0px);
+    -webkit-backdrop-filter: blur(0px);
     pointer-events: none;
-    transform: translate3d(0, -10px, 0) scale(0.985);
-    transform-origin: top right;
     transition:
-        opacity 0.18s var(--ease),
-        transform 0.24s var(--spring);
+        background 0.22s var(--ease),
+        backdrop-filter 0.24s var(--ease);
 }
 
 body > .portfolio-manager-popover.is-visible {
-    opacity: 1;
+    background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
     pointer-events: auto;
-    transform: translate3d(0, 0, 0) scale(1);
 }
 
 .portfolio-manager-panel {
@@ -2027,11 +2029,22 @@ body > .portfolio-manager-popover.is-visible {
     -webkit-backdrop-filter: saturate(180%) blur(40px);
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
     border-radius: 20px !important;
-    box-shadow: 0 30px 80px -24px rgba(0, 0, 0, 0.62);
+    box-shadow: 0 32px 80px -20px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(255,255,255,0.04);
     display: flex;
     flex-direction: column;
-    max-height: inherit;
+    width: min(1080px, 100%);
+    max-height: calc(100dvh - 88px - env(safe-area-inset-top) - 1.5rem);
     overflow: hidden;
+    transform: translateY(-14px) scale(0.97);
+    opacity: 0;
+    transition:
+        transform 0.26s var(--spring),
+        opacity 0.20s var(--ease);
+}
+
+body > .portfolio-manager-popover.is-visible .portfolio-manager-panel {
+    transform: translateY(0) scale(1);
+    opacity: 1;
 }
 
 .portfolio-manager-header {
@@ -2094,11 +2107,11 @@ body > .portfolio-manager-popover.is-visible {
 
 @media (max-width: 575.98px) {
     body > .portfolio-manager-popover {
-        top: calc(64px + env(safe-area-inset-top));
-        right: 0.5rem;
-        left: 0.5rem;
-        width: auto;
-        max-height: calc(100dvh - 74px - env(safe-area-inset-top));
+        padding: calc(60px + env(safe-area-inset-top)) 0.5rem 0.5rem;
+    }
+
+    .portfolio-manager-panel {
+        max-height: calc(100dvh - 70px - env(safe-area-inset-top) - 0.5rem);
     }
 
     .portfolio-manager-header,

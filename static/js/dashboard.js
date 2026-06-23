@@ -3238,12 +3238,13 @@ function closePortfolioManager() {
 }
 
 function initPortfolioManager() {
-    document.addEventListener("click", (e) => {
-        const popover = document.getElementById("portfolioModal");
-        if (!popover?.classList.contains("is-visible")) return;
-        const clickedPanel = popover.contains(e.target);
-        const clickedTrigger = portfolioManagerTriggers().some(trigger => trigger.contains(e.target));
-        if (!clickedPanel && !clickedTrigger) closePortfolioManager();
+    const popover = document.getElementById("portfolioModal");
+    if (!popover) return;
+    // Close when clicking the backdrop (the popover element itself), not the inner panel
+    popover.addEventListener("click", (e) => {
+        if (!popover.classList.contains("is-visible")) return;
+        const panel = popover.querySelector(".portfolio-manager-panel");
+        if (!panel?.contains(e.target)) closePortfolioManager();
     });
 }
 
