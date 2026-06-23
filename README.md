@@ -154,6 +154,39 @@ ANTHROPIC_API_KEY=your_anthropic_api_key_here
 
 The API key costs a little money per AI query, roughly pennies. AI explanations are cached, so refreshing the dashboard does not keep spending.
 
+#### Getting Your Own Anthropic API Key
+
+This is the tiny toll booth that lets FolioSenseAI ask Claude for portfolio explanations. Your brokerage anxiety remains locally sourced.
+
+1. Go to the [Anthropic Console](https://console.anthropic.com/) and sign in or create an account.
+2. Open the API keys area. Anthropic may ask you to create a workspace or add billing first; this is normal capitalism, sadly.
+3. Create a new API key and give it a boring name like `FolioSenseAI Local`.
+4. Copy the key right away. Treat it like a password with better vocabulary.
+5. Open the `.env` file in the FolioSenseAI folder and paste it like this:
+
+```env
+ANTHROPIC_API_KEY=sk-ant-your-real-key-goes-here
+```
+
+6. Save `.env`, stop the app with `Ctrl+C`, then restart it:
+
+```bash
+./scripts/start.sh
+```
+
+Windows:
+
+```powershell
+.\scripts\start.ps1
+```
+
+Tips before Claude starts analyzing your portfolio with unsettling calm:
+
+- Do not paste your API key into GitHub, screenshots, Slack, email, or anywhere public. If it leaks, delete it in the Anthropic Console and create a new one.
+- Start with a small billing limit if Anthropic offers one. The app caches AI responses, but budgets are cheaper than surprises.
+- The Claude web subscription and the Anthropic API are separate. Having Claude Pro does not automatically make API usage free.
+- You can leave the key blank. The dashboard still tracks holdings and market data; it just loses the AI therapist chair.
+
 ### Quick Fixes
 
 | If you see this | Try this |
