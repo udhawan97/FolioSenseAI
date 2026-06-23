@@ -675,7 +675,7 @@ function allocationTooltipMetrics(ticker, value) {
     const holdingsCount = latestHoldings.length;
     if (!holding || !holdingsCount) return null;
 
-    const rank = sortedByAllocation(latestHoldings)
+    const rank = sortedByAllocation(latestHoldings.filter(h => !h.is_watchlist))
         .findIndex(h => h.ticker === ticker) + 1;
     const equalWeightValue = allocationTotal / holdingsCount;
     const equalWeightDrift = toNumber(value) - equalWeightValue;
@@ -828,7 +828,7 @@ function setAllocationFocus(chart, activeIndex = -1) {
 }
 
 function renderAllocation() {
-    const sorted = sortedByAllocation(latestHoldings);
+    const sorted = sortedByAllocation(latestHoldings.filter(h => !h.is_watchlist));
 
     const allocTable = document.getElementById("allocation-table");
     allocTable.innerHTML = "";
