@@ -430,12 +430,14 @@ def explain_move(  # pylint: disable=too-many-branches,too-many-statements
     near_earnings = False
     earnings_date_str: Optional[str] = None
 
-    # Fetch news for individual stocks and thematic/sector ETFs (not broad-market)
-    fetch_news = (not is_etf) or ticker in ("ITA", "QTUM", "SETM", "IBIT")
-    if fetch_news:
+    # Fetch news only where the UI can make it meaningful. Individual stocks
+    # still fetch earnings context, but do not surface generic news activity.
+    fetch_news = is_etf and ticker in ("ITA", "QTUM", "SETM", "IBIT")
+    if fetch_news or not is_etf:
         try:
             yf_stock = yf.Ticker(ticker)
-            news = _extract_news(yf_stock)
+            if fetch_news:
+                news = _extract_news(yf_stock)
             if not is_etf:
                 near_earnings, earnings_date_str = _earnings_near(yf_stock)
         except Exception as exc:
