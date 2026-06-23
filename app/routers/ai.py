@@ -26,7 +26,12 @@ from app.services.analyst_recommendation import (
     get_analyst_recommendation,
     rec_to_dict,
 )
-from app.services.stock_service import DEFAULT_HOLDINGS, get_all_quotes, get_stock_data
+from app.services.stock_service import (
+    DEFAULT_HOLDINGS,
+    QUOTE_FETCH_ERROR,
+    get_all_quotes,
+    get_stock_data,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/ai", tags=["ai"])
@@ -132,10 +137,17 @@ def _attach_contributions_batch(intel_dicts: dict[str, dict]) -> None:
                     t = futures[future]
                     try:
                         preloaded[t] = future.result()
-                    except Exception:
+                    except Exception as exc:
+                        logger.debug(
+                            "Contribution preload failed; exception_type=%s",
+                            type(exc).__name__,
+                        )
                         preloaded[t] = 0.0
-        except Exception:
-            pass  # populate what we have; remainder gets 0.0 inside compute_contribution_breakdown
+        except Exception as exc:
+            logger.debug(
+                "Contribution preload batch failed; exception_type=%s",
+                type(exc).__name__,
+            )
 
     for d in intel_dicts.values():
         top_holdings = d.get("top_holdings") or []
@@ -146,7 +158,11 @@ def _attach_contributions_batch(intel_dicts: dict[str, dict]) -> None:
             d["contribution_breakdown"] = compute_contribution_breakdown(
                 top_holdings, preloaded_changes=preloaded
             )
-        except Exception:
+        except Exception as exc:
+            logger.debug(
+                "Contribution breakdown failed; exception_type=%s",
+                type(exc).__name__,
+            )
             d["contribution_breakdown"] = None
 
 
@@ -289,7 +305,7 @@ async def get_stock_summary(
 
     stock_data = get_stock_data(ticker)
     if stock_data.get("error"):
-        raise HTTPException(status_code=404, detail=f"Cannot fetch data for {ticker}")
+        raise HTTPException(status_code=404, detail=QUOTE_FETCH_ERROR)
 
     summary_text = generate_stock_summary(stock_data)
 
@@ -439,7 +455,7 @@ async def get_move_explanation(ticker: str):
     ticker = ticker.upper()
     stock_data = get_stock_data(ticker)
     if stock_data.get("error"):
-        raise HTTPException(status_code=404, detail=f"Cannot fetch data for {ticker}")
+        raise HTTPException(status_code=404, detail=QUOTE_FETCH_ERROR)
 
     summary = explain_move(stock_data)
     return _summary_to_dict(summary)
@@ -469,8 +485,11 @@ async def get_all_move_explanations(db: Session = Depends(get_db)):
                 _benchmark_cache=benchmark_cache,
             )
             results[ticker] = _summary_to_dict(summary)
-        except Exception as e:
-            logger.error("Move explanation failed for %s: %s", ticker, e)
+        except Exception as exc:
+            logger.error(
+                "Move explanation failed; exception_type=%s",
+                type(exc).__name__,
+            )
             results[ticker] = {**_UNCLEAR_RESULT, "ticker": ticker}
 
     return {"explanations": results, "count": len(results)}
@@ -487,14 +506,18 @@ async def get_holding_intelligence_single(ticker: str):
     ticker = ticker.upper()
     stock_data = get_stock_data(ticker)
     if stock_data.get("error"):
-        raise HTTPException(status_code=404, detail=f"Cannot fetch data for {ticker}")
+        raise HTTPException(status_code=404, detail=QUOTE_FETCH_ERROR)
     intel = get_holding_intelligence(ticker, stock_data)
     intel_dict = _enrich_intelligence_dict(intelligence_to_dict(intel), stock_data)
     top_holdings = intel_dict.get("top_holdings") or []
     if top_holdings and intel_dict.get("coverage_type") != "equity":
         try:
             intel_dict["contribution_breakdown"] = compute_contribution_breakdown(top_holdings)
-        except Exception:
+        except Exception as exc:
+            logger.debug(
+                "Contribution breakdown failed; exception_type=%s",
+                type(exc).__name__,
+            )
             intel_dict["contribution_breakdown"] = None
     else:
         intel_dict["contribution_breakdown"] = None
@@ -541,15 +564,21 @@ async def get_all_intelligence(db: Session = Depends(get_db)):
                 intelligence_to_dict(intel),
                 stock_data if not stock_data.get("error") else None,
             )
-        except Exception as e:
-            logger.error("Intelligence fetch failed for %s: %s", ticker, e)
+        except Exception as exc:
+            logger.error(
+                "Intelligence fetch failed; exception_type=%s",
+                type(exc).__name__,
+            )
             intel_dicts[ticker] = {"ticker": ticker, **_FALLBACK_INTEL_BASE}
 
     # Phase 2: batch-fetch holding prices and attach contribution breakdowns
     try:
         _attach_contributions_batch(intel_dicts)
-    except Exception as e:
-        logger.warning("Contribution batch failed, skipping: %s", e)
+    except Exception as exc:
+        logger.warning(
+            "Contribution batch failed, skipping; exception_type=%s",
+            type(exc).__name__,
+        )
         for d in intel_dicts.values():
             d.setdefault("contribution_breakdown", None)
 
@@ -592,8 +621,11 @@ async def get_all_analyst_recommendations(db: Session = Depends(get_db)):
         try:
             rec = get_analyst_recommendation(ticker)
             results[ticker] = rec_to_dict(rec)
-        except Exception as e:
-            logger.error("Analyst rec failed for %s: %s", ticker, e)
+        except Exception as exc:
+            logger.error(
+                "Analyst rec failed; exception_type=%s",
+                type(exc).__name__,
+            )
             results[ticker] = {
                 "ticker": ticker,
                 "action": "unavailable",

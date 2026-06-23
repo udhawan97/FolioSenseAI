@@ -5,6 +5,7 @@ import yfinance as yf
 from fastapi import APIRouter, HTTPException, Query
 from app.services.stock_service import (
     DEFAULT_HOLDINGS,
+    QUOTE_FETCH_ERROR,
     get_stock_data,
     get_all_quotes,
     get_historical_prices,
@@ -46,7 +47,7 @@ async def get_price(ticker: str):
     quote = get_stock_data(ticker)
     # If the stock service couldn't fetch data, return a 404 with the reason
     if quote.get("error"):
-        raise HTTPException(status_code=404, detail=quote["error"])
+        raise HTTPException(status_code=404, detail=QUOTE_FETCH_ERROR)
     return quote
 
 
@@ -139,6 +140,9 @@ async def get_world_markets():
                 "day_change_pct": round(chg_pct, 2),
             })
         except Exception as exc:
-            logger.warning("World market fetch failed for %s: %s", market["ticker"], exc)
+            logger.warning(
+                "World market fetch failed; exception_type=%s",
+                type(exc).__name__,
+            )
             results.append({**market, "price": 0, "day_change": 0, "day_change_pct": 0})
     return {"markets": results}

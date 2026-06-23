@@ -125,8 +125,9 @@ def generate_stock_summary(stock_data: dict) -> str:
         text_block = next((b for b in message.content if b.type == "text"), None)
         raw = text_block.text.strip() if text_block else ""
         logger.info(
-            f"Generated summary for {ticker}: "
-            f"{message.usage.input_tokens}+{message.usage.output_tokens} tokens"
+            "Generated summary: %s+%s tokens",
+            message.usage.input_tokens,
+            message.usage.output_tokens,
         )
         return normalize_bullets(raw)
 
@@ -139,15 +140,18 @@ def generate_stock_summary(stock_data: dict) -> str:
         )
 
     except anthropic.RateLimitError:
-        logger.warning(f"Rate limit hit while generating summary for {ticker}")
+        logger.warning("Rate limit hit while generating summary")
         return (
             f"• {ticker} summary temporarily unavailable (rate limit).\n"
             "• Try again in a few moments.\n"
             "• Data not available."
         )
 
-    except Exception as e:
-        logger.error(f"AI summary failed for {ticker}: {e}")
+    except Exception as exc:
+        logger.error(
+            "AI summary failed; exception_type=%s",
+            type(exc).__name__,
+        )
         chg = stock_data.get("day_change_pct", 0)
         direction = "up" if chg >= 0 else "down"
         return (

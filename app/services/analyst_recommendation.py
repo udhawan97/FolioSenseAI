@@ -81,7 +81,7 @@ def _compute_fcf_yield(info: dict) -> Optional[float]:
         if fcf is not None and cap and float(cap) > 0:
             return round(float(fcf) / float(cap) * 100, 2)
     except (TypeError, ValueError, ZeroDivisionError):
-        pass
+        return None
     return None
 
 
@@ -233,7 +233,10 @@ def get_analyst_recommendation(ticker: str) -> AnalystRec:
     try:
         return _fetch_from_yfinance(ticker)
     except Exception as exc:
-        logger.warning("Analyst rec fetch failed for %s: %s", ticker, exc)
+        logger.warning(
+            "Analyst rec fetch failed; exception_type=%s",
+            type(exc).__name__,
+        )
         return _not_rated(ticker)
 
 

@@ -136,8 +136,11 @@ def _day_change_pct(ticker: str) -> float:
         prev = info.get("previousClose") or info.get("regularMarketPreviousClose") or 0
         if prev > 0 and current > 0:
             return round((current - prev) / prev * 100, 2)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug(
+            "Day change fetch failed; exception_type=%s",
+            type(exc).__name__,
+        )
     return 0.0
 
 
@@ -184,10 +187,17 @@ def compute_contribution_breakdown(
                     t = futures[future]
                     try:
                         changes[t] = future.result()
-                    except Exception:
+                    except Exception as exc:
+                        logger.debug(
+                            "Contribution change fetch failed; exception_type=%s",
+                            type(exc).__name__,
+                        )
                         changes[t] = 0.0
-        except Exception:
-            pass  # use what we have; missing tickers get 0.0 below
+        except Exception as exc:
+            logger.debug(
+                "Contribution batch fetch failed; exception_type=%s",
+                type(exc).__name__,
+            )
 
     results = []
     total_weight = 0.0
@@ -195,11 +205,11 @@ def compute_contribution_breakdown(
         t = h["ticker"]
         w = float(h.get("weight") or 0)
         if not 0 <= w <= 100:
-            logger.warning("Skipping %s: weight %s out of valid range [0, 100]", t, w)
+            logger.warning("Skipping holding with weight %.4f out of valid range [0, 100]", w)
             continue
         chg = changes.get(t, 0.0)
         if not -100 <= chg <= 100:
-            logger.warning("Skipping %s: day_change_pct %s out of valid range", t, chg)
+            logger.warning("Skipping holding with day_change_pct %.4f out of valid range", chg)
             continue
         contribution_pp = round(w / 100.0 * chg, 4)
         total_weight += w
@@ -272,10 +282,17 @@ def _extract_news(stock: yf.Ticker) -> list[NewsCatalyst]:
                     results.append(NewsCatalyst(
                         title=title, source=source, url=url, published_at=pub
                     ))
-            except Exception:
+            except Exception as exc:
+                logger.debug(
+                    "News item parse failed; exception_type=%s",
+                    type(exc).__name__,
+                )
                 continue
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug(
+            "News fetch failed; exception_type=%s",
+            type(exc).__name__,
+        )
     return results
 
 
@@ -305,10 +322,17 @@ def _earnings_near(stock: yf.Ticker) -> tuple[bool, Optional[str]]:
                     continue
                 if abs((d - now).days) <= 3:
                     return True, d.strftime("%b %d")
-            except Exception:
+            except Exception as exc:
+                logger.debug(
+                    "Earnings date parse failed; exception_type=%s",
+                    type(exc).__name__,
+                )
                 continue
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug(
+            "Earnings calendar fetch failed; exception_type=%s",
+            type(exc).__name__,
+        )
     return False, None
 
 
@@ -414,8 +438,11 @@ def explain_move(  # pylint: disable=too-many-branches,too-many-statements
             news = _extract_news(yf_stock)
             if not is_etf:
                 near_earnings, earnings_date_str = _earnings_near(yf_stock)
-        except Exception as e:
-            logger.debug("Extra data fetch failed for %s: %s", ticker, e)
+        except Exception as exc:
+            logger.debug(
+                "Extra data fetch failed; exception_type=%s",
+                type(exc).__name__,
+            )
 
     has_news = len(news) > 0
     drivers: list[MoveDriver] = []

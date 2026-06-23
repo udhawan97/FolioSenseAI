@@ -7,8 +7,11 @@ history and common moving-average/range fields for most funds.
 """
 from __future__ import annotations
 
+import logging
 import math
 from typing import Any, Iterable, Mapping
+
+logger = logging.getLogger(__name__)
 
 
 def _first_number(data: Mapping[str, Any], *keys: str) -> float | None:
@@ -48,7 +51,11 @@ def history_closes(history: Any) -> list[float]:
         if hasattr(close_series, "dropna"):
             close_series = close_series.dropna()
         values = close_series.tolist() if hasattr(close_series, "tolist") else list(close_series)
-    except Exception:
+    except Exception as exc:
+        logger.debug(
+            "ETF history close extraction failed; exception_type=%s",
+            type(exc).__name__,
+        )
         return []
     return _clean_numbers(values)
 
@@ -160,6 +167,10 @@ def fetch_etf_price_signal(ticker: str, info: Mapping[str, Any], stock: Any) -> 
     try:
         history = stock.history(period="1y", auto_adjust=True)
         closes = history_closes(history)
-    except Exception:
+    except Exception as exc:
+        logger.debug(
+            "ETF price history fetch failed; exception_type=%s",
+            type(exc).__name__,
+        )
         closes = []
     return calculate_etf_price_signal({"ticker": ticker, **dict(info)}, closes)

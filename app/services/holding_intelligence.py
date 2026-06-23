@@ -503,8 +503,11 @@ def _try_yfinance_enrichment(ticker: str) -> tuple[list, list, list]:
                 pct = round(float(h.get("holdingPercent") or 0) * 100, 1)
                 if sym:
                     top_holdings.append(TopHolding(ticker=sym, name=name, weight=pct))
-    except Exception as e:
-        logger.debug("yfinance enrichment failed for %s: %s", ticker, e)
+    except Exception as exc:
+        logger.debug(
+            "yfinance enrichment failed; exception_type=%s",
+            type(exc).__name__,
+        )
     return sectors, countries, top_holdings
 
 

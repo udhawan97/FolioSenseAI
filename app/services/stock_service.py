@@ -6,6 +6,7 @@ from app.config import settings
 from app.services.security_type import classify_security
 
 logger = logging.getLogger(__name__)
+QUOTE_FETCH_ERROR = "Quote data is temporarily unavailable."
 
 # Tickers fetched when no specific list is provided.
 # Configure with DEFAULT_HOLDINGS=VOO,QQQ,... in .env.
@@ -107,8 +108,11 @@ def get_stock_data(ticker: str) -> dict:
             "error": None,
         }
 
-    except Exception as e:
-        logger.error(f"Error fetching data for {ticker}: {e}")
+    except Exception as exc:
+        logger.error(
+            "Error fetching stock data; exception_type=%s",
+            type(exc).__name__,
+        )
         # Return a safe error dict so callers can check quote["error"] instead of crashing
         return {
             "ticker": ticker.upper(),
@@ -116,7 +120,7 @@ def get_stock_data(ticker: str) -> dict:
             "current_price": 0.0,
             "day_change": 0.0,
             "day_change_pct": 0.0,
-            "error": str(e),
+            "error": QUOTE_FETCH_ERROR,
         }
 
 
@@ -131,7 +135,7 @@ def get_all_quotes(tickers: Optional[list[str]] = None) -> list[dict]:
     for ticker in tickers:
         quote = get_stock_data(ticker)
         quotes.append(quote)
-        logger.info(f"Fetched {ticker}: ${quote.get('current_price', 'N/A')}")
+        logger.info("Fetched quote")
     return quotes
 
 
@@ -158,8 +162,11 @@ def get_historical_prices(ticker: str, period: str = "1mo") -> list[dict]:
                 }
             )
         return results
-    except Exception as e:
-        logger.error(f"Error fetching historical data for {ticker}: {e}")
+    except Exception as exc:
+        logger.error(
+            "Error fetching historical data; exception_type=%s",
+            type(exc).__name__,
+        )
         return []
 
 
