@@ -15,6 +15,44 @@ router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 # ── Shared helpers ─────────────────────────────────────────────────────
 
 
+def _ensure_default_portfolio(db):
+    """
+    Create portfolio 1 on first use so a fresh install can open the dashboard
+    without a manual seed command.
+    """
+    portfolio = db.query(Portfolio).filter(Portfolio.id == 1).first()
+    if portfolio:
+        return portfolio
+
+    portfolio = Portfolio(id=1, name="My Portfolio", description="Local portfolio")
+    db.add(portfolio)
+    db.flush()
+
+    for ticker in settings.DEFAULT_HOLDINGS:
+        db.add(Holding(
+            portfolio_id=portfolio.id,
+            ticker=ticker,
+            shares=0.0,
+        ))
+
+    db.commit()
+    db.refresh(portfolio)
+    return portfolio
+
+
+def _get_portfolio_or_404(portfolio_id, db):
+    """Return the requested portfolio, auto-creating only the default one."""
+    if portfolio_id == 1:
+        return _ensure_default_portfolio(db)
+
+    portfolio = db.query(Portfolio).filter(Portfolio.id == portfolio_id).first()
+    if not portfolio:
+        raise HTTPException(
+            status_code=404, detail=f"Portfolio {portfolio_id} not found"
+        )
+    return portfolio
+
+
 def _compute_portfolio(portfolio_id, db):
     """
     Value every active holding at live prices and return
@@ -227,6 +265,7 @@ async def create_portfolio(
 @router.get("/", response_model=list[dict])
 async def get_portfolios(db: Session = Depends(get_db)):
     """Return a list of all portfolios (id and name only)."""
+    _ensure_default_portfolio(db)
     portfolios = db.query(Portfolio).all()
     return [{"id": p.id, "name": p.name} for p in portfolios]
 
@@ -237,6 +276,7 @@ async def get_portfolios(db: Session = Depends(get_db)):
 @router.get("/holdings")
 async def get_holdings(portfolio_id: int = 1, db: Session = Depends(get_db)):
     """Return all active holdings for a portfolio (defaults to portfolio 1)."""
+    _get_portfolio_or_404(portfolio_id, db)
     holdings = (
         db.query(Holding)
         .filter(Holding.portfolio_id == portfolio_id, Holding.is_active.is_(True))
@@ -263,12 +303,7 @@ async def add_holding(
     data: HoldingCreate, portfolio_id: int = 1, db: Session = Depends(get_db)
 ):
     """Add a new stock holding to the portfolio."""
-    # Make sure the target portfolio actually exists
-    portfolio = db.query(Portfolio).filter(Portfolio.id == portfolio_id).first()
-    if not portfolio:
-        raise HTTPException(
-            status_code=404, detail=f"Portfolio {portfolio_id} not found"
-        )
+    _get_portfolio_or_404(portfolio_id, db)
 
     # Prevent adding the same ticker twice to the same portfolio
     existing = (
@@ -363,31 +398,15 @@ async def remove_holding(holding_id: int, db: Session = Depends(get_db)):
 @router.post("/seed")
 async def seed_portfolio(db: Session = Depends(get_db)):
     """
-    One-time setup: create the default portfolio and optional configured holdings.
-    Safe to call repeatedly — returns early if the portfolio already exists.
+    Backward-compatible setup helper.
+    The default portfolio is now created automatically on first use.
     """
-    # Don't seed again if a portfolio with this name already exists
-    existing = db.query(Portfolio).filter(Portfolio.name == "My Portfolio").first()
-    if existing:
-        return {"message": "Already seeded", "portfolio_id": existing.id}
-
-    portfolio = Portfolio(name="My Portfolio", description="Local portfolio")
-    db.add(portfolio)
-    db.flush()  # Write to DB to get the generated ID, but don't commit yet
-
-    for ticker in settings.DEFAULT_HOLDINGS:
-        holding = Holding(
-            portfolio_id=portfolio.id,
-            ticker=ticker,
-            shares=0.0,  # Update share counts via PUT /holdings/{id} after seeding
-        )
-        db.add(holding)
-
-    db.commit()
+    existing = db.query(Portfolio).filter(Portfolio.id == 1).first()
+    portfolio = _ensure_default_portfolio(db)
     return {
-        "message": "Portfolio seeded successfully",
+        "message": "Already seeded" if existing else "Portfolio seeded successfully",
         "portfolio_id": portfolio.id,
-        "holdings_added": len(settings.DEFAULT_HOLDINGS),
+        "holdings_added": 0 if existing else len(settings.DEFAULT_HOLDINGS),
     }
 
 
@@ -398,6 +417,7 @@ async def get_portfolio_value(portfolio_id: int = 1, db: Session = Depends(get_d
     profit/loss (realized + unrealized). Also refreshes today's snapshot so the
     performance history builds up passively as the dashboard is used.
     """
+    _get_portfolio_or_404(portfolio_id, db)
     totals = _compute_portfolio(portfolio_id, db)
     result, total_value, total_daily_change, total_cost_basis = totals
 
@@ -448,6 +468,7 @@ async def get_pnl(portfolio_id: int = 1, db: Session = Depends(get_db)):
     daily snapshot history (for the performance chart). Reads stored data only —
     no live quotes — so it's cheap to call after a holdings edit.
     """
+    _get_portfolio_or_404(portfolio_id, db)
     realized = _cumulative_realized(portfolio_id, db)
     realized_stats = _realized_stats_by_ticker(portfolio_id, db)
 

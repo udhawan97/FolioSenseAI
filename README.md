@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite"/>
   <img src="https://img.shields.io/badge/Bootstrap-5-7952B3?style=flat-square&logo=bootstrap&logoColor=white" alt="Bootstrap 5"/>
   <img src="https://img.shields.io/badge/Chart.js-FF6384?style=flat-square&logo=chartdotjs&logoColor=white" alt="Chart.js"/>
-  <img src="https://img.shields.io/badge/release-v1-brightgreen?style=flat-square" alt="Release v1"/>
+  <img src="https://img.shields.io/badge/release-v1.1-brightgreen?style=flat-square" alt="Release v1.1"/>
 </p>
 
 <p align="center">
@@ -82,160 +82,93 @@
 
 ## 🚀 Local Setup
 
-### Prerequisites
+### Fast Install
 
-You'll need these before anything else:
+You'll need **Python 3.11+** from [python.org](https://www.python.org/downloads/). On Windows, check **Add Python to PATH** during install.
 
-| Requirement | Where to get it |
-|------------|----------------|
-| **Python 3.11+** | [python.org](https://www.python.org/downloads/) |
-| **Git** *(optional)* | [git-scm.com](https://git-scm.com/) — only needed for Git Bash or source development |
-| **Anthropic API key** | [console.anthropic.com](https://console.anthropic.com/) |
+The Anthropic API key is optional. Without it, FolioSenseAI still runs with live market data and portfolio tracking; AI explanations stay disabled until you add a key from [console.anthropic.com](https://console.anthropic.com/).
 
-> 💡 The Anthropic API key costs a little money per AI query — roughly pennies. The AI explanations are cached, so you won't rack up charges just by refreshing.
+These commands install the GitHub release [v1.1](https://github.com/udhawan97/FolioSenseAI/releases/tag/release-v1.1).
 
----
-
-### 🍎 Mac Setup
-
-macOS tends to just work here. Suspiciously well.
-
-**1. Download the v1 release**
+**Mac / Linux**
 
 ```bash
-curl -L -o FolioSenseAI-v1.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v1.zip
-unzip FolioSenseAI-v1.zip
-cd FolioSenseAI-release-v1
+curl -L -o FolioSenseAI-v1.1.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v1.1.zip
+unzip FolioSenseAI-v1.1.zip
+cd FolioSenseAI-release-v1.1
+./scripts/setup.sh
 ```
 
-> 💡 This installs the GitHub release [v1](https://github.com/udhawan97/FolioSenseAI/releases/tag/release-v1). If you're developing the app instead, clone the repo from `main`.
+**Windows PowerShell**
 
-**2. Create a virtual environment and install dependencies**
+```powershell
+Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v1.1.zip" -OutFile "FolioSenseAI-v1.1.zip"
+Expand-Archive -Path "FolioSenseAI-v1.1.zip" -DestinationPath .
+cd FolioSenseAI-release-v1.1
+.\scripts\setup.ps1
+```
+
+The setup script creates the virtual environment, installs dependencies, creates `.env`, generates a local secret key, creates the database folder, and starts the app.
+
+Open [http://localhost:8000](http://localhost:8000). Your local portfolio is created automatically the first time the dashboard asks for data.
+
+### Starting Later
+
+After the first install, use the lighter start script:
+
+```bash
+./scripts/start.sh
+```
+
+Windows:
+
+```powershell
+.\scripts\start.ps1
+```
+
+### Optional AI Setup
+
+If you skipped the Anthropic key during setup, open `.env` and set:
+
+```env
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+```
+
+The API key costs a little money per AI query, roughly pennies. AI explanations are cached, so refreshing the dashboard does not keep spending.
+
+### Developer Setup
+
+Prefer doing everything manually? Fair enough.
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-```
-
-> 💡 If `python3` isn't found, install via [Homebrew](https://brew.sh/): `brew install python`
->
-> 💡 You'll know the venv is active when your terminal prompt shows `(venv)`. Don't skip this step — global Python installs are a mess.
-
-**3. Configure environment**
-
-```bash
 cp .env.example .env
-```
-
-Open `.env` and fill in your values:
-
-```env
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
-SECRET_KEY=some_long_random_string_here
-DEBUG=True
-DATABASE_URL=sqlite:///./database/portfolio.db
-CORS_ALLOWED_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
-DEFAULT_HOLDINGS=
-```
-
-> 💡 Generate a proper secret key in one line:
-> ```bash
-> python3 -c "import secrets; print(secrets.token_hex(32))"
-> ```
-
-**4. Run**
-
-```bash
 python run.py
 ```
 
-Open [http://localhost:8000](http://localhost:8000) — your dashboard awaits.
-
-**5. Create your local portfolio** *(first run only)*
-
-```bash
-curl -X POST http://localhost:8000/api/portfolio/seed
-```
-
-This creates an empty local portfolio by default. To seed starter tickers without committing personal holdings, set `DEFAULT_HOLDINGS=VOO,QQQ,BND` in your own `.env`, then run the seed command.
-
----
-
-### 🪟 Windows Setup
-
-Windows is supported. We have feelings about it, but we support it.
-
-**Step 0: Install Python properly**
-
-Download Python from [python.org](https://www.python.org/downloads/). During install, **check "Add Python to PATH"** — this is not optional. If you miss it, uninstall and reinstall. Trust us.
-
-**Option A: Command Prompt or PowerShell**
+Windows:
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v1.zip" -OutFile "FolioSenseAI-v1.zip"
-Expand-Archive -Path "FolioSenseAI-v1.zip" -DestinationPath .
-cd FolioSenseAI-release-v1
-
 python -m venv venv
 venv\Scripts\activate
-
 pip install -r requirements.txt
-```
-
-> 💡 If PowerShell blocks script execution, run this first:
-> ```powershell
-> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-> ```
-
-**Option B: Git Bash** *(recommended — Unix-like and sane)*
-
-If you installed Git for Windows, Git Bash lets you use the same commands as Mac:
-
-```bash
-curl -L -o FolioSenseAI-v1.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v1.zip
-unzip FolioSenseAI-v1.zip
-cd FolioSenseAI-release-v1
-
-python -m venv venv
-source venv/Scripts/activate   # Note: "Scripts" not "bin" on Windows
-
-pip install -r requirements.txt
-```
-
-> 💡 Both Windows options install the GitHub release [v1](https://github.com/udhawan97/FolioSenseAI/releases/tag/release-v1). Clone the repo only if you want to work from the latest source instead of the release.
-
-**Configure environment:**
-
-```cmd
 copy .env.example .env
-```
-
-Open `.env` in Notepad, VS Code, or anything that isn't WordPad:
-
-```env
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
-SECRET_KEY=some_long_random_string_here
-DEBUG=True
-DATABASE_URL=sqlite:///./database/portfolio.db
-CORS_ALLOWED_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
-DEFAULT_HOLDINGS=
-```
-
-> 💡 Generate a secret key in PowerShell:
-> ```powershell
-> python -c "import secrets; print(secrets.token_hex(32))"
-> ```
-
-**Run:**
-
-```cmd
 python run.py
 ```
 
-Open [http://localhost:8000](http://localhost:8000).
+If PowerShell blocks scripts, run:
 
-> ⚠️ **SSL errors?** If yfinance complains about certificates, run: `pip install --upgrade certifi`
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+If yfinance complains about certificates, run:
+
+```bash
+pip install --upgrade certifi
+```
 
 ---
 
@@ -255,7 +188,8 @@ This repo is designed so forks start without personal portfolio data:
 
 - `.env` stays local and is ignored by Git.
 - SQLite databases and database backups are ignored.
-- `POST /api/portfolio/seed` creates an empty portfolio unless you set `DEFAULT_HOLDINGS` in your own `.env`.
+- A fresh database creates an empty local portfolio on first use.
+- `DEFAULT_HOLDINGS` is optional and stays in your own `.env` if you want starter tickers.
 - `CORS_ALLOWED_ORIGINS` defaults to local app origins instead of `*`.
 
 If you previously committed a real database backup, delete it from the current tree and purge it from Git history before treating the public repo as clean.
@@ -289,7 +223,7 @@ Full interactive docs at `/docs` when running locally. Here's the cheat sheet:
 | `DELETE` | `/api/portfolio/holdings/{id}` | Remove a holding (touch grass) |
 | `GET` | `/api/portfolio/value` | Portfolio value, allocation, daily P&L |
 | `GET` | `/api/portfolio/pnl` | Historical returns and realized P&L |
-| `POST` | `/api/portfolio/seed` | Create the local portfolio and optional configured starter holdings |
+| `POST` | `/api/portfolio/seed` | Backward-compatible first-run helper; usually no longer needed |
 
 </details>
 

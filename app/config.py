@@ -39,7 +39,7 @@ class Settings:
         "FolioSenseAI helps explain portfolio movement by surfacing market context, "
         "news, and AI-generated insights for holdings."
     )
-    # Optional comma-separated tickers pre-loaded by POST /api/portfolio/seed.
+    # Optional comma-separated tickers pre-loaded when the default portfolio is created.
     # Empty by default so forks do not inherit anyone's personal portfolio.
     DEFAULT_HOLDINGS: list[str] = _csv_env("DEFAULT_HOLDINGS", uppercase=True)
 

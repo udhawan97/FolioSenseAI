@@ -21,6 +21,16 @@ def make_db():
     return session
 
 
+def make_empty_db():
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    return sessionmaker(bind=engine)()
+
+
 def add_holding(db, ticker, shares, avg_cost, is_active=True):
     db.add(
         Holding(
@@ -127,3 +137,16 @@ def test_missing_or_zero_basis_returns_none(monkeypatch):
 
     assert row_by_ticker(rows, "FREE")["total_return_pct"] is None
     assert stats["total_return_pct"] is None
+
+
+def test_default_portfolio_is_created_on_first_use(monkeypatch):
+    db = make_empty_db()
+    monkeypatch.setattr(portfolio_router.settings, "DEFAULT_HOLDINGS", ["VOO", "QQQ"])
+
+    portfolio = portfolio_router._ensure_default_portfolio(db)
+
+    holdings = db.query(Holding).order_by(Holding.ticker).all()
+    assert portfolio.id == 1
+    assert portfolio.name == "My Portfolio"
+    assert [h.ticker for h in holdings] == ["QQQ", "VOO"]
+    assert all(h.shares == 0 for h in holdings)
