@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite"/>
   <img src="https://img.shields.io/badge/Bootstrap-5-7952B3?style=flat-square&logo=bootstrap&logoColor=white" alt="Bootstrap 5"/>
   <img src="https://img.shields.io/badge/Chart.js-FF6384?style=flat-square&logo=chartdotjs&logoColor=white" alt="Chart.js"/>
-  <img src="https://img.shields.io/badge/version-0.4.1-brightgreen?style=flat-square" alt="Version"/>
+  <img src="https://img.shields.io/badge/release-v1-brightgreen?style=flat-square" alt="Release v1"/>
 </p>
 
 <p align="center">
@@ -89,7 +89,7 @@ You'll need these before anything else:
 | Requirement | Where to get it |
 |------------|----------------|
 | **Python 3.11+** | [python.org](https://www.python.org/downloads/) |
-| **Git** | [git-scm.com](https://git-scm.com/) |
+| **Git** *(optional)* | [git-scm.com](https://git-scm.com/) — only needed for Git Bash or source development |
 | **Anthropic API key** | [console.anthropic.com](https://console.anthropic.com/) |
 
 > 💡 The Anthropic API key costs a little money per AI query — roughly pennies. The AI explanations are cached, so you won't rack up charges just by refreshing.
@@ -100,14 +100,15 @@ You'll need these before anything else:
 
 macOS tends to just work here. Suspiciously well.
 
-**1. Clone the repo**
+**1. Download the v1 release**
 
 ```bash
-git clone git@github.com:<your-user>/FolioSenseAI.git
-cd FolioSenseAI
+curl -L -o FolioSenseAI-v1.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v1.zip
+unzip FolioSenseAI-v1.zip
+cd FolioSenseAI-release-v1
 ```
 
-> 💡 If you prefer HTTPS: `git clone https://github.com/<your-user>/FolioSenseAI.git`
+> 💡 This installs the GitHub release [v1](https://github.com/udhawan97/FolioSenseAI/releases/tag/release-v1). If you're developing the app instead, clone the repo from `main`.
 
 **2. Create a virtual environment and install dependencies**
 
@@ -171,9 +172,10 @@ Download Python from [python.org](https://www.python.org/downloads/). During ins
 
 **Option A: Command Prompt or PowerShell**
 
-```cmd
-git clone git@github.com:<your-user>/FolioSenseAI.git
-cd FolioSenseAI
+```powershell
+Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v1.zip" -OutFile "FolioSenseAI-v1.zip"
+Expand-Archive -Path "FolioSenseAI-v1.zip" -DestinationPath .
+cd FolioSenseAI-release-v1
 
 python -m venv venv
 venv\Scripts\activate
@@ -191,14 +193,17 @@ pip install -r requirements.txt
 If you installed Git for Windows, Git Bash lets you use the same commands as Mac:
 
 ```bash
-git clone git@github.com:<your-user>/FolioSenseAI.git
-cd FolioSenseAI
+curl -L -o FolioSenseAI-v1.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v1.zip
+unzip FolioSenseAI-v1.zip
+cd FolioSenseAI-release-v1
 
 python -m venv venv
 source venv/Scripts/activate   # Note: "Scripts" not "bin" on Windows
 
 pip install -r requirements.txt
 ```
+
+> 💡 Both Windows options install the GitHub release [v1](https://github.com/udhawan97/FolioSenseAI/releases/tag/release-v1). Clone the repo only if you want to work from the latest source instead of the release.
 
 **Configure environment:**
 
