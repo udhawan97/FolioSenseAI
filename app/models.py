@@ -40,7 +40,8 @@ class Holding(Base):
     shares = Column(Float, nullable=False, default=0.0)
     avg_cost = Column(Float, nullable=False, default=0.0)   # Average purchase price per share
     is_active = Column(Boolean, default=True)               # False means soft-deleted
-    is_watchlist = Column(Boolean, default=False, server_default="0")  # True = research-only, excluded from P&L and snapshots
+    # True = research-only, excluded from P&L and snapshots
+    is_watchlist = Column(Boolean, default=False, server_default="0")
     notes = Column(Text, nullable=True)
     added_at = Column(DateTime, default=func.now())
 

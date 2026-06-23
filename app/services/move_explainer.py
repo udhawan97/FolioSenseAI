@@ -194,11 +194,11 @@ def compute_contribution_breakdown(
     for h in top_holdings:
         t = h["ticker"]
         w = float(h.get("weight") or 0)
-        if not (0 <= w <= 100):
+        if not 0 <= w <= 100:
             logger.warning("Skipping %s: weight %s out of valid range [0, 100]", t, w)
             continue
         chg = changes.get(t, 0.0)
-        if not (-100 <= chg <= 100):
+        if not -100 <= chg <= 100:
             logger.warning("Skipping %s: day_change_pct %s out of valid range", t, chg)
             continue
         contribution_pp = round(w / 100.0 * chg, 4)

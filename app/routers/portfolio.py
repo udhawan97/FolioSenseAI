@@ -426,10 +426,18 @@ async def get_portfolio_value(portfolio_id: int = 1, db: Session = Depends(get_d
         "total_return": total_return,
         "total_return_pct": total_return_pct,
         "best_performer": (
-            max((h for h in result if not h.get("is_watchlist")), key=lambda x: x["day_change_pct"], default=None)
+            max(
+                (h for h in result if not h.get("is_watchlist")),
+                key=lambda x: x["day_change_pct"],
+                default=None,
+            )
         ),
         "worst_performer": (
-            min((h for h in result if not h.get("is_watchlist")), key=lambda x: x["day_change_pct"], default=None)
+            min(
+                (h for h in result if not h.get("is_watchlist")),
+                key=lambda x: x["day_change_pct"],
+                default=None,
+            )
         ),
         "holdings": result,
     }
