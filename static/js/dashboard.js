@@ -3032,6 +3032,37 @@ function _verdictColor(action) {
     return map[action] || "var(--text-tertiary)";
 }
 
+function _sanitizeVerdict(verdict) {
+    if (!verdict || typeof verdict !== "object") return null;
+    const VALID_ACTIONS = new Set(["add", "hold", "trim", "needs-data"]);
+    const action = VALID_ACTIONS.has(verdict.action) ? verdict.action : "needs-data";
+    const conf = Math.min(100, Math.max(0, Math.round(parseFloat(verdict.confidence) || 0)));
+    const label = typeof verdict.label === "string" && verdict.label.trim()
+        ? verdict.label.trim().slice(0, 40) : "Needs Data";
+    const quip = typeof verdict.quip === "string" ? verdict.quip.trim().slice(0, 300) : "";
+    const reasons = (Array.isArray(verdict.reasons) ? verdict.reasons : [])
+        .filter(r => typeof r === "string" && r.trim())
+        .slice(0, 5)
+        .map(r => r.trim().slice(0, 220));
+    const risks = (Array.isArray(verdict.risks) ? verdict.risks : [])
+        .filter(r => typeof r === "string" && r.trim())
+        .slice(0, 4)
+        .map(r => r.trim().slice(0, 220));
+    const ft = verdict.flip_triggers;
+    const addPrice  = ft && isFinite(ft.add_price)  && ft.add_price  > 0 ? ft.add_price  : null;
+    const trimPrice = ft && isFinite(ft.trim_price) && ft.trim_price > 0 ? ft.trim_price : null;
+    return {
+        ...verdict,
+        action,
+        confidence: conf,
+        label,
+        quip,
+        reasons,
+        risks,
+        flip_triggers: (addPrice && trimPrice) ? { add_price: addPrice, trim_price: trimPrice } : null,
+    };
+}
+
 const _verdictSettled = new Set();  // tickers whose die has already settled
 
 function _verdictLoadingLine(ticker) {
@@ -3211,6 +3242,8 @@ function renderAiVerdict(section, verdict, ticker) {
         return;
     }
 
+    verdict = _sanitizeVerdict(verdict) || verdict;
+
     const action    = verdict.action || "needs-data";
     const label     = verdict.label  || "Needs Data";
     const conf      = verdict.confidence || 0;
@@ -3225,11 +3258,17 @@ function renderAiVerdict(section, verdict, ticker) {
     const brandCopy = _verdictBrand(verdict);
 
     const reasonsHtml = reasons.map(r =>
-        `<div class="intel-spec-row"><span><i class="bi bi-check-circle" style="color:var(--verdict-color)"></i></span><strong>${escapeHtml(r)}</strong></div>`
+        `<div class="intel-spec-row verdict-reason-row">
+            <span aria-hidden="true"><i class="bi bi-check-circle-fill"></i></span>
+            <span>${escapeHtml(r)}</span>
+        </div>`
     ).join("");
 
     const risksHtml = risks.map(r =>
-        `<div class="intel-spec-row"><span><i class="bi bi-exclamation-triangle"></i></span><strong><span class="spec-pill risk">${escapeHtml(r)}</span></strong></div>`
+        `<div class="intel-spec-row verdict-risk-row">
+            <span aria-hidden="true"><i class="bi bi-exclamation-triangle-fill"></i></span>
+            <span><span class="spec-pill risk">${escapeHtml(r)}</span></span>
+        </div>`
     ).join("");
 
     const dieClass = shouldReveal ? "is-tumbling" : "is-settled";
@@ -3282,11 +3321,8 @@ function renderAiVerdict(section, verdict, ticker) {
             ${metaChips ? `<div class="verdict-mini-chip-row">${metaChips}</div>` : ""}
             ${_renderSignalMix(verdict)}
             ${_renderQuip(quip)}
-            ${(reasonsHtml || risksHtml) ? `
-            <div class="intel-spec-rows verdict-spec-rows">
-                ${reasonsHtml}
-                ${risksHtml}
-            </div>` : ""}
+            ${reasonsHtml ? `<div class="intel-spec-rows verdict-spec-rows verdict-reasons-group">${reasonsHtml}</div>` : ""}
+            ${risksHtml ? `<div class="intel-spec-rows verdict-spec-rows verdict-risks-group">${risksHtml}</div>` : ""}
             ${disc ? `<div class="intel-meta-row">
                 <span class="fact-tag">${escapeHtml(disc)}</span>
             </div>` : ""}

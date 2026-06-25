@@ -8623,8 +8623,48 @@ tr.research-holding-row:hover {
 /* ── Spec rows ── */
 .verdict-spec-rows {
     display: grid;
-    gap: 0.18rem;
-    padding: 0.35rem 0.9rem 0;
+    gap: 0;
+    padding: 0 0.9rem;
+}
+
+.verdict-reasons-group {
+    padding-top: 0.3rem;
+}
+
+.verdict-risks-group {
+    padding-bottom: 0.3rem;
+    border-top: 1px solid var(--hairline-soft);
+}
+
+/* Override intel-spec-row column layout for compact verdict bullets */
+.verdict-spec-rows .intel-spec-row {
+    grid-template-columns: 18px 1fr;
+    gap: 0.5rem;
+    align-items: flex-start;
+    padding: 0.38rem 0;
+    font-size: 0.72rem;
+}
+
+.verdict-spec-rows .intel-spec-row > span {
+    color: inherit;
+    white-space: normal;
+    line-height: 1.4;
+}
+
+.verdict-spec-rows .intel-spec-row > span:first-child {
+    padding-top: 0.1rem;
+    display: flex;
+    justify-content: center;
+}
+
+.verdict-reason-row > span:first-child i {
+    color: var(--accent-green);
+    font-size: 0.72rem;
+}
+
+.verdict-risk-row > span:first-child i {
+    color: var(--accent-yellow);
+    font-size: 0.72rem;
 }
 
 /* ── Disclaimer row ── */
@@ -8643,6 +8683,26 @@ tr.research-holding-row:hover {
     font-size: 0.74rem;
     color: var(--text-secondary);
     line-height: 1.35;
+}
+
+/* ── Dark mode polish ── */
+[data-bs-theme="dark"] .signal-mix-item {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+[data-bs-theme="dark"] .verdict-spec-rows .intel-spec-row > span {
+    color: rgba(235, 245, 255, 0.78);
+}
+
+[data-bs-theme="dark"] .spec-pill.risk {
+    background: rgba(255, 214, 10, 0.13);
+    color: #ffd60a;
+    font-weight: 620;
+}
+
+[data-bs-theme="dark"] .intel-verdict .fact-tag {
+    background: rgba(255, 255, 255, 0.055);
+    color: var(--text-secondary);
 }
 
 /* ── Verdict color per action ── */
@@ -8669,13 +8729,94 @@ tr.research-holding-row:hover {
 [data-bs-theme="light"] .intel-verdict {
     background:
         radial-gradient(ellipse 80% 60% at 50% -5%,
-            color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 8%, transparent) 0%,
+            color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 10%, transparent) 0%,
             transparent 68%),
-        rgba(255, 255, 255, 0.72);
+        rgba(255, 255, 255, 0.98);
+    border-color: color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 30%, rgba(0,0,0,0.12));
+    box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 6%, transparent) inset,
+        0 2px 16px -4px rgba(0, 0, 0, 0.08),
+        0 8px 28px -6px color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 16%, transparent);
+}
+
+[data-bs-theme="light"] .verdict-header-bar {
+    background: color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 6%, rgba(0,0,0,0.02));
+    border-bottom-color: color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 16%, rgba(0,0,0,0.08));
+}
+
+[data-bs-theme="light"] .verdict-conf-pct {
+    text-shadow: none;
+}
+
+[data-bs-theme="light"] .verdict-feels-line {
+    color: var(--text-tertiary);
+}
+
+[data-bs-theme="light"] .verdict-hero-conf {
+    border-left-color: color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 22%, rgba(0,0,0,0.1));
+}
+
+[data-bs-theme="light"] .verdict-meter {
+    background: color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 16%, rgba(0,0,0,0.06));
+}
+
+[data-bs-theme="light"] .verdict-insight-row {
+    background: color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 8%, rgba(0,0,0,0.02));
+    border-color: color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 20%, rgba(0,0,0,0.08));
+    color: var(--text-primary);
+}
+
+[data-bs-theme="light"] .verdict-face-label {
+    color: var(--text-primary);
+}
+
+[data-bs-theme="light"] .verdict-price-pair {
+    color: var(--text-primary);
+}
+
+[data-bs-theme="light"] .signal-mix-item {
+    background: rgba(0, 0, 0, 0.045);
+    border: 1px solid rgba(0, 0, 0, 0.09);
+    color: var(--text-primary);
+}
+
+[data-bs-theme="light"] .verdict-mini-chip {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 26%, rgba(0,0,0,0.12));
+    color: var(--text-secondary);
 }
 
 [data-bs-theme="light"] .verdict-quote {
-    color: rgba(0, 0, 0, 0.62);
+    background: color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 7%, rgba(0,0,0,0.025));
+    color: var(--text-primary);
+    border-left-color: color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 70%, transparent);
+}
+
+[data-bs-theme="light"] .verdict-tea-label {
+    color: color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 72%, #000 28%);
+}
+
+[data-bs-theme="light"] .verdict-spec-rows .intel-spec-row {
+    border-bottom-color: rgba(0, 0, 0, 0.07);
+}
+
+[data-bs-theme="light"] .verdict-spec-rows .intel-spec-row > span {
+    color: var(--text-primary);
+}
+
+[data-bs-theme="light"] .verdict-risks-group {
+    border-top-color: rgba(0, 0, 0, 0.08);
+}
+
+[data-bs-theme="light"] .spec-pill.risk {
+    background: rgba(255, 159, 10, 0.12);
+    color: #8a5200;
+    font-weight: 640;
+}
+
+[data-bs-theme="light"] .intel-verdict .fact-tag {
+    background: rgba(0, 0, 0, 0.04);
+    color: var(--text-secondary);
 }
 
 [data-bs-theme="light"] .intel-verdict-section {
