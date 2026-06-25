@@ -33,6 +33,7 @@ def _ensure_default_portfolio(db):
             portfolio_id=portfolio.id,
             ticker=ticker,
             shares=0.0,
+            hold_class="auto",
         ))
 
     db.commit()
@@ -69,6 +70,8 @@ def _compute_portfolio(portfolio_id, db):
     shares_map = {h.ticker: h.shares for h in holdings}
     cost_map = {h.ticker: (h.avg_cost or 0.0) for h in holdings}
     watchlist_map = {h.ticker: bool(h.is_watchlist) for h in holdings}
+    hold_class_map = {h.ticker: (h.hold_class or "auto") for h in holdings}
+    id_map = {h.ticker: h.id for h in holdings}
 
     quotes = get_all_quotes(list(shares_map.keys()))
     realized_stats = _realized_stats_by_ticker(portfolio_id, db)
@@ -85,6 +88,7 @@ def _compute_portfolio(portfolio_id, db):
         shares = shares_map.get(ticker, 0)
         avg_cost = cost_map.get(ticker, 0.0)
         is_watchlist = watchlist_map.get(ticker, False)
+        hold_class = hold_class_map.get(ticker, "auto")
         current_value = shares * q["current_price"]
         daily_value_change = shares * q["day_change"]
         cost_basis = shares * avg_cost
@@ -109,6 +113,7 @@ def _compute_portfolio(portfolio_id, db):
 
         result.append({
             "ticker": ticker,
+            "id": id_map.get(ticker),
             "name": q["name"],
             "shares": shares,
             "current_price": q["current_price"],
@@ -125,6 +130,7 @@ def _compute_portfolio(portfolio_id, db):
             "daily_value_change": round(daily_value_change, 2),
             "allocation_pct": 0,
             "is_watchlist": is_watchlist,
+            "hold_class": hold_class,
         })
 
     for item in result:
@@ -291,6 +297,7 @@ async def get_holdings(portfolio_id: int = 1, db: Session = Depends(get_db)):
                 "shares": h.shares,
                 "avg_cost": h.avg_cost,
                 "is_watchlist": bool(h.is_watchlist),
+                "hold_class": h.hold_class or "auto",
             }
             for h in holdings
         ],
@@ -327,6 +334,7 @@ async def add_holding(
         avg_cost=data.avg_cost,
         notes=data.notes,
         is_watchlist=data.is_watchlist or False,
+        hold_class=data.hold_class or "auto",
     )
     db.add(holding)
     db.commit()
@@ -363,10 +371,16 @@ async def update_holding(
         holding.is_active = data.is_active
     if data.is_watchlist is not None:
         holding.is_watchlist = data.is_watchlist
+    if data.hold_class is not None:
+        holding.hold_class = data.hold_class
 
     db.commit()
     db.refresh(holding)
-    return {"ticker": holding.ticker, "message": "Updated successfully"}
+    return {
+        "ticker": holding.ticker,
+        "hold_class": holding.hold_class or "auto",
+        "message": "Updated successfully",
+    }
 
 
 @router.delete("/holdings/{holding_id}")

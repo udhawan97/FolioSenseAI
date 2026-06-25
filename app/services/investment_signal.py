@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from app.services.analyst_recommendation import AnalystRec
+from app.services.timing_signal import weakness_flags
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,9 @@ class InvestmentSignal:  # pylint: disable=too-many-instance-attributes
     flip_triggers: dict | None = None
     signal_mix: list[dict] = field(default_factory=list)
     freshness: dict | None = None
+    hold_class: str = "auto"
+    instrument_role: str = "tactical"
+    timing: dict | None = None
 
 
 def signal_to_dict(sig: InvestmentSignal) -> dict:
@@ -57,6 +61,9 @@ def signal_to_dict(sig: InvestmentSignal) -> dict:
         "flip_triggers": sig.flip_triggers,
         "signal_mix": sig.signal_mix,
         "freshness": sig.freshness,
+        "hold_class": sig.hold_class,
+        "instrument_role": sig.instrument_role,
+        "timing": sig.timing,
     }
 
 
@@ -142,6 +149,154 @@ def _quality_stance(data_quality: str) -> str:
     if data_quality == "low":
         return "against"
     return "neutral"
+
+
+def _instrument_role(rec: AnalystRec, hold_class: str) -> str:
+    if hold_class == "anchor":
+        return "anchor"
+    if rec.security_type == "ETF":
+        category = ((rec.etf_quality or {}).get("category") or "").lower()
+        return "core" if category == "broad" else "tactical"
+    return "tactical"
+
+
+def _is_deteriorating(timing: dict | None) -> bool:
+    if not timing:
+        return False
+    cross = timing.get("cross") or {}
+    return (
+        timing.get("momentum_state") in {"rolling_over", "weakening"}
+        or (cross.get("type") == "death" and cross.get("recent"))
+    )
+
+
+def _is_stabilizing(timing: dict | None) -> bool:
+    if not timing:
+        return False
+    cross = timing.get("cross") or {}
+    return (
+        timing.get("momentum_state") in {"trend_intact", "stabilizing"}
+        or (cross.get("type") == "golden" and cross.get("recent"))
+    )
+
+
+# pylint: disable-next=too-many-return-statements
+def _timing_reason(timing: dict | None) -> str:
+    if not timing:
+        return ""
+    cross = timing.get("cross") or {}
+    sessions = cross.get("sessions_ago")
+    if cross.get("type") == "golden":
+        return f"50-day crossed above the 200-day {sessions} sessions ago"
+    if cross.get("type") == "death":
+        return f"50-day crossed below the 200-day {sessions} sessions ago"
+    state = timing.get("momentum_state")
+    if state == "rolling_over":
+        return "Trend is rolling over versus the 50- and 200-day averages"
+    if state == "weakening":
+        return "Price is below key trend lines and the 50-day is falling"
+    if state == "stabilizing":
+        return "Price is stabilizing while the 50-day trend improves"
+    if state == "trend_intact":
+        return "Trend check is intact above key moving averages"
+    drawdown = timing.get("drawdown_from_52w_high_pct")
+    if drawdown is not None:
+        return f"Trading {drawdown:.0f}% below its 12-month high"
+    return ""
+
+
+# pylint: disable-next=too-many-branches
+def _apply_timing_modifier(
+    *,
+    action: str,
+    conf: int,
+    reasons: list[str],
+    risks: list[str],
+    zone: str | None,
+    role: str,
+    timing: dict | None,
+) -> tuple[str, int, list[str], list[str]]:
+    if not timing or not timing.get("available"):
+        return action, conf, reasons, risks
+
+    timing_reason = _timing_reason(timing)
+    deteriorating = _is_deteriorating(timing)
+    stabilizing = _is_stabilizing(timing)
+
+    if role == "core":
+        if action == "trim" and not (zone == "Rich" and deteriorating):
+            action = "hold"
+            conf = _clamp(min(conf, 56))
+            reasons = _prepend_reason(
+                reasons,
+                timing_reason or "Core ETF stays patient unless rich price meets fading momentum",
+            )
+            risks.append("Core holding: mild richness is a patience signal, not a trim signal")
+            return action, conf, reasons, risks
+        if zone == "Bargain" and stabilizing:
+            action = "add"
+            conf = _clamp(max(conf, 58) + 4)
+            if timing_reason:
+                reasons = _prepend_reason(reasons, timing_reason)
+        elif action == "trim" and deteriorating:
+            conf = _clamp(conf + 6)
+            if timing_reason:
+                reasons = _prepend_reason(reasons, timing_reason)
+        return action, conf, reasons, risks
+
+    if zone == "Rich" and deteriorating:
+        action = "trim"
+        conf = _clamp(max(conf, 62) + 5)
+        if timing_reason:
+            reasons = _prepend_reason(reasons, timing_reason)
+    elif zone == "Bargain" and stabilizing:
+        action = "add"
+        conf = _clamp(max(conf, 58) + 5)
+        if timing_reason:
+            reasons = _prepend_reason(reasons, timing_reason)
+    elif action == "add" and deteriorating:
+        action = "hold"
+        conf = _clamp(min(conf, 52))
+        if timing_reason:
+            reasons = _prepend_reason(reasons, f"{timing_reason} — wait for stabilization")
+        risks.append("Add case is tempered by fading timing signals")
+    elif action == "trim" and stabilizing:
+        action = "hold"
+        conf = _clamp(min(conf, 55))
+        if timing_reason:
+            reasons = _prepend_reason(reasons, f"{timing_reason} — trim case needs weakness")
+    elif timing_reason:
+        reasons = _prepend_reason(reasons, timing_reason)
+
+    return action, conf, reasons, risks
+
+
+def _apply_anchor_override(sig: InvestmentSignal, zone: str | None = None) -> InvestmentSignal:
+    sig.hold_class = "anchor"
+    sig.instrument_role = "anchor"
+    flags = weakness_flags(sig.timing, zone=zone)
+    if flags:
+        sig.action = "add"
+        sig.label = "Add (anchor)"
+        sig.confidence = _clamp(max(sig.confidence, 62))
+        sig.reasons = _prepend_reason(
+            sig.reasons,
+            "Good moment to add to your anchor — on sale vs its own history",
+        )
+    else:
+        sig.action = "hold"
+        sig.label = "Hold"
+        sig.confidence = _clamp(min(max(sig.confidence, 45), 68))
+        sig.reasons = _prepend_reason(
+            sig.reasons,
+            "Anchor hold — staying the course; signals below are FYI",
+        )
+    sig.risks = [risk for risk in sig.risks if "trim" not in risk.lower()][:2]
+    sig.signal_mix = [
+        {**item, "stance": "neutral" if item.get("stance") == "against" else item.get("stance")}
+        for item in sig.signal_mix
+    ]
+    return sig
 
 
 def _stock_signal_mix(
@@ -400,12 +555,14 @@ def _apply_allocation_modifier(
             sig.confidence = _clamp(sig.confidence - _CONCENTRATION_CONF_PENALTY)
 
 
-# pylint: disable-next=too-many-branches,too-many-statements
+# pylint: disable-next=too-many-branches,too-many-statements,too-many-positional-arguments
 def _build_stock_signal(
     rec: AnalystRec,
     allocation_pct: Optional[float],
     is_watchlist: bool,
     stock_data: dict | None = None,
+    hold_class: str = "auto",
+    timing: dict | None = None,
 ) -> InvestmentSignal:
     """Signal for a stock with analyst coverage (buy/hold/sell)."""
     analyst_action = rec.action  # buy | hold | sell
@@ -468,6 +625,7 @@ def _build_stock_signal(
 
     quality = "high" if count >= 5 and mean is not None else "medium" if count >= 1 else "low"
     market_mood = _derive_stock_market_mood(stock_data)
+    role = _instrument_role(rec, hold_class)
     action, conf, reasons, risks = _refine_for_momentum(
         action=action,
         conf=conf,
@@ -476,11 +634,22 @@ def _build_stock_signal(
         market_mood=market_mood,
         security_type="STOCK",
     )
+    action, conf, reasons, risks = _apply_timing_modifier(
+        action=action,
+        conf=conf,
+        reasons=reasons,
+        risks=risks,
+        zone=None,
+        role=role,
+        timing=timing,
+    )
     if stock_data:
         _append_source_once(
             source,
             ["current_price", "day_change_pct", "fifty_two_week_high", "fifty_two_week_low"],
         )
+    if timing and timing.get("available"):
+        _append_source_once(source, ["timing_signal"])
     generated_at = datetime.now(timezone.utc).isoformat()
     signal_mix = _stock_signal_mix(
         action=action,
@@ -504,16 +673,24 @@ def _build_stock_signal(
         flip_triggers=_flip_triggers_stock(rec, stock_data),
         signal_mix=signal_mix,
         freshness=_freshness_payload(generated_at),
+        hold_class=hold_class,
+        instrument_role=role,
+        timing=timing,
     )
     _apply_allocation_modifier(sig, allocation_pct, is_watchlist)
+    if hold_class == "anchor":
+        _apply_anchor_override(sig)
     return sig
 
 
+# pylint: disable-next=too-many-positional-arguments
 def _build_stock_no_analyst_signal(
     rec: AnalystRec,
     allocation_pct: Optional[float],
     is_watchlist: bool,
     stock_data: dict | None = None,
+    hold_class: str = "auto",
+    timing: dict | None = None,
 ) -> InvestmentSignal:
     """Signal for a stock without analyst coverage but possibly with FCF yield."""
     fcf = rec.fcf_yield
@@ -533,6 +710,7 @@ def _build_stock_no_analyst_signal(
     conf = min(conf, 45)  # never confident without analyst data
     risks = ["No analyst coverage — limited independent validation of this signal"]
     market_mood = _derive_stock_market_mood(stock_data)
+    role = _instrument_role(rec, hold_class)
     action, conf, reasons, risks = _refine_for_momentum(
         action=action,
         conf=conf,
@@ -541,11 +719,22 @@ def _build_stock_no_analyst_signal(
         market_mood=market_mood,
         security_type="STOCK",
     )
+    action, conf, reasons, risks = _apply_timing_modifier(
+        action=action,
+        conf=conf,
+        reasons=reasons,
+        risks=risks,
+        zone=None,
+        role=role,
+        timing=timing,
+    )
     if stock_data:
         _append_source_once(
             source,
             ["current_price", "day_change_pct", "fifty_two_week_high", "fifty_two_week_low"],
         )
+    if timing and timing.get("available"):
+        _append_source_once(source, ["timing_signal"])
     generated_at = datetime.now(timezone.utc).isoformat()
     signal_mix = _stock_signal_mix(
         action=action,
@@ -569,16 +758,23 @@ def _build_stock_no_analyst_signal(
         flip_triggers=_flip_triggers_stock(rec, stock_data),
         signal_mix=signal_mix,
         freshness=_freshness_payload(generated_at),
+        hold_class=hold_class,
+        instrument_role=role,
+        timing=timing,
     )
     _apply_allocation_modifier(sig, allocation_pct, is_watchlist)
+    if hold_class == "anchor":
+        _apply_anchor_override(sig)
     return sig
 
 
-# pylint: disable-next=too-many-statements
+# pylint: disable-next=too-many-branches,too-many-statements
 def _build_etf_signal(
     rec: AnalystRec,
     allocation_pct: Optional[float],
     is_watchlist: bool,
+    hold_class: str = "auto",
+    timing: dict | None = None,
 ) -> InvestmentSignal:
     """Signal for an ETF using price_signal + etf_quality."""
     price_signal = rec.price_signal or {}
@@ -587,6 +783,7 @@ def _build_etf_signal(
     zone = (price_signal.get("priceZoneLabel") or "Unavailable").strip()
     percentile = price_signal.get("percentile")
     market_mood = _derive_etf_market_mood(price_signal)
+    role = _instrument_role(rec, hold_class)
 
     zone_to_action = {
         "Bargain": "add",
@@ -641,6 +838,8 @@ def _build_etf_signal(
             "price_signal.vs200dChangePct",
         ],
     )
+    if timing and timing.get("available"):
+        _append_source_once(source, ["timing_signal"])
 
     # Risks
     risks: list[str] = []
@@ -670,6 +869,15 @@ def _build_etf_signal(
         zone=zone,
         security_type="ETF",
     )
+    action, conf, reasons, risks = _apply_timing_modifier(
+        action=action,
+        conf=conf,
+        reasons=reasons,
+        risks=risks,
+        zone=zone,
+        role=role,
+        timing=timing,
+    )
     generated_at = datetime.now(timezone.utc).isoformat()
     signal_mix = _etf_signal_mix(
         action=action,
@@ -693,8 +901,13 @@ def _build_etf_signal(
         flip_triggers=_flip_triggers_etf(price_signal),
         signal_mix=signal_mix,
         freshness=_freshness_payload(generated_at),
+        hold_class=hold_class,
+        instrument_role=role,
+        timing=timing,
     )
     _apply_allocation_modifier(sig, allocation_pct, is_watchlist)
+    if hold_class == "anchor":
+        _apply_anchor_override(sig, zone=zone)
     return sig
 
 
@@ -704,6 +917,8 @@ def build_investment_signal(
     allocation_pct: Optional[float] = None,
     is_watchlist: bool = False,
     stock_data: dict | None = None,
+    hold_class: str = "auto",
+    timing: dict | None = None,
 ) -> InvestmentSignal:
     """
     Build a deterministic InvestmentSignal from an AnalystRec + holding context.
@@ -711,14 +926,18 @@ def build_investment_signal(
     """
     try:
         if rec.security_type == "ETF" and rec.action == "etf-quality":
-            return _build_etf_signal(rec, allocation_pct, is_watchlist)
+            return _build_etf_signal(rec, allocation_pct, is_watchlist, hold_class, timing)
 
         if rec.action in ("buy", "hold", "sell"):
-            return _build_stock_signal(rec, allocation_pct, is_watchlist, stock_data)
+            return _build_stock_signal(
+                rec, allocation_pct, is_watchlist, stock_data, hold_class, timing
+            )
 
         # Stock with no analyst coverage — try FCF yield fallback
         if rec.action in ("unavailable",):
-            return _build_stock_no_analyst_signal(rec, allocation_pct, is_watchlist, stock_data)
+            return _build_stock_no_analyst_signal(
+                rec, allocation_pct, is_watchlist, stock_data, hold_class, timing
+            )
 
         return _needs_data(rec.ticker)
 

@@ -101,7 +101,12 @@ def _not_rated(ticker: str, info: Optional[dict] = None) -> AnalystRec:
     )
 
 
-def _etf_quality_rec(ticker: str, info: dict, stock) -> AnalystRec:
+def _etf_quality_rec(
+    ticker: str,
+    info: dict,
+    stock,
+    closes: list[float] | None = None,
+) -> AnalystRec:
     static = get_static_holding_metadata(ticker)
     data = {
         **static,
@@ -121,7 +126,7 @@ def _etf_quality_rec(ticker: str, info: dict, stock) -> AnalystRec:
         ),
     }
     quality = calculate_etf_quality_score(data)
-    price_signal = fetch_etf_price_signal(ticker, data, stock)
+    price_signal = fetch_etf_price_signal(ticker, data, stock, closes=closes)
     label = f"ETF Quality: {quality['qualityLabel']}"
     subparts = []
     if quality["costLabel"] != "Unknown":
@@ -166,7 +171,7 @@ def _action_from_mean(mean: float) -> str:
     return "sell"
 
 
-def _fetch_from_yfinance(ticker: str) -> AnalystRec:
+def _fetch_from_yfinance(ticker: str, closes: list[float] | None = None) -> AnalystRec:
     """
     Pull analyst consensus from Yahoo Finance.
     Returns ETF quality for ETFs and unavailable for missing stock analyst data.
@@ -176,7 +181,7 @@ def _fetch_from_yfinance(ticker: str) -> AnalystRec:
 
     security_type = classify_security(ticker, info)
     if security_type == SecurityType.ETF:
-        return _etf_quality_rec(ticker, info, stock)
+        return _etf_quality_rec(ticker, info, stock, closes=closes)
 
     quote_type = str(info.get("quoteType") or "").lower()
     if quote_type in _NO_ANALYST_COVERAGE_TYPES or security_type in {
@@ -224,14 +229,14 @@ def _fetch_from_yfinance(ticker: str) -> AnalystRec:
     )
 
 
-def get_analyst_recommendation(ticker: str) -> AnalystRec:
+def get_analyst_recommendation(ticker: str, closes: list[float] | None = None) -> AnalystRec:
     """
     Return analyst consensus for a single ticker.
     Always returns a result — falls back to unavailable on any error.
     """
     ticker = ticker.upper()
     try:
-        return _fetch_from_yfinance(ticker)
+        return _fetch_from_yfinance(ticker, closes=closes)
     except Exception as exc:
         logger.warning(
             "Analyst rec fetch failed; exception_type=%s",

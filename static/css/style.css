@@ -8279,6 +8279,36 @@ tr.research-holding-row:hover {
     font-variant-numeric: tabular-nums;
 }
 
+.verdict-anchor-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    min-height: 22px;
+    padding: 0.12rem 0.42rem;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--accent-green) 28%, transparent);
+    background: color-mix(in srgb, var(--accent-green) 8%, transparent);
+    color: var(--text-tertiary);
+    font-size: 0.58rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    text-transform: none;
+    cursor: pointer;
+}
+
+.verdict-anchor-pill.is-anchor {
+    color: var(--accent-green);
+    background: color-mix(in srgb, var(--accent-green) 16%, transparent);
+    border-color: color-mix(in srgb, var(--accent-green) 40%, transparent);
+}
+
+.verdict-anchor-pill:hover,
+.verdict-anchor-pill:focus-visible {
+    color: var(--accent-green);
+    border-color: color-mix(in srgb, var(--accent-green) 54%, transparent);
+    outline: none;
+}
+
 /* ── Hero row: die + action text + big confidence number ── */
 .verdict-hero {
     display: flex;
@@ -8551,6 +8581,12 @@ tr.research-holding-row:hover {
     width: 1px;
     height: 14px;
     background: color-mix(in srgb, var(--text-tertiary) 38%, transparent);
+}
+
+.verdict-timing-copy {
+    color: var(--text-primary);
+    font-weight: 680;
+    text-transform: capitalize;
 }
 
 .signal-mix-items {

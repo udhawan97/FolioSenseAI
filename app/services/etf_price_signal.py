@@ -206,16 +206,22 @@ def calculate_etf_price_signal(
     }
 
 
-def fetch_etf_price_signal(ticker: str, info: Mapping[str, Any], stock: Any) -> dict[str, Any]:
+def fetch_etf_price_signal(
+    ticker: str,
+    info: Mapping[str, Any],
+    stock: Any,
+    closes: Iterable[Any] | None = None,
+) -> dict[str, Any]:
     """Fetch yfinance history defensively, then calculate the ETF price-zone signal."""
-    closes: list[float] = []
-    try:
-        history = stock.history(period="1y", auto_adjust=True)
-        closes = history_closes(history)
-    except Exception as exc:
-        logger.debug(
-            "ETF price history fetch failed; exception_type=%s",
-            type(exc).__name__,
-        )
-        closes = []
-    return calculate_etf_price_signal({"ticker": ticker, **dict(info)}, closes)
+    close_values = _clean_numbers(closes if closes is not None else [])
+    if closes is None:
+        try:
+            history = stock.history(period="1y", auto_adjust=True)
+            close_values = history_closes(history)
+        except Exception as exc:
+            logger.debug(
+                "ETF price history fetch failed; exception_type=%s",
+                type(exc).__name__,
+            )
+            close_values = []
+    return calculate_etf_price_signal({"ticker": ticker, **dict(info)}, close_values)

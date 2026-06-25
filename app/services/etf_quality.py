@@ -262,6 +262,7 @@ def calculate_etf_quality_score(etf_data: Mapping[str, Any]) -> dict[str, Any]:
             "diversificationLabel": diversification,
             "concentrationRiskLabel": concentration_risk,
             "categoryRiskLabel": category_risk,
+            "category": category or "",
             "explanationBullets": ["Insufficient ETF data to score quality."],
             "missingFields": missing_fields,
         }
@@ -290,6 +291,7 @@ def calculate_etf_quality_score(etf_data: Mapping[str, Any]) -> dict[str, Any]:
         "diversificationLabel": diversification,
         "concentrationRiskLabel": concentration_risk,
         "categoryRiskLabel": category_risk,
+        "category": category or "",
         "explanationBullets": bullets,
         "missingFields": missing_fields,
     }

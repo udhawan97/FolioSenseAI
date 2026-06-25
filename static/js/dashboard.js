@@ -3092,8 +3092,8 @@ function _verdictTip({ title, body, hint = "", icon = "bi-info-circle-fill", var
 function _verdictInfoTip() {
     return _verdictTip({
         title: "How Folio Sense decides",
-        body: "Combines analyst consensus (for stocks) or price-zone + fund quality (for ETFs) with recent momentum and how big the position is. It defaults to Hold and only leans Add or Trim when the signals clearly point that way. It's a calculated read, not financial advice.",
-        hint: "Re-scan to refresh it with the latest market data.",
+        body: "It blends the signals that fit each holding — analyst consensus for stocks, price-zone and fund quality for ETFs — with the recent trend and your position size. It defaults to Hold and only leans Add or Trim when the evidence clearly points there.",
+        hint: "Re-scan to refresh on the latest prices. Not financial advice.",
         icon: "bi-dice-5-fill",
     });
 }
@@ -3101,9 +3101,29 @@ function _verdictInfoTip() {
 function _confidenceTip() {
     return _verdictTip({
         title: "Confidence",
-        body: "How strongly the underlying signals agree. Higher means more of them point the same way. A calm 30-60% on a Hold is normal - it just means there's no strong push either direction.",
+        body: "How strongly the underlying signals agree. A calm 30–60% on a Hold is normal — no strong push either way. Higher means more signals point the same way.",
         icon: "bi-speedometer2",
     });
+}
+
+function _anchorTipAttrs() {
+    return `data-tip-title="Anchor hold"
+        data-tip-body="Mark holdings you plan to keep for the long run. Folio Sense never suggests trimming an anchor — instead it flags good moments to add more when the price dips below its own trend. Set it here or in Manage Holdings."
+        data-tip-icon="bi-anchor"`;
+}
+
+function _renderAnchorPill(verdict, ticker) {
+    const isAnchor = verdict?.hold_class === "anchor";
+    const holding = latestHoldings.find(h => h.ticker === ticker);
+    if (!isAnchor && !holding?.id) return "";
+    const pressed = isAnchor ? "true" : "false";
+    return `<button class="verdict-anchor-pill tip-trigger ${isAnchor ? "is-anchor" : ""}"
+            type="button"
+            aria-pressed="${pressed}"
+            onclick="toggleAnchorHold(event, ${holding?.id || "null"}, ${inlineJsString(ticker)})"
+            ${_anchorTipAttrs()}>
+            <i class="bi bi-anchor" aria-hidden="true"></i> Anchor
+        </button>`;
 }
 
 function _renderFlipTriggers(verdict) {
@@ -3121,8 +3141,38 @@ function _renderFlipTriggers(verdict) {
         </span>
         ${_verdictTip({
             title: "What flips it",
-            body: "The rough price levels where the verdict would change. For ETFs we map the cheap zone (about the lowest quarter of the past year) and the expensive zone (about the top fifth) to a price; for stocks we frame it around the analyst target and the 52-week range. Approximate, and only shown when the data supports it.",
+            body: "The rough price levels where the verdict would change — the cheaper zone where it tilts toward adding, the richer zone where it tilts toward trimming. Approximate, and shown only when the data supports it.",
             icon: "bi-signpost-split",
+        })}
+    </div>`;
+}
+
+function _renderTimingLine(verdict) {
+    const timing = verdict?.timing;
+    if (!timing?.available) return "";
+    const parts = [];
+    if (timing.cross?.type) {
+        const label = timing.cross.type === "golden" ? "Golden cross" : "Death cross";
+        parts.push(`${label} ${timing.cross.sessions_ago}d ago`);
+    } else if (timing.momentum_state) {
+        parts.push(String(timing.momentum_state).replaceAll("_", " "));
+    }
+    if (Number.isFinite(timing.vs50d_pct)) parts.push(`${timing.vs50d_pct}% vs 50d`);
+    if (Number.isFinite(timing.drawdown_from_52w_high_pct)) {
+        parts.push(`${timing.drawdown_from_52w_high_pct}% off high`);
+    }
+    const copy = parts.slice(0, 3).join(" · ");
+    if (!copy) return "";
+    return `<div class="verdict-insight-row verdict-timing-line">
+        <span class="verdict-row-icon"><i class="bi bi-activity" aria-hidden="true"></i></span>
+        <span class="verdict-row-copy">
+            <span class="verdict-face-label">Trend check</span>
+            <span class="verdict-timing-copy">${escapeHtml(copy)}</span>
+        </span>
+        ${_verdictTip({
+            title: "Timing signal",
+            body: "Reads the price against its 50- and 200-day averages, whether those just crossed (a golden or death cross) and how recently, whether momentum is building or fading, and how far it sits below its 12-month high. This is how it judges WHEN, not just what.",
+            icon: "bi-activity",
         })}
     </div>`;
 }
@@ -3135,7 +3185,7 @@ function _renderSinceLastScan(verdict) {
         ${escapeHtml(delta.label)}
         ${_verdictTip({
             title: "Since your last check",
-            body: "Compares this verdict with the one from your previous scan, so you can see what moved as the market changed.",
+            body: "Compares this verdict with your previous scan so you can see what moved as the market changed.",
             icon: "bi-clock-history",
         })}
     </span>`;
@@ -3149,7 +3199,7 @@ function _renderFreshness(verdict) {
         ${escapeHtml(fresh.label)}
         ${_verdictTip({
             title: "Freshness",
-            body: "Shows when this read was calculated from the latest scan data available to the dashboard. Re-scan to refresh market inputs.",
+            body: "When this read was last calculated. Re-scan to recompute it on the latest prices.",
             icon: "bi-arrow-repeat",
         })}
     </span>`;
@@ -3172,7 +3222,7 @@ function _renderSignalMix(verdict) {
         <span class="verdict-face-label">Signal mix</span>
         ${_verdictTip({
             title: "Signal mix",
-            body: "Each input that fed the verdict. Green supports the call, grey is neutral, red pushes the other way. The blend is what sets the confidence above.",
+            body: "Each input behind the call — Analyst, Valuation, Momentum, Quality. Green supports the verdict, grey is neutral, red points the other way. The blend sets the confidence shown above.",
             icon: "bi-ui-checks-grid",
         })}
         <span class="signal-mix-items">${dots}</span>
@@ -3185,7 +3235,7 @@ function _renderQuip(quip) {
         <span class="verdict-tea-label">Claude spilled:</span>
         ${_verdictTip({
             title: "Claude's take",
-            body: "Claude writes this one line from the same signals - it's color commentary, not a separate recommendation. It's cached so it barely costs anything and only refreshes when the verdict or market mood changes.",
+            body: "Claude writes this one line from the same signals — color commentary, not a separate recommendation. It's cached, so it costs almost nothing and only refreshes when the verdict or the market mood changes.",
             variant: "ai",
         })}
         ${escapeHtml(quip)}
@@ -3256,6 +3306,7 @@ function renderAiVerdict(section, verdict, ticker) {
     const reducedMotion  = prefersReducedMotion();
     const shouldReveal = !alreadySettled && !reducedMotion;
     const brandCopy = _verdictBrand(verdict);
+    const anchorPill = _renderAnchorPill(verdict, ticker);
 
     const reasonsHtml = reasons.map(r =>
         `<div class="intel-spec-row verdict-reason-row">
@@ -3288,6 +3339,7 @@ function renderAiVerdict(section, verdict, ticker) {
                 <span class="verdict-header-label">AI Verdict</span>
                 <span class="verdict-header-sep" aria-hidden="true">·</span>
                 <span class="verdict-header-ticker">${escapeHtml(ticker)}</span>
+                ${anchorPill}
             </div>
             <div class="verdict-hero">
                 <div class="verdict-die ${dieClass}" aria-hidden="true">
@@ -3318,6 +3370,7 @@ function renderAiVerdict(section, verdict, ticker) {
                 </div>
             </div>
             ${_renderFlipTriggers(verdict)}
+            ${_renderTimingLine(verdict)}
             ${metaChips ? `<div class="verdict-mini-chip-row">${metaChips}</div>` : ""}
             ${_renderSignalMix(verdict)}
             ${_renderQuip(quip)}
@@ -4214,6 +4267,7 @@ function renderManageHoldingsLoading(tbody) {
             <td><span class="shimmer-line" style="width:70px"></span></td>
             <td><span class="shimmer-line" style="width:92px"></span></td>
             <td><span class="shimmer-line" style="width:92px"></span></td>
+            <td><span class="shimmer-line" style="width:54px"></span></td>
             <td><span class="shimmer-line" style="width:74px"></span></td>
         </tr>
     `).join("");
@@ -4236,7 +4290,7 @@ async function loadManageHoldings({ preserveExisting = false } = {}) {
 
         tbody.innerHTML = "";
         if (!data.holdings.length) {
-            tbody.innerHTML = `<tr><td colspan="4" class="text-center text-secondary py-4">No holdings yet.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-secondary py-4">No holdings yet.</td></tr>`;
             return;
         }
 
@@ -4245,6 +4299,7 @@ async function loadManageHoldings({ preserveExisting = false } = {}) {
             const tickerLabel = escapeHtml(h.ticker);
             const tickerArg = inlineJsString(h.ticker);
             const isWatchlist = !!h.is_watchlist;
+            const isAnchor = h.hold_class === "anchor";
             row.id = `manage-row-${h.id}`;
             if (isWatchlist) row.classList.add("watchlist-row");
             const watchlistBadge = isWatchlist
@@ -4273,6 +4328,11 @@ async function loadManageHoldings({ preserveExisting = false } = {}) {
                                   text-white d-inline" style="width:90px"
                            id="cost-${h.id}" placeholder="--">
                 </td>
+                <td class="text-center">
+                    <input class="form-check-input anchor-hold-check" type="checkbox"
+                           id="anchor-${h.id}" ${isAnchor ? "checked" : ""}
+                           aria-label="Anchor ${tickerLabel}">
+                </td>
                 <td>
                     <button class="btn btn-sm btn-outline-primary me-1"
                             onclick="updateHolding(${h.id})" aria-label="Save ${tickerLabel}">
@@ -4285,7 +4345,7 @@ async function loadManageHoldings({ preserveExisting = false } = {}) {
     } catch (err) {
         console.warn("Unable to load manage holdings:", err);
         if (requestId === manageHoldingsRequestId && !preserveExisting) {
-            tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger py-4">Unable to load holdings.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-4">Unable to load holdings.</td></tr>`;
         }
     } finally {
         if (requestId === manageHoldingsRequestId) popover?.classList.remove("is-loading");
@@ -4296,6 +4356,7 @@ async function loadManageHoldings({ preserveExisting = false } = {}) {
 async function updateHolding(holdingId) {
     const shares = parseFloat(document.getElementById(`shares-${holdingId}`).value);
     const avgCost = parseFloat(document.getElementById(`cost-${holdingId}`).value) || null;
+    const holdClass = document.getElementById(`anchor-${holdingId}`)?.checked ? "anchor" : "auto";
 
     if (isNaN(shares) || shares <= 0) {
         alert("Shares must be a positive number");
@@ -4305,13 +4366,64 @@ async function updateHolding(holdingId) {
     const res = await fetch(`/api/portfolio/holdings/${holdingId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shares, avg_cost: avgCost }),
+        body: JSON.stringify({ shares, avg_cost: avgCost, hold_class: holdClass }),
     });
     if (res.ok) {
         showToast("Holding updated!", "success");
         refreshPortfolioMutationInBackground();
+        refreshAiVerdicts();
     } else {
         showToast("Update failed", "danger");
+    }
+}
+
+async function refreshAiVerdicts() {
+    if (!Object.keys(cachedVerdicts).length && !intelligenceLoaded && !intelligenceLoading) return;
+    try {
+        const res = await fetch("/api/ai/investment-signals/all");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        Object.entries(data.signals || {}).forEach(([ticker, sig]) => {
+            cachedVerdicts[ticker] = sig;
+        });
+        document.querySelectorAll("tr[data-ticker]").forEach(mainRow => {
+            const ticker = mainRow.dataset.ticker;
+            const verdictSection = mainRow.nextElementSibling?.querySelector(".intel-verdict-section");
+            if (verdictSection) renderAiVerdict(verdictSection, cachedVerdicts[ticker], ticker);
+        });
+    } catch (err) {
+        console.warn("Unable to refresh verdicts:", err);
+    }
+}
+
+async function toggleAnchorHold(event, holdingId, ticker) {
+    event?.stopPropagation();
+    event?.preventDefault();
+    if (!holdingId) {
+        showToast("Open Manage Holdings to set Anchor", "info");
+        return;
+    }
+    const holding = latestHoldings.find(h => h.id === holdingId || h.ticker === ticker) || {};
+    const nextClass = holding.hold_class === "anchor" ? "auto" : "anchor";
+    try {
+        const res = await fetch(`/api/portfolio/holdings/${holdingId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ hold_class: nextClass }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        latestHoldings = latestHoldings.map(h => (
+            h.id === holdingId || h.ticker === ticker ? { ...h, hold_class: nextClass } : h
+        ));
+        const check = document.getElementById(`anchor-${holdingId}`);
+        if (check) check.checked = nextClass === "anchor";
+        showToast(nextClass === "anchor" ? `${ticker} anchored` : `${ticker} set to auto`, "success");
+        renderHoldings();
+        await refreshAiVerdicts();
+        refreshPortfolioMutationInBackground({ includeRecommendations: false });
+    } catch (err) {
+        console.warn("Unable to toggle anchor:", err);
+        showToast("Anchor update failed", "danger");
     }
 }
 

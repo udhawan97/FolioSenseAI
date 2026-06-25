@@ -18,6 +18,16 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 # ── Holding Schemas ────────────────────────────────────────────────────
 
 _TICKER_PATTERN = re.compile(r"^[A-Z0-9.^-]{1,10}$")
+_HOLD_CLASS_VALUES = {"auto", "anchor"}
+
+
+def _normalize_hold_class(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    hold_class = str(value).strip().lower()
+    if hold_class not in _HOLD_CLASS_VALUES:
+        raise ValueError("hold_class must be 'auto' or 'anchor'")
+    return hold_class
 
 class HoldingCreate(BaseModel):
     """Data required to add a new holding."""
@@ -27,6 +37,7 @@ class HoldingCreate(BaseModel):
     avg_cost: Optional[float] = Field(None, gt=0, description="Average purchase price per share")
     notes: Optional[str] = Field(None, max_length=500)
     is_watchlist: Optional[bool] = False  # True = research-only, excluded from P&L
+    hold_class: Optional[str] = Field(default="auto")
 
     @field_validator("ticker")
     @classmethod
@@ -39,6 +50,11 @@ class HoldingCreate(BaseModel):
             )
         return ticker
 
+    @field_validator("hold_class")
+    @classmethod
+    def valid_hold_class(cls, v):
+        return _normalize_hold_class(v) or "auto"
+
 
 class HoldingUpdate(BaseModel):
     """Fields that can be changed on an existing holding. All fields are optional."""
@@ -47,6 +63,12 @@ class HoldingUpdate(BaseModel):
     notes: Optional[str] = Field(None, max_length=500)
     is_active: Optional[bool] = None
     is_watchlist: Optional[bool] = None  # Toggle research mode without affecting P&L
+    hold_class: Optional[str] = None
+
+    @field_validator("hold_class")
+    @classmethod
+    def valid_hold_class(cls, v):
+        return _normalize_hold_class(v)
 
 
 class HoldingResponse(BaseModel):
@@ -59,6 +81,7 @@ class HoldingResponse(BaseModel):
     shares: float
     avg_cost: Optional[float]
     is_active: bool
+    hold_class: str
     notes: Optional[str]
     added_at: datetime
 

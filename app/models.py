@@ -42,6 +42,8 @@ class Holding(Base):
     is_active = Column(Boolean, default=True)               # False means soft-deleted
     # True = research-only, excluded from P&L and snapshots
     is_watchlist = Column(Boolean, default=False, server_default="0")
+    # auto = Folio Sense decides core/tactical; anchor = long-horizon never-trim hold
+    hold_class = Column(String(20), nullable=False, default="auto", server_default="auto")
     notes = Column(Text, nullable=True)
     added_at = Column(DateTime, default=func.now())
 

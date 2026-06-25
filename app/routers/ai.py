@@ -37,6 +37,12 @@ from app.services.investment_signal import (
     build_investment_signal,
     signal_to_dict,
 )
+from app.services.timing_signal import (
+    build_timing_signal,
+    get_batched_history_closes,
+    get_cached_history_closes,
+    timing_bucket,
+)
 from app.services.ai_service import fallback_quip, generate_verdict_quips
 from app.services.verdict_scan_cache import attach_since_last_scan
 
@@ -629,6 +635,7 @@ _ACTION_CACHE_CODE = {"add": "a", "hold": "h", "trim": "t", "needs-data": "n"}
 _MOOD_CACHE_CODE = {
     "hot": "hot", "warm": "warm", "neutral": "neut", "cooling": "cool", "cold": "cold"
 }
+_HOLD_CLASS_CACHE_CODE = {"auto": "auto", "anchor": "anch"}
 
 VERDICT_BRAND_COPY = {
     "kicker": VERDICT_BRAND_KICKER,
@@ -648,13 +655,22 @@ _NEEDS_DATA_SIGNAL = {
     "signal_mix": [],
     "freshness": None,
     "since_last_scan": None,
+    "hold_class": "auto",
+    "instrument_role": "tactical",
+    "timing": None,
 }
 
 
 def _holding_meta(db: Session, portfolio_id: int = 1) -> dict[str, dict]:
-    """Return ticker → {shares, avg_cost, is_watchlist} for active holdings."""
+    """Return ticker → holding context for active holdings."""
     rows = (
-        db.query(Holding.ticker, Holding.shares, Holding.avg_cost, Holding.is_watchlist)
+        db.query(
+            Holding.ticker,
+            Holding.shares,
+            Holding.avg_cost,
+            Holding.is_watchlist,
+            Holding.hold_class,
+        )
         .filter(Holding.portfolio_id == portfolio_id, Holding.is_active.is_(True))
         .all()
     )
@@ -663,6 +679,7 @@ def _holding_meta(db: Session, portfolio_id: int = 1) -> dict[str, dict]:
             "shares": float(r[1] or 0),
             "avg_cost": float(r[2] or 0),
             "is_watchlist": bool(r[3]),
+            "hold_class": str(r[4] or "auto"),
         }
         for r in rows
     }
@@ -687,11 +704,29 @@ def _compute_allocation_pcts(holding_meta: dict, quotes: dict) -> dict[str, floa
     return result
 
 
-def _verdict_summary_type(action: str, market_mood: str) -> str:
+def _verdict_summary_type(
+    action: str,
+    market_mood: str,
+    hold_class: str = "auto",
+    timing_key: str = "none",
+) -> str:
     """Compact cache namespace for ticker verdict quips."""
     action_code = _ACTION_CACHE_CODE.get(action, "n")
     mood_code = _MOOD_CACHE_CODE.get(market_mood, "neut")
-    return f"v:{action_code}:{mood_code}"
+    hold_code = _HOLD_CLASS_CACHE_CODE.get(hold_class, "auto")
+    return f"v:{action_code}:{mood_code}:{hold_code}:{timing_key}"
+
+
+def _timing_for_quote(quote_data: dict | None, closes: list[float]) -> dict:
+    quote = quote_data or {}
+    return build_timing_signal(
+        closes,
+        current_price=quote.get("current_price"),
+        high_52w=quote.get("fifty_two_week_high"),
+        low_52w=quote.get("fifty_two_week_low"),
+        fallback_ma50=quote.get("fifty_day_average"),
+        fallback_ma200=quote.get("two_hundred_day_average"),
+    )
 
 
 def _portfolio_state_signature(signals: dict[str, dict], alloc_map: dict[str, float]) -> dict:
@@ -768,6 +803,7 @@ async def get_investment_signal_single(ticker: str, db: Session = Depends(get_db
     meta = _holding_meta(db)
     holding = meta.get(ticker, {})
     is_watchlist = holding.get("is_watchlist", False)
+    hold_class = holding.get("hold_class", "auto")
 
     # Allocation pct needs portfolio total — fetch quote for this ticker only
     allocation_pct: float | None = None
@@ -778,12 +814,19 @@ async def get_investment_signal_single(ticker: str, db: Session = Depends(get_db
         alloc_map = _compute_allocation_pcts(meta, quotes)
         allocation_pct = alloc_map.get(ticker)
 
-    rec = get_analyst_recommendation(ticker)
+    closes = get_cached_history_closes(ticker)
+    timing = _timing_for_quote(
+        quote_data if not quote_data.get("error") else None,
+        closes,
+    )
+    rec = get_analyst_recommendation(ticker, closes=closes)
     sig = build_investment_signal(
         rec,
         allocation_pct=allocation_pct,
         is_watchlist=is_watchlist,
         stock_data=quote_data if not quote_data.get("error") else None,
+        hold_class=hold_class,
+        timing=timing,
     )
     sig_dict = signal_to_dict(sig)
     scan_snapshot_changed = attach_since_last_scan(db, ticker, sig_dict)
@@ -807,6 +850,7 @@ async def get_all_investment_signals(db: Session = Depends(get_db)):  # pylint: 
     active_tickers = _active_portfolio_tickers(db)
     holding_meta = _holding_meta(db)
     quotes = {q["ticker"]: q for q in get_all_quotes(active_tickers)}
+    history_map = get_batched_history_closes(active_tickers)
     alloc_map = _compute_allocation_pcts(holding_meta, quotes)
 
     signals: dict[str, dict] = {}
@@ -817,15 +861,23 @@ async def get_all_investment_signals(db: Session = Depends(get_db)):  # pylint: 
         try:
             meta = holding_meta.get(ticker, {})
             is_watchlist = meta.get("is_watchlist", False)
+            hold_class = meta.get("hold_class", "auto")
             allocation_pct = alloc_map.get(ticker)
 
             quote_data = quotes.get(ticker) or {}
-            rec = get_analyst_recommendation(ticker)
+            closes = history_map.get(ticker, [])
+            timing = _timing_for_quote(
+                quote_data if not quote_data.get("error") else None,
+                closes,
+            )
+            rec = get_analyst_recommendation(ticker, closes=closes)
             sig = build_investment_signal(
                 rec,
                 allocation_pct=allocation_pct,
                 is_watchlist=is_watchlist,
                 stock_data=quote_data if not quote_data.get("error") else None,
+                hold_class=hold_class,
+                timing=timing,
             )
             sig_dict = signal_to_dict(sig)
             scan_snapshot_changed = (
@@ -838,6 +890,8 @@ async def get_all_investment_signals(db: Session = Depends(get_db)):  # pylint: 
             summary_type = _verdict_summary_type(
                 sig_dict.get("action", "needs-data"),
                 sig_dict.get("market_mood", "neutral"),
+                sig_dict.get("hold_class", "auto"),
+                timing_bucket(sig_dict.get("timing")),
             )
             cached = (
                 db.query(AISummary)
@@ -918,6 +972,8 @@ async def get_all_investment_signals(db: Session = Depends(get_db)):  # pylint: 
             summary_type = _verdict_summary_type(
                 signals[ticker].get("action", "needs-data"),
                 signals[ticker].get("market_mood", "neutral"),
+                signals[ticker].get("hold_class", "auto"),
+                timing_bucket(signals[ticker].get("timing")),
             )
             try:
                 db.add(AISummary(

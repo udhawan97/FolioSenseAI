@@ -2,6 +2,7 @@
 Tests for app/services/investment_signal.py and related verdict infrastructure.
 No real network calls — AnalystRec objects are constructed directly.
 """
+# pylint: disable=protected-access
 import json
 import asyncio
 from unittest.mock import MagicMock, patch
@@ -86,6 +87,7 @@ def _etf_rec(
         "liquidityLabel": "High",
         "diversificationLabel": "Broad",
         "categoryRiskLabel": category_risk,
+        "category": "broad",
     }
     return AnalystRec(
         ticker="VOO",
@@ -137,6 +139,31 @@ def _make_ai_db(tickers=("NOW",), shares=10):
         )
     db.commit()
     return db
+
+
+def _timing(
+    *,
+    state="neutral",
+    cross_type=None,
+    sessions_ago=6,
+    near_low=False,
+    vs50=1.0,
+    vs200=2.0,
+    drawdown=8.0,
+):
+    return {
+        "available": True,
+        "momentum_state": state,
+        "cross": (
+            {"type": cross_type, "sessions_ago": sessions_ago, "recent": sessions_ago <= 20}
+            if cross_type else None
+        ),
+        "vs50d_pct": vs50,
+        "vs200d_pct": vs200,
+        "drawdown_from_52w_high_pct": drawdown,
+        "near_52w_low": near_low,
+        "bucket": state,
+    }
 
 
 # ── Stock buy/hold/sell → add/hold/trim mapping ────────────────────────────────
@@ -286,6 +313,60 @@ class TestSpeculativeGate:
     def test_non_speculative_bargain_is_add(self):
         sig = build_investment_signal(_etf_rec("Bargain", category_risk="Low"))
         assert sig.action == "add"
+
+
+class TestAnchorAndRole:
+    def test_anchor_never_trims_even_when_rich_and_concentrated(self):
+        sig = build_investment_signal(
+            _etf_rec("Rich", price_overrides={"percentile": 95}),
+            allocation_pct=28,
+            hold_class="anchor",
+            timing=_timing(state="rolling_over", cross_type="death"),
+        )
+        assert sig.action != "trim"
+        assert sig.hold_class == "anchor"
+        assert sig.instrument_role == "anchor"
+        assert any("Anchor hold" in reason for reason in sig.reasons)
+
+    def test_anchor_emits_buy_more_state_on_weakness(self):
+        sig = build_investment_signal(
+            _etf_rec("Bargain", price_overrides={"percentile": 8}),
+            hold_class="anchor",
+            timing=_timing(state="trend_intact", near_low=True, vs50=-4.0, vs200=2.5),
+        )
+        assert sig.action == "add"
+        assert sig.label == "Add (anchor)"
+        assert any("add to your anchor" in reason for reason in sig.reasons)
+
+    def test_broad_core_etf_stays_hold_under_mild_rich_noise(self):
+        sig = build_investment_signal(
+            _etf_rec("Rich", price_overrides={"percentile": 84}),
+            timing=_timing(state="trend_intact"),
+        )
+        assert sig.instrument_role == "core"
+        assert sig.action == "hold"
+
+    def test_tactical_rich_rolling_over_trims(self):
+        rec = _etf_rec("Rich", price_overrides={"percentile": 92})
+        rec.etf_quality["category"] = "sector"
+        sig = build_investment_signal(
+            rec,
+            timing=_timing(state="rolling_over", cross_type="death", sessions_ago=6),
+        )
+        assert sig.instrument_role == "tactical"
+        assert sig.action == "trim"
+        assert "50-day crossed below" in sig.reasons[0]
+
+    def test_tactical_bargain_golden_cross_adds(self):
+        rec = _etf_rec("Bargain", price_overrides={"percentile": 10})
+        rec.etf_quality["category"] = "thematic"
+        sig = build_investment_signal(
+            rec,
+            timing=_timing(state="stabilizing", cross_type="golden", sessions_ago=4),
+        )
+        assert sig.instrument_role == "tactical"
+        assert sig.action == "add"
+        assert "50-day crossed above" in sig.reasons[0]
 
 
 # ── Allocation risk modifier ───────────────────────────────────────────────────
@@ -474,7 +555,12 @@ def test_verdict_quip_cache_uses_action_and_market_mood(monkeypatch):
     calls = []
 
     monkeypatch.setattr(ai_router, "get_all_quotes", lambda _tickers: [quote_state["quote"]])
-    monkeypatch.setattr(ai_router, "get_analyst_recommendation", lambda _ticker: _stock_rec("buy"))
+    monkeypatch.setattr(ai_router, "get_batched_history_closes", lambda _tickers: {})
+    monkeypatch.setattr(
+        ai_router,
+        "get_analyst_recommendation",
+        lambda _ticker, closes=None: _stock_rec("buy"),
+    )
 
     def fake_generate(inputs):
         calls.append(inputs)
@@ -498,6 +584,40 @@ def test_verdict_quip_cache_uses_action_and_market_mood(monkeypatch):
     assert set(calls[0][0]) == {"ticker", "action", "confidence", "market_mood", "reason"}
 
 
+def test_verdict_quip_key_includes_hold_class_and_timing_bucket():
+    auto_key = ai_router._verdict_summary_type("hold", "neutral", "auto", "trend_intact")
+    anchor_key = ai_router._verdict_summary_type("hold", "neutral", "anchor", "trend_intact")
+    timing_key = ai_router._verdict_summary_type("hold", "neutral", "auto", "death-recent")
+
+    assert auto_key != anchor_key
+    assert auto_key != timing_key
+
+
+def test_all_signals_passes_batched_history_into_recommendation(monkeypatch):
+    db = _make_ai_db(("VOO",))
+    received = {}
+    closes = [100] * 210 + [102, 104, 106, 108, 110]
+
+    monkeypatch.setattr(
+        ai_router,
+        "get_all_quotes",
+        lambda _tickers: [_stock_quote(price=110, low=90, high=120, ticker="VOO")],
+    )
+    monkeypatch.setattr(ai_router, "get_batched_history_closes", lambda _tickers: {"VOO": closes})
+
+    def fake_rec(ticker, closes=None):
+        received[ticker] = closes
+        return _etf_rec("Fair")
+
+    monkeypatch.setattr(ai_router, "get_analyst_recommendation", fake_rec)
+    monkeypatch.setattr(ai_router, "generate_verdict_quips", lambda inputs: {})
+
+    result = asyncio.run(ai_router.get_all_investment_signals(db))
+
+    assert received["VOO"] is closes
+    assert result["signals"]["VOO"]["timing"]["cross"]["type"] == "golden"
+
+
 def test_portfolio_quip_cache_and_fallback(monkeypatch):
     db = _make_ai_db(("AAA", "BBB"))
     recs = {
@@ -514,7 +634,12 @@ def test_portfolio_quip_cache_and_fallback(monkeypatch):
             _stock_quote(price=80, low=50, high=120, day_change_pct=0.0, ticker="BBB"),
         ],
     )
-    monkeypatch.setattr(ai_router, "get_analyst_recommendation", lambda ticker: recs[ticker])
+    monkeypatch.setattr(ai_router, "get_batched_history_closes", lambda _tickers: {})
+    monkeypatch.setattr(
+        ai_router,
+        "get_analyst_recommendation",
+        lambda ticker, closes=None: recs[ticker],
+    )
 
     def fail_generate(inputs):
         calls.append(inputs)

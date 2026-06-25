@@ -80,6 +80,8 @@ def get_stock_data(ticker: str) -> dict:
             "day_low": round(info.get("dayLow") or current_price, 2),
             "fifty_two_week_high": round(info.get("fiftyTwoWeekHigh") or 0, 2),
             "fifty_two_week_low": round(info.get("fiftyTwoWeekLow") or 0, 2),
+            "fifty_day_average": _r(info.get("fiftyDayAverage"), 2),
+            "two_hundred_day_average": _r(info.get("twoHundredDayAverage"), 2),
             "volume": info.get("volume") or info.get("regularMarketVolume") or 0,
             "average_volume": info.get("averageVolume") or info.get("averageVolume10days") or 0,
             "market_cap": market_cap,

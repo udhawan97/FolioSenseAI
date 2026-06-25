@@ -1,12 +1,16 @@
 # pylint: disable=protected-access
 
+import asyncio
+
 from sqlalchemy import create_engine
+from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app import database as app_database
 from app.models import Base, Holding, Portfolio, RealizedTrade
 from app.routers import portfolio as portfolio_router
-from app.schemas import HoldingCreate
+from app.schemas import HoldingCreate, HoldingUpdate
 
 
 def make_db():
@@ -151,6 +155,50 @@ def test_default_portfolio_is_created_on_first_use(monkeypatch):
     assert portfolio.name == "My Portfolio"
     assert [h.ticker for h in holdings] == ["QQQ", "VOO"]
     assert all(h.shares == 0 for h in holdings)
+
+
+def test_hold_class_persists_via_update_endpoint():
+    db = make_db()
+    add_holding(db, "VOO", shares=1, avg_cost=400)
+    holding = db.query(Holding).filter(Holding.ticker == "VOO").first()
+
+    result = asyncio.run(
+        portfolio_router.update_holding(
+            holding.id,
+            HoldingUpdate(hold_class="anchor"),
+            db,
+        )
+    )
+
+    db.refresh(holding)
+    assert result["hold_class"] == "anchor"
+    assert holding.hold_class == "anchor"
+
+
+def test_hold_class_startup_migration_is_idempotent(tmp_path, monkeypatch):
+    db_path = tmp_path / "migration.db"
+    engine = create_engine(f"sqlite:///{db_path}")
+    with engine.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE holdings ("
+            "id INTEGER PRIMARY KEY, "
+            "portfolio_id INTEGER NOT NULL, "
+            "ticker VARCHAR(10) NOT NULL, "
+            "shares FLOAT NOT NULL, "
+            "avg_cost FLOAT NOT NULL, "
+            "is_active BOOLEAN, "
+            "is_watchlist BOOLEAN DEFAULT 0)"
+        ))
+
+    monkeypatch.setattr(app_database, "engine", engine)
+    monkeypatch.setattr(app_database.settings, "DATABASE_URL", f"sqlite:///{db_path}")
+
+    app_database.ensure_startup_migrations()
+    app_database.ensure_startup_migrations()
+
+    with engine.begin() as conn:
+        columns = [row[1] for row in conn.execute(text("PRAGMA table_info(holdings)"))]
+    assert columns.count("hold_class") == 1
 
 
 def test_holding_create_rejects_unsafe_ticker_characters():

@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 from app.config import settings
 
@@ -41,3 +41,21 @@ def get_db():
         yield db  # FastAPI injects this db object into the route function
     finally:
         db.close()
+
+
+def ensure_startup_migrations():
+    """Apply tiny idempotent SQLite migrations that create_all cannot cover."""
+    if not settings.DATABASE_URL.startswith("sqlite"):
+        return
+    with engine.begin() as conn:
+        columns = {
+            row[1]
+            for row in conn.execute(text("PRAGMA table_info(holdings)")).fetchall()
+        }
+        if "hold_class" not in columns:
+            conn.execute(
+                text(
+                    "ALTER TABLE holdings "
+                    "ADD COLUMN hold_class VARCHAR(20) NOT NULL DEFAULT 'auto'"
+                )
+            )

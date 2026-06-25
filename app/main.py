@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from app.routers import stocks, portfolio, ai
 from app.config import settings
-from app.database import engine
+from app.database import engine, ensure_startup_migrations
 from app import models
 
 
@@ -14,6 +14,7 @@ from app import models
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     models.Base.metadata.create_all(bind=engine)
+    ensure_startup_migrations()
     yield  # The app runs while we're "inside" this yield
 
 # Create the FastAPI application instance
