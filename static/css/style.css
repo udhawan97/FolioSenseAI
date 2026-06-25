@@ -6945,13 +6945,13 @@ body > .dashboard-pet {
     flex-direction: column;
     align-items: center;
     gap: 0.08rem;
-    width: 4.9rem;
+    width: 5.22rem;
     margin-top: 0.24rem;
 }
 .target-trend-line {
     --target-trend-color: var(--text-tertiary);
     display: grid;
-    grid-template-columns: 2rem 2.7rem;
+    grid-template-columns: 2rem 3rem;
     align-items: center;
     justify-content: center;
     column-gap: 0.22rem;
@@ -6970,6 +6970,7 @@ body > .dashboard-pet {
     color: var(--target-trend-color);
     font-weight: 800;
     text-align: left;
+    white-space: nowrap;
 }
 .target-trend-line.positive { --target-trend-color: var(--accent-green); }
 .target-trend-line.negative { --target-trend-color: var(--accent-red); }

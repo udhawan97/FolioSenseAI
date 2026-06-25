@@ -631,7 +631,11 @@ function setAiChecking(active, message = "Reading positions", insightsReady = fa
 }
 
 
+let _portfolioValueInFlight = false;
+
 async function loadPortfolioValue() {
+    if (_portfolioValueInFlight) return;
+    _portfolioValueInFlight = true;
     try {
         const res = await fetch("/api/portfolio/value");
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -682,30 +686,35 @@ async function loadPortfolioValue() {
             : null;
         latestHoldings = data.holdings;
         updateHoldingsFilterCounts();
-        renderAllocation();
 
-        if (data.best_performer) {
-            const el = document.getElementById("best-performer");
-            el.dataset.ticker = data.best_performer.ticker;
-            el.innerHTML = `${data.best_performer.ticker} <span style="font-size:.85em;opacity:.8">${formatPct(data.best_performer.day_change_pct)}</span>`;
-        }
-        if (data.worst_performer) {
-            const el = document.getElementById("worst-performer");
-            el.dataset.ticker = data.worst_performer.ticker;
-            el.innerHTML = `${data.worst_performer.ticker} <span style="font-size:.85em;opacity:.8">${formatPct(data.worst_performer.day_change_pct)}</span>`;
-        }
-        if (data.holdings.length) {
-            const largest = data.holdings.reduce((a, b) =>
-                a.current_value > b.current_value ? a : b);
-            const el = document.getElementById("largest-holding");
-            el.dataset.ticker = largest.ticker;
-            el.innerHTML = `${largest.ticker} <span style="font-size:.85em;opacity:.8">${formatCompact(largest.current_value)}</span>`;
-        }
+        // Wrap all rendering so Chart.js or DOM errors don't trigger "Refresh failed".
+        try {
+            renderAllocation();
 
-        // Show portfolio mutations as soon as valuation data arrives; sparklines can catch up.
-        renderHoldings();
-        latestTrendData = await loadTrendData(data.holdings.map(h => h.ticker));
-        renderHoldings();
+            if (data.best_performer) {
+                const el = document.getElementById("best-performer");
+                el.dataset.ticker = data.best_performer.ticker;
+                el.innerHTML = `${data.best_performer.ticker} <span style="font-size:.85em;opacity:.8">${formatPct(data.best_performer.day_change_pct)}</span>`;
+            }
+            if (data.worst_performer) {
+                const el = document.getElementById("worst-performer");
+                el.dataset.ticker = data.worst_performer.ticker;
+                el.innerHTML = `${data.worst_performer.ticker} <span style="font-size:.85em;opacity:.8">${formatPct(data.worst_performer.day_change_pct)}</span>`;
+            }
+            if (data.holdings.length) {
+                const largest = data.holdings.reduce((a, b) =>
+                    a.current_value > b.current_value ? a : b);
+                const el = document.getElementById("largest-holding");
+                el.dataset.ticker = largest.ticker;
+                el.innerHTML = `${largest.ticker} <span style="font-size:.85em;opacity:.8">${formatCompact(largest.current_value)}</span>`;
+            }
+
+            renderHoldings();
+            latestTrendData = await loadTrendData(data.holdings.map(h => h.ticker));
+            renderHoldings();
+        } catch (renderErr) {
+            console.warn("Portfolio render error (data is current):", renderErr);
+        }
 
     } catch (err) {
         console.error("Error loading portfolio value:", err);
@@ -729,6 +738,8 @@ async function loadPortfolioValue() {
                 </td>`;
             }
         }
+    } finally {
+        _portfolioValueInFlight = false;
     }
 }
 
@@ -2349,7 +2360,8 @@ function buildHoldingFact(data) {
 function formatSignalPct(value, decimals = 1) {
     if (!isFiniteNumber(value)) return "—";
     const numeric = Number(value);
-    return `${numeric >= 0 ? "+" : ""}${numeric.toFixed(decimals)}%`;
+    const d = Math.abs(numeric) >= 100 ? 0 : decimals;
+    return `${numeric >= 0 ? "+" : ""}${numeric.toFixed(d)}%`;
 }
 
 function signalTone(value) {
