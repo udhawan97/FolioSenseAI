@@ -222,7 +222,12 @@ def test_research_holding_can_be_added_without_shares(monkeypatch):
     monkeypatch.setattr(
         portfolio_router,
         "validate_ticker_symbol",
-        lambda ticker: {"valid": True, "ticker": ticker, "quote": quote(ticker, 100), "suggestions": []},
+        lambda ticker: {
+            "valid": True,
+            "ticker": ticker,
+            "quote": quote(ticker, 100),
+            "suggestions": [],
+        },
     )
 
     result = asyncio.run(

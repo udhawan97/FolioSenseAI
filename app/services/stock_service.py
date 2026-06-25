@@ -221,7 +221,10 @@ def validate_ticker_symbol(ticker: str, suggestion_limit: int = 3) -> dict:
         return {
             "valid": False,
             "ticker": normalized,
-            "message": "Ticker can use only letters, numbers, '.', '-', or '^' and must be 10 characters or fewer.",
+            "message": (
+                "Ticker can use only letters, numbers, '.', '-', or '^' "
+                "and must be 10 characters or fewer."
+            ),
             "suggestions": suggest_tickers(ticker, limit=suggestion_limit),
         }
 

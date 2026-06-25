@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite"/>
   <img src="https://img.shields.io/badge/Bootstrap-5-7952B3?style=flat-square&logo=bootstrap&logoColor=white" alt="Bootstrap 5"/>
   <img src="https://img.shields.io/badge/Chart.js-FF6384?style=flat-square&logo=chartdotjs&logoColor=white" alt="Chart.js"/>
-  <img src="https://img.shields.io/badge/release-v2.1-brightgreen?style=flat-square" alt="Release v2.1"/>
+  <img src="https://img.shields.io/badge/release-v2.2-brightgreen?style=flat-square" alt="Release v2.2"/>
 </p>
 
 <p align="center">
@@ -27,9 +27,9 @@
 
 ---
 
-> **v2.1 is here: FolioSenseAI now reads your portfolio like an analyst with a personality.**
+> **v2.2 is here: FolioSenseAI got sharper, cleaner, and a little more expensive-looking without actually becoming expensive.**
 >
-> FolioSenseAI tracks your holdings, pulls live prices from Yahoo Finance, and asks Claude AI to explain what on earth is happening — market context, sector moves, macro events, analyst takes, and now a clearer Add / Hold / Trim read. All the excuses reasons you need, in one dashboard.
+> FolioSenseAI tracks your holdings, pulls live prices from Yahoo Finance, validates the tickers before they enter the portfolio, and asks Claude AI to explain what on earth is happening. v2.2 adds a live Claude heartbeat, clearer AI cost accounting, cleaner portfolio math, and smoother dashboard polish. Responsible? Mostly. Charming? Unfortunately, yes.
 
 ---
 
@@ -51,6 +51,7 @@
 - Total portfolio value and daily P&L *(color-coded — green good, red bad, you know the drill)*
 - Allocation, return, and performance-history views
 - Market open/closed indicator with auto-refresh countdown — so you can watch it drop in real time
+- **Live feed HUD** with refresh state, force-refresh control, and Claude API heartbeat
 - **Portfolio Butler companion** — a lightweight dashboard pet with witty market reactions and a polished top-bar toggle
 
 ### 🧠 Portfolio Intelligence *(the whole point)*
@@ -68,6 +69,9 @@
 ### ⚙️ Portfolio Management
 - Add and remove holdings from the UI
 - Update share counts and average cost basis
+- Research-mode watchlist entries can be added without share counts
+- Ticker validation catches invalid symbols before they sneak into your portfolio wearing a fake mustache
+- Realized-sale rows can be deleted when your historical bookkeeping gets a little too creative
 - Soft-delete holdings while preserving historical trade data *(because your mistakes deserve to be remembered)*
 
 ---
@@ -103,23 +107,23 @@ You do not need to be a developer to run FolioSenseAI locally. Think of this lik
 
 The Anthropic API key is optional. Without it, FolioSenseAI still runs with live market data and portfolio tracking; AI explanations stay disabled until you add a key from [console.anthropic.com](https://console.anthropic.com/).
 
-These commands install the GitHub release [v2.1](https://github.com/udhawan97/FolioSenseAI/releases/tag/release-v2.1).
+These commands install the GitHub release [v2.2](https://github.com/udhawan97/FolioSenseAI/releases/tag/release-v2.2).
 
 **Mac / Linux**
 
 ```bash
-curl -L -o FolioSenseAI-v2.1.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v2.1.zip
-unzip FolioSenseAI-v2.1.zip
-cd FolioSenseAI-release-v2.1
+curl -L -o FolioSenseAI-v2.2.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v2.2.zip
+unzip FolioSenseAI-v2.2.zip
+cd FolioSenseAI-release-v2.2
 ./scripts/setup.sh
 ```
 
 **Windows PowerShell**
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v2.1.zip" -OutFile "FolioSenseAI-v2.1.zip"
-Expand-Archive -Path "FolioSenseAI-v2.1.zip" -DestinationPath .
-cd FolioSenseAI-release-v2.1
+Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v2.2.zip" -OutFile "FolioSenseAI-v2.2.zip"
+Expand-Archive -Path "FolioSenseAI-v2.2.zip" -DestinationPath .
+cd FolioSenseAI-release-v2.2
 .\scripts\setup.ps1
 ```
 
@@ -252,6 +256,28 @@ pip install --upgrade certifi
 
 ---
 
+## 🪄 What's New In v2.2
+
+**FolioSenseAI v2.2 is the "trust but verify" release: cleaner signals, safer inputs, better cost visibility, and a dashboard that behaves like it got a tailored suit.**
+
+- Added **Claude heartbeat** in the live feed HUD so the dashboard can show whether AI is reachable, missing a key, or taking a dramatic little network nap.
+- Added **force refresh** from the HUD for prices, signals, and dashboard state when waiting for the countdown feels emotionally unreasonable.
+- Improved **AI cache and cost accounting** so local fallback/deterministic rows are counted separately from Claude-backed summaries; billing now clearly shows paused when no Anthropic key is configured.
+- Added **ticker validation and suggestions** before new holdings are saved, including safe symbol-shape checks and Yahoo Finance search suggestions for near misses.
+- Added **research-mode holdings without shares**, letting you track ideas before they become positions. Commitment issues, but make it product strategy.
+- Added **realized-sale deletion** with today's snapshot recalculation for cleaner P&L history when an accidental sale record needs to exit gracefully.
+- Improved **total return math** across open and realized positions, including partial sales and zero-basis edge cases.
+- Polished the **dashboard layout, table sizing, holding intelligence cards, mobile holding form, and Claude copy** so the app reads cleaner without losing its little smirk.
+- Expanded regression coverage for Claude heartbeat, AI cache billing states, ticker validation, research holdings, realized-sale cleanup, and portfolio return calculations.
+
+### v2.2 Release Notes
+
+**For users:** v2.2 makes FolioSenseAI feel calmer and more trustworthy. The dashboard now tells you whether Claude is actually available, keeps AI cost estimates honest, catches bad tickers before they make a mess, and gives research ideas a proper home before they become real positions.
+
+**For developers:** v2.2 bumps the FastAPI app to `2.2.0`, adds `/api/ai/heartbeat`, improves `/api/ai/cache/stats`, introduces ticker validation and suggestions through `stock_service`, supports zero-share research holdings, exposes realized trade IDs, adds `DELETE /api/portfolio/trades/{trade_id}`, and broadens regression coverage around portfolio return math and billing state.
+
+---
+
 ## 🪄 What's New In v2.1
 
 **FolioSenseAI v2.1 adds conviction to the verdict — mark what you're keeping, lock in long-term positions, and get cleaner signals on everything else.**
@@ -332,6 +358,7 @@ Full interactive docs at `/docs` when running locally. Here's the cheat sheet:
 | `POST` | `/api/portfolio/holdings` | Add a holding |
 | `PUT` | `/api/portfolio/holdings/{id}` | Update shares/cost |
 | `DELETE` | `/api/portfolio/holdings/{id}` | Remove a holding (touch grass) |
+| `DELETE` | `/api/portfolio/trades/{trade_id}` | Remove one realized sale and refresh today's snapshot |
 | `GET` | `/api/portfolio/value` | Portfolio value, allocation, daily P&L |
 | `GET` | `/api/portfolio/pnl` | Historical returns and realized P&L |
 | `POST` | `/api/portfolio/seed` | Backward-compatible first-run helper; usually no longer needed |
@@ -354,6 +381,7 @@ Full interactive docs at `/docs` when running locally. Here's the cheat sheet:
 | `GET` | `/api/ai/analyst-recommendation/{ticker}` | Analyst take and ETF quality label for one holding |
 | `GET` | `/api/ai/analyst-recommendations/all` | Analyst takes and ETF quality labels for all holdings |
 | `GET` | `/api/ai/cache/stats` | Cache stats and estimated API cost |
+| `GET` | `/api/ai/heartbeat` | Claude API reachability for the dashboard HUD |
 
 </details>
 
