@@ -2061,6 +2061,21 @@ table tbody tr:hover {
     font-feature-settings: "tnum" 1;
 }
 
+.day-chg-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+}
+.day-chg-cell i {
+    font-size: 0.6rem;
+    opacity: 0.75;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
 @media (max-width: 991.98px) {
     .holdings-table {
         min-width: 900px;
@@ -5592,15 +5607,45 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
 
 .brand-intro-offline-note {
     display: block;
-    margin-top: 0.5rem;
-    padding: 0.28rem 0.5rem;
-    border-radius: 6px;
-    background: rgba(224, 82, 82, 0.08);
-    border: 1px solid rgba(224, 82, 82, 0.22);
+    margin-top: 0.6rem;
+    padding: 0.46rem 0.58rem 0.52rem;
+    border-radius: 8px;
+    background: rgba(224, 82, 82, 0.07);
+    border: 1px solid rgba(224, 82, 82, 0.2);
+    font-size: 0.64rem;
+    line-height: 1.45;
+}
+.brand-offline-label {
+    display: block;
     color: #e05252;
-    font-size: 0.62rem;
+    font-weight: 660;
+    font-size: 0.61rem;
+    letter-spacing: 0.025em;
+    margin-bottom: 0.38rem;
     font-style: italic;
-    line-height: 1.3;
+}
+.brand-offline-steps {
+    margin: 0;
+    padding-left: 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.18rem;
+    color: var(--text-secondary);
+}
+.brand-offline-steps a {
+    color: var(--brand-cyan);
+    text-decoration: none;
+    pointer-events: auto;
+    cursor: pointer;
+}
+.brand-offline-steps a:hover { text-decoration: underline; }
+.brand-offline-steps code {
+    font-family: var(--bs-font-monospace, monospace);
+    font-size: 0.88em;
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.07);
+    padding: 0.05em 0.25em;
+    border-radius: 3px;
 }
 
 /* ── Living dashboard pet ───────────────────────────────────────────────── */
@@ -6469,7 +6514,7 @@ body > .dashboard-pet {
     align-items: center;
     gap: 0.22rem;
 }
-.market-tile-change i { font-size: 0.6rem; opacity: 0.8; }
+.market-tile-change i { font-size: 0.6rem; opacity: 0.8; line-height: 1; flex-shrink: 0; }
 
 @keyframes marketTileTrace {
     0%, 54% {

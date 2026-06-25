@@ -1772,10 +1772,8 @@ function moveBadgeHtml(ticker) {
 function dayChangeHtml(h) {
     const up = h.day_change_pct >= 0;
     return `
-        <div class="${colorClass(h.day_change_pct)}">
-            <i class="bi ${up ? "bi-caret-up-fill" : "bi-caret-down-fill"}"
-               style="font-size:.65rem;vertical-align:middle;opacity:.75"></i>
-            ${formatPct(h.day_change_pct)}
+        <div class="day-chg-cell ${colorClass(h.day_change_pct)}">
+            <i class="bi ${up ? "bi-caret-up-fill" : "bi-caret-down-fill"}"></i>${formatPct(h.day_change_pct)}
         </div>
         ${moveBadgeHtml(h.ticker)}
     `;
@@ -3650,10 +3648,16 @@ function applyClaudeApiStatus(claudeLive) {
         }
 
         if (callout && !callout.querySelector(".brand-intro-offline-note")) {
-            const note = document.createElement("span");
+            const note = document.createElement("div");
             note.className = "brand-intro-offline-note";
             note.id = "brand-intro-offline-note";
-            note.textContent = "Local Intelligence is on duty. Reconnect Claude so Folio Sense can restore the subtle signal exchange.";
+            note.innerHTML = `<span class="brand-offline-label">Claude offline — AI features paused</span>
+<ol class="brand-offline-steps">
+  <li>Get an API key at <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer">console.anthropic.com</a></li>
+  <li>Open <code>.env</code> in your FolioSenseAI folder</li>
+  <li>Add the line: <code>ANTHROPIC_API_KEY=sk-ant-…</code></li>
+  <li>Save, then restart: <code>Ctrl+C</code> → <code>./scripts/start.sh</code></li>
+</ol>`;
             callout.appendChild(note);
         }
 
