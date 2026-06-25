@@ -699,6 +699,9 @@ async function loadPortfolioValue() {
 
     } catch (err) {
         console.error("Error loading portfolio value:", err);
+        _lastDashboardSyncText = "Sync failed";
+        const popUpdatedEl = document.getElementById("hud-pop-updated");
+        if (popUpdatedEl) popUpdatedEl.textContent = _lastDashboardSyncText;
     }
 }
 
