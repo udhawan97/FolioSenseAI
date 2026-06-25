@@ -11,6 +11,8 @@ def test_tip_system_uses_delegation_for_dynamic_verdict_triggers():
     assert 'addEventListener("focusin"' in js
     assert 'addEventListener("mouseover"' in js
     assert 'querySelectorAll(".tip-trigger").forEach' not in js
+    assert 'event.stopPropagation();\n    }, true)' not in js
+    assert 'if (event.target.closest(".tip-trigger")) return;' in js
     assert "data-tip-title" in js
     assert "Claude's take" in js
 

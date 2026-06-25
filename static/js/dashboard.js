@@ -1760,7 +1760,10 @@ function updateHoldingsTable(holdings, trendData = {}) {
             <td class="text-center d-none d-lg-table-cell" id="rec-cell-${h.ticker}">${renderAnalystRecCell(rec)}</td>
             <td class="text-center d-none d-xl-table-cell trend-cell"></td>
         `;
-        row.addEventListener("click", () => toggleSummaryRow(row));
+        row.addEventListener("click", event => {
+            if (event.target.closest(".tip-trigger")) return;
+            toggleSummaryRow(row);
+        });
         const canvas = document.createElement("canvas");
         canvas.className = "trend-sparkline";
         canvas.width = 150;
@@ -4493,11 +4496,6 @@ function initTips() {
         const trigger = tipTriggerFor(event.target);
         if (trigger && trigger === activeTrigger) hideTimeout = setTimeout(hideTip, 160);
     });
-    document.addEventListener("click", event => {
-        const trigger = tipTriggerFor(event.target);
-        if (trigger) event.stopPropagation();
-    }, true);
-
     window.addEventListener("scroll", hideTip, { passive: true, capture: true });
     window.addEventListener("resize", hideTip, { passive: true });
     document.addEventListener("click", event => {
