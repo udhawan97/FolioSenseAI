@@ -3,6 +3,7 @@ app/services/ai_service.py
 Claude AI integration for generating stock and portfolio summaries.
 """
 
+import json
 import logging
 import re
 
@@ -14,6 +15,104 @@ logger = logging.getLogger(__name__)
 client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
 
 MODEL = "claude-haiku-4-5-20251001"
+
+# Rotating fallback quips per action (no Claude required)
+_FALLBACK_QUIPS: dict[str, list[str]] = {
+    "add": [
+        "Quietly compounding while nobody's watching — the boring kind of brilliant.",
+        "The numbers like it, the signal likes it — a patient entry could pay off.",
+        "Solid footing at this price; the math whispers 'yes' without shouting.",
+        "Fundamentals doing the heavy lifting — a thoughtful add makes sense here.",
+    ],
+    "hold": [
+        "Doing exactly what it promised, no fireworks — let it cook.",
+        "No drama, no dazzle — and sometimes that's the whole strategy.",
+        "The boring middle ground where most of the real compounding happens.",
+        "Steady as she goes — sitting tight is a position, and right now it's the right one.",
+    ],
+    "trim": [
+        "Lovely run, but it's wearing a valuation it can't quite afford — maybe shave a slice.",
+        "The price has gotten ahead of the story — locking in a bit of that profit isn't cowardly.",
+        "When everything looks rich, it usually is — a light trim keeps your options open.",
+        "It's done the work; let some of those gains do theirs.",
+    ],
+    "needs-data": [
+        "The data fairy skipped this one — more signal needed before a verdict lands.",
+        "Gaps in the data make for gaps in the call — check back with better coverage.",
+        "Not enough to go on — a confident guess would just be noise in a suit.",
+        "Verdict: pending. The data gods are stingy here.",
+    ],
+}
+
+_FALLBACK_CYCLE: dict[str, int] = {}
+
+
+def fallback_quip(action: str) -> str:
+    """Return a rotating deterministic quip for the given action (no API required)."""
+    options = _FALLBACK_QUIPS.get(action, _FALLBACK_QUIPS["needs-data"])
+    idx = _FALLBACK_CYCLE.get(action, 0) % len(options)
+    _FALLBACK_CYCLE[action] = idx + 1
+    return options[idx]
+
+
+def generate_verdict_quips(signals: list[dict]) -> dict[str, str]:
+    """
+    One batched Haiku call for all holdings. Returns ticker→one-sentence quip.
+    Input: list of {ticker, action, confidence, reason (top reason or "")}.
+    On ANY failure returns {} so the router falls back to fallback_quip().
+    """
+    if not signals:
+        return {}
+
+    lines = "\n".join(
+        f'{s["ticker"]}: action={s["action"]}, confidence={s["confidence"]}%, '
+        f'reason="{s.get("reason", "")}"'
+        for s in signals
+    )
+
+    system = (
+        "You are writing one-sentence verdicts for an investment dashboard. "
+        "For each ticker listed, write exactly ONE sentence (≤18 words). "
+        "Be witty but professional — Claude's voice, not a broker's. "
+        "Reference the action (add/hold/trim/needs-data) naturally. "
+        "No new financial advice. No invented numbers. "
+        "Return ONLY a JSON object with ticker keys and sentence values, nothing else."
+    )
+
+    prompt = (
+        f"Write one witty sentence per ticker. Return only JSON.\n\n{lines}"
+    )
+
+    try:
+        message = client.messages.create(
+            model=MODEL,
+            max_tokens=60 * len(signals) + 80,
+            system=system,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text_block = next((b for b in message.content if b.type == "text"), None)
+        raw = text_block.text.strip() if text_block else ""
+
+        # Strip markdown code fences if present
+        raw = re.sub(r"^```[a-z]*\s*|\s*```$", "", raw, flags=re.DOTALL).strip()
+
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            return {}
+
+        result: dict[str, str] = {}
+        for ticker, sentence in parsed.items():
+            if isinstance(ticker, str) and isinstance(sentence, str) and sentence.strip():
+                result[ticker.upper()] = sentence.strip()
+        logger.info("Generated %d verdict quips", len(result))
+        return result
+
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.warning(
+            "generate_verdict_quips failed; exception_type=%s",
+            type(exc).__name__,
+        )
+        return {}
 
 
 def normalize_bullets(text: str) -> str:

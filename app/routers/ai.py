@@ -32,6 +32,11 @@ from app.services.stock_service import (
     get_all_quotes,
     get_stock_data,
 )
+from app.services.investment_signal import (
+    build_investment_signal,
+    signal_to_dict,
+)
+from app.services.ai_service import fallback_quip, generate_verdict_quips
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/ai", tags=["ai"])
@@ -589,6 +594,182 @@ async def get_all_intelligence(db: Session = Depends(get_db)):
 
 
 # ── Analyst Recommendation endpoints ─────────────────────────────────────────
+
+_VERDICT_DISCLAIMER = (
+    "\U0001f3b2 Claude rolled the dice — a hunch, not financial advice. "
+    "Verify before you trade."
+)
+
+_NEEDS_DATA_SIGNAL = {
+    "action": "needs-data",
+    "label": "Needs Data",
+    "confidence": 0,
+    "reasons": [],
+    "risks": ["Insufficient data to form a view"],
+    "data_quality": "low",
+    "source_fields": [],
+}
+
+
+def _holding_meta(db: Session, portfolio_id: int = 1) -> dict[str, dict]:
+    """Return ticker → {shares, avg_cost, is_watchlist} for active holdings."""
+    rows = (
+        db.query(Holding.ticker, Holding.shares, Holding.avg_cost, Holding.is_watchlist)
+        .filter(Holding.portfolio_id == portfolio_id, Holding.is_active.is_(True))
+        .all()
+    )
+    return {
+        str(r[0]).upper(): {
+            "shares": float(r[1] or 0),
+            "avg_cost": float(r[2] or 0),
+            "is_watchlist": bool(r[3]),
+        }
+        for r in rows
+    }
+
+
+def _compute_allocation_pcts(holding_meta: dict, quotes: dict) -> dict[str, float]:
+    """Compute allocation_pct for every non-watchlist holding."""
+    total_value = sum(
+        meta["shares"] * (quotes.get(ticker, {}).get("current_price") or 0)
+        for ticker, meta in holding_meta.items()
+        if not meta["is_watchlist"]
+    )
+    if total_value <= 0:
+        return {}
+    result: dict[str, float] = {}
+    for ticker, meta in holding_meta.items():
+        if meta["is_watchlist"]:
+            continue
+        price = (quotes.get(ticker, {}).get("current_price") or 0)
+        value = meta["shares"] * price
+        result[ticker] = round(value / total_value * 100, 1)
+    return result
+
+
+@router.get("/investment-signal/{ticker}")
+async def get_investment_signal_single(ticker: str, db: Session = Depends(get_db)):
+    """
+    Return deterministic investment signal + quip for a single ticker.
+    """
+    ticker = ticker.upper()
+    meta = _holding_meta(db)
+    holding = meta.get(ticker, {})
+    is_watchlist = holding.get("is_watchlist", False)
+
+    # Allocation pct needs portfolio total — fetch quote for this ticker only
+    allocation_pct: float | None = None
+    quote_data = get_stock_data(ticker)
+    if not quote_data.get("error"):
+        all_tickers = list(meta.keys())
+        quotes = {q["ticker"]: q for q in get_all_quotes(all_tickers)}
+        alloc_map = _compute_allocation_pcts(meta, quotes)
+        allocation_pct = alloc_map.get(ticker)
+
+    rec = get_analyst_recommendation(ticker)
+    sig = build_investment_signal(rec, allocation_pct=allocation_pct, is_watchlist=is_watchlist)
+    sig_dict = signal_to_dict(sig)
+
+    quip = fallback_quip(sig.action)
+    sig_dict["quip"] = quip
+    sig_dict["disclaimer"] = _VERDICT_DISCLAIMER
+    return sig_dict
+
+
+@router.get("/investment-signals/all")
+async def get_all_investment_signals(db: Session = Depends(get_db)):
+    """
+    Return investment signals for all active portfolio holdings.
+    Deterministic signals are computed fresh; quips are cached 24h in AISummary
+    (summary_type='verdict') with price-drift invalidation.
+    """
+    active_tickers = _active_portfolio_tickers(db)
+    holding_meta = _holding_meta(db)
+    quotes = {q["ticker"]: q for q in get_all_quotes(active_tickers)}
+    alloc_map = _compute_allocation_pcts(holding_meta, quotes)
+
+    signals: dict[str, dict] = {}
+    missing_quip_tickers: list[str] = []
+
+    for ticker in active_tickers:
+        try:
+            meta = holding_meta.get(ticker, {})
+            is_watchlist = meta.get("is_watchlist", False)
+            allocation_pct = alloc_map.get(ticker)
+
+            rec = get_analyst_recommendation(ticker)
+            sig = build_investment_signal(
+                rec, allocation_pct=allocation_pct, is_watchlist=is_watchlist
+            )
+            sig_dict = signal_to_dict(sig)
+            sig_dict["disclaimer"] = _VERDICT_DISCLAIMER
+
+            # Check cache for quip
+            current_price = (quotes.get(ticker) or {}).get("current_price")
+            cached = (
+                db.query(AISummary)
+                .filter(AISummary.ticker == ticker, AISummary.summary_type == "verdict")
+                .order_by(AISummary.generated_at.desc())
+                .first()
+            )
+            if cached and _cache_is_fresh(cached, current_price=current_price):
+                sig_dict["quip"] = getattr(cached, "summary_text", "")
+            else:
+                sig_dict["quip"] = None  # will be filled by batch call
+                missing_quip_tickers.append(ticker)
+
+            signals[ticker] = sig_dict
+
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.error(
+                "Investment signal failed for %s; exception_type=%s",
+                ticker, type(exc).__name__,
+            )
+            signals[ticker] = {
+                **_NEEDS_DATA_SIGNAL,
+                "ticker": ticker,
+                "quip": fallback_quip("needs-data"),
+                "disclaimer": _VERDICT_DISCLAIMER,
+                "generated_at": "",
+            }
+
+    # Batch-generate quips for stale/missing tickers
+    if missing_quip_tickers:
+        quip_inputs = [
+            {
+                "ticker": t,
+                "action": signals[t].get("action", "needs-data"),
+                "confidence": signals[t].get("confidence", 0),
+                "reason": (signals[t].get("reasons") or [""])[0],
+            }
+            for t in missing_quip_tickers
+        ]
+        new_quips = generate_verdict_quips(quip_inputs)
+
+        for ticker in missing_quip_tickers:
+            fallback_action = signals[ticker].get("action", "needs-data")
+            quip = new_quips.get(ticker) or fallback_quip(fallback_action)
+            signals[ticker]["quip"] = quip
+
+            # Persist to cache
+            current_price = (quotes.get(ticker) or {}).get("current_price")
+            try:
+                db.add(AISummary(
+                    ticker=ticker,
+                    summary_type="verdict",
+                    summary_text=quip,
+                    price_when_generated=current_price,
+                    model_used=MODEL if new_quips.get(ticker) else "fallback",
+                ))
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.debug(
+                    "Failed to cache quip for %s; exception_type=%s",
+                    ticker, type(exc).__name__,
+                )
+        db.commit()
+
+    return {"signals": signals, "count": len(signals)}
+
 
 @router.get("/analyst-recommendation/{ticker}")
 async def get_analyst_recommendation_single(ticker: str):

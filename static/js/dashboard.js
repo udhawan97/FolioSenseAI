@@ -342,6 +342,7 @@ let intelligenceExhaustedTickers = new Set();
 
 // Rating state: stock analyst ratings or ETF quality labels
 let cachedRecommendations = {};  // ticker → rec object from /api/ai/analyst-recommendations/all
+let cachedVerdicts = {};         // ticker → verdict object from /api/ai/investment-signals/all
 let aiCheckInterval = null;
 
 const AI_CHECK_MESSAGES = [
@@ -2737,6 +2738,7 @@ function injectSummaryRows(tbody) {
             td.innerHTML = `<div class="summary-body"><div class="intel-grid">
                 <div class="intel-coverage-section"></div>
                 <div class="intel-move-section"></div>
+                <div class="intel-verdict-section"></div>
                 <div class="intel-loading-overlay" aria-hidden="true">
                     <div class="intel-loading-content">
                         <img src="/static/img/brand/folio-orbit-icon.svg" alt="" class="intel-loading-orbit">
@@ -2757,6 +2759,7 @@ function injectSummaryRows(tbody) {
         const body          = expandRow.querySelector(".summary-body");
         const coverageSection = expandRow.querySelector(".intel-coverage-section");
         const moveSection   = expandRow.querySelector(".intel-move-section");
+        const verdictSection  = expandRow.querySelector(".intel-verdict-section");
 
         if (!coverageSection || !moveSection) return;
 
@@ -2777,6 +2780,15 @@ function injectSummaryRows(tbody) {
         } else if (hasCoverage) {
             renderHoldingCoverage(coverageSection, cachedIntelligence[ticker]);
             renderMoveExplainer(moveSection, cachedExplanations[ticker], cachedIntelligence[ticker]);
+        }
+
+        // Verdict section: render shimmer while intel is loading; render card when data arrives
+        if (verdictSection) {
+            if (intelligenceLoading && !cachedVerdicts[ticker]) {
+                renderAiVerdictShimmer(verdictSection, ticker);
+            } else {
+                renderAiVerdict(verdictSection, cachedVerdicts[ticker], ticker);
+            }
         }
 
         if (holdingIntelSettled(ticker)) {
@@ -2970,6 +2982,143 @@ async function loadAnalystRecommendations() {
         });
     } catch (err) {
         console.warn("Analyst recommendations unavailable:", err);
+    }
+}
+
+// ── AI Verdict rendering ──────────────────────────────────────────────────
+
+const VERDICT_ICONS = {
+    "add":        "bi-arrow-up-circle-fill",
+    "hold":       "bi-dash-circle-fill",
+    "trim":       "bi-arrow-down-circle-fill",
+    "needs-data": "bi-question-circle",
+};
+
+function _verdictColor(action) {
+    const map = {
+        "add":  "var(--accent-green)",
+        "hold": "var(--accent-yellow)",
+        "trim": "var(--accent-red)",
+    };
+    return map[action] || "var(--text-tertiary)";
+}
+
+const _verdictSettled = new Set();  // tickers whose die has already settled
+
+function renderAiVerdictShimmer(section, ticker) {
+    if (section._verdictShimmerTicker === ticker) return;
+    section._verdictShimmerTicker = ticker;
+    section.innerHTML = `
+        <div class="intel-label"><i class="bi bi-dice-5"></i> AI Verdict</div>
+        <div class="verdict-shimmer">
+            <div style="display:flex;align-items:center;gap:.6rem">
+                <div class="verdict-die is-tumbling" aria-hidden="true">
+                    <img src="/static/img/brand/folio-orbit-icon.svg" alt="">
+                </div>
+                <div class="shimmer-line" style="width:68px;height:22px;border-radius:999px"></div>
+                <div class="shimmer-line" style="flex:1;height:6px;border-radius:3px"></div>
+                <div class="shimmer-line" style="width:28px;height:10px;border-radius:3px"></div>
+            </div>
+            <div class="shimmer-line" style="width:90%;height:10px;border-radius:4px"></div>
+            <div class="shimmer-line" style="width:75%;height:10px;border-radius:4px"></div>
+        </div>`;
+}
+
+function _animateConfidence(el, target, reducedMotion) {
+    if (reducedMotion) { el.textContent = target + "%"; return; }
+    const start = performance.now();
+    const duration = 600;
+    function tick(now) {
+        const t = Math.min((now - start) / duration, 1);
+        const ease = 1 - Math.pow(1 - t, 3); // easeOutCubic
+        el.textContent = Math.round(ease * target) + "%";
+        if (t < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+}
+
+function renderAiVerdict(section, verdict, ticker) {
+    if (!verdict) {
+        section.innerHTML = `
+            <div class="intel-label"><i class="bi bi-dice-5"></i> AI Verdict</div>
+            <span class="intel-na">Verdict unavailable — tap Holding Intel to refresh.</span>`;
+        return;
+    }
+
+    const action    = verdict.action || "needs-data";
+    const label     = verdict.label  || "Needs Data";
+    const conf      = verdict.confidence || 0;
+    const quip      = verdict.quip || "";
+    const reasons   = verdict.reasons || [];
+    const risks     = verdict.risks   || [];
+    const disc      = verdict.disclaimer || "";
+    const icon      = VERDICT_ICONS[action] || "bi-question-circle";
+    const alreadySettled = _verdictSettled.has(ticker);
+    const reducedMotion  = prefersReducedMotion();
+
+    const reasonsHtml = reasons.map(r =>
+        `<div class="intel-spec-row"><span><i class="bi bi-check-circle" style="color:var(--verdict-color)"></i></span><strong>${escapeHtml(r)}</strong></div>`
+    ).join("");
+
+    const risksHtml = risks.map(r =>
+        `<div class="intel-spec-row"><span><i class="bi bi-exclamation-triangle"></i></span><strong><span class="spec-pill risk">${escapeHtml(r)}</span></strong></div>`
+    ).join("");
+
+    const dieClass = (!alreadySettled && !reducedMotion) ? "is-tumbling" : "is-settled";
+
+    section.innerHTML = `
+        <div class="intel-label"><i class="bi bi-dice-5"></i> AI Verdict</div>
+        <div class="intel-verdict" data-action="${escapeHtml(action)}"
+             aria-label="${escapeHtml(label)} verdict, ${conf}% confidence">
+            <div class="verdict-head">
+                <div class="verdict-die ${dieClass}" aria-hidden="true">
+                    <img src="/static/img/brand/folio-orbit-icon.svg" alt="">
+                    <i class="bi ${escapeHtml(icon)} verdict-action-glyph"
+                       style="color:var(--verdict-color)"></i>
+                </div>
+                <div class="verdict-chip">
+                    <i class="bi ${escapeHtml(icon)}"></i>
+                    ${escapeHtml(label)}
+                </div>
+                <div class="verdict-meter-wrap">
+                    <div class="verdict-meter"
+                         role="meter"
+                         aria-valuenow="${conf}"
+                         aria-valuemin="0"
+                         aria-valuemax="100"
+                         aria-label="Confidence">
+                        <div class="verdict-meter-fill" style="width:${conf}%"></div>
+                    </div>
+                    <span class="verdict-conf-pct" data-conf-target="${conf}">0%</span>
+                </div>
+            </div>
+            ${quip ? `<div class="verdict-quote">${escapeHtml(quip)}</div>` : ""}
+            ${(reasonsHtml || risksHtml) ? `
+            <div class="intel-spec-rows verdict-spec-rows">
+                ${reasonsHtml}
+                ${risksHtml}
+            </div>` : ""}
+            ${disc ? `<div class="intel-meta-row">
+                <span class="fact-tag">${escapeHtml(disc)}</span>
+            </div>` : ""}
+        </div>`;
+
+    // Kick off confidence count-up
+    const confEl = section.querySelector(".verdict-conf-pct");
+    if (confEl) _animateConfidence(confEl, conf, reducedMotion);
+
+    // Die settle animation (one-shot per ticker)
+    if (!alreadySettled && !reducedMotion) {
+        const die = section.querySelector(".verdict-die");
+        if (die) {
+            setTimeout(() => {
+                die.classList.remove("is-tumbling");
+                die.classList.add("is-settled");
+                _verdictSettled.add(ticker);
+            }, 350);
+        }
+    } else {
+        _verdictSettled.add(ticker);
     }
 }
 
@@ -3658,10 +3807,11 @@ async function loadHoldingIntelligence() {
     }
 
     try {
-        // Fetch both data sources in parallel
-        const [intelRes, moveRes] = await Promise.all([
+        // Fetch all data sources in parallel
+        const [intelRes, moveRes, verdictRes] = await Promise.all([
             fetch("/api/ai/intelligence/all/batch"),
             fetch("/api/ai/move-explanations/all"),
+            fetch("/api/ai/investment-signals/all"),
         ]);
 
         if (intelRes.ok) {
@@ -3681,6 +3831,13 @@ async function loadHoldingIntelligence() {
             });
         }
 
+        if (verdictRes.ok) {
+            const verdictData = await verdictRes.json();
+            Object.entries(verdictData.signals || {}).forEach(([ticker, sig]) => {
+                cachedVerdicts[ticker] = sig;
+            });
+        }
+
         await verifyAndRefreshIncompleteIntelligence();
         intelligenceLoaded = updateIntelligenceLoadedState();
         intelligenceLoading = false;
@@ -3693,8 +3850,10 @@ async function loadHoldingIntelligence() {
             if (!expandRow || !expandRow.classList.contains("summary-expand-row")) return;
             const coverageSection = expandRow.querySelector(".intel-coverage-section");
             const moveSection     = expandRow.querySelector(".intel-move-section");
+            const verdictSection  = expandRow.querySelector(".intel-verdict-section");
             if (coverageSection) renderHoldingCoverage(coverageSection, cachedIntelligence[ticker]);
             if (moveSection)     renderMoveExplainer(moveSection, cachedExplanations[ticker], cachedIntelligence[ticker]);
+            if (verdictSection)  renderAiVerdict(verdictSection, cachedVerdicts[ticker], ticker);
         });
 
         // If any rows were open during load, re-sync their max-height to the new content size
