@@ -200,8 +200,8 @@ def _timing_reason(timing: dict | None) -> str:
     if state == "trend_intact":
         return "Trend check is intact above key moving averages"
     drawdown = timing.get("drawdown_from_52w_high_pct")
-    if drawdown is not None:
-        return f"Trading {drawdown:.0f}% below its 12-month high"
+    if drawdown is not None and drawdown > 0:
+        return f"Down {drawdown:.0f}% from its 12-month high"
     return ""
 
 
@@ -450,7 +450,7 @@ def _momentum_reason(market_mood: str, security_type: str) -> str:
         "hot": "Trading near its 52-week highs with positive momentum",
         "warm": "Price action is holding up versus its 52-week range",
         "cooling": "Pulling back from its highs",
-        "cold": "Still falling near the low end of its 52-week range",
+        "cold": "Near its 52-week low and still under pressure",
     }.get(market_mood, "")
 
 
@@ -501,8 +501,8 @@ def _refine_for_momentum(
         action = "hold"
         conf = _clamp(min(conf, 52) - (6 if market_mood == "cold" else 3))
         if reason:
-            reasons = _prepend_reason(reasons, f"{reason} — add case needs price to stabilize")
-        risks.append("Positive signal is tempered by weak near-term momentum")
+            reasons = _prepend_reason(reasons, f"{reason} — wait for the price to stabilize before adding")
+        risks.append("The outlook is positive, but price momentum is still weak")
     elif action == "trim" and market_mood == "hot":
         action = "hold"
         conf = _clamp(conf - 8)
@@ -602,7 +602,7 @@ def _build_stock_signal(
         _map = {"buy": "Buy", "hold": "Hold", "sell": "Sell"}
         _rating = _map.get(analyst_action, analyst_action.capitalize())
         reasons.append(
-            f"{count} analyst{'s' if count != 1 else ''} rate this a {_rating}"
+            f"Consensus {_rating} across {count} analyst{'s' if count != 1 else ''}"
         )
     if upside is not None and rec.target_price is not None:
         sign = "+" if upside >= 0 else ""
@@ -621,7 +621,10 @@ def _build_stock_signal(
     if action == "trim" and (count or 0) < 3:
         risks.append("Thin analyst coverage — sell signal carries low conviction")
     if not risks:
-        risks.append("Analyst consensus can lag rapidly changing fundamentals")
+        if count < 5 or mean is None:
+            risks.append("Limited analyst coverage — treat this signal with caution")
+        else:
+            risks.append("No major red flags, but always cross-check before acting")
 
     quality = "high" if count >= 5 and mean is not None else "medium" if count >= 1 else "low"
     market_mood = _derive_stock_market_mood(stock_data)
