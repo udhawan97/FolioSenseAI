@@ -501,7 +501,8 @@ def _refine_for_momentum(
         action = "hold"
         conf = _clamp(min(conf, 52) - (6 if market_mood == "cold" else 3))
         if reason:
-            reasons = _prepend_reason(reasons, f"{reason} — wait for the price to stabilize before adding")
+            msg = f"{reason} — wait for the price to stabilize before adding"
+            reasons = _prepend_reason(reasons, msg)
         risks.append("The outlook is positive, but price momentum is still weak")
     elif action == "trim" and market_mood == "hot":
         action = "hold"
