@@ -689,6 +689,10 @@ async function loadPortfolioValue() {
         _lastDashboardSyncText = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
         const popUpdatedEl = document.getElementById("hud-pop-updated");
         if (popUpdatedEl) popUpdatedEl.textContent = _lastDashboardSyncText;
+        const syncSubEl = document.getElementById("hud-pop-sync-sub");
+        if (syncSubEl) syncSubEl.textContent = "Prices, P&L and holdings pulled from market data";
+        const syncIconEl = document.getElementById("hud-sync-icon");
+        if (syncIconEl) syncIconEl.innerHTML = `<i class="bi bi-check-circle-fill"></i>`;
         const pill = document.getElementById("hud-status-pill");
         if (pill) {
             pill.classList.remove("is-refreshed");
@@ -699,10 +703,16 @@ async function loadPortfolioValue() {
 
     } catch (err) {
         console.error("Error loading portfolio value:", err);
-        _lastDashboardSyncText = "Sync failed";
-        const popUpdatedEl = document.getElementById("hud-pop-updated");
-        if (popUpdatedEl) popUpdatedEl.textContent = _lastDashboardSyncText;
-        if (!_hasLoadedOnce) {
+        if (_hasLoadedOnce) {
+            // Refresh failed but we have stale data — keep showing last good sync time
+            const subEl = document.getElementById("hud-pop-sync-sub");
+            if (subEl) subEl.textContent = "Refresh failed — showing last known prices";
+            const iconEl = document.getElementById("hud-sync-icon");
+            if (iconEl) iconEl.innerHTML = `<i class="bi bi-exclamation-circle" style="color:var(--bs-warning)"></i>`;
+        } else {
+            _lastDashboardSyncText = "Sync failed";
+            const popUpdatedEl = document.getElementById("hud-pop-updated");
+            if (popUpdatedEl) popUpdatedEl.textContent = _lastDashboardSyncText;
             const tbody = document.getElementById("holdings-table");
             if (tbody) {
                 tbody.querySelectorAll("tr[data-empty-state]").forEach(r => r.remove());
