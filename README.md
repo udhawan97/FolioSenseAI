@@ -103,13 +103,13 @@ You do not need to be a developer to run FolioSenseAI locally. Think of this lik
 
 The Anthropic API key is optional. Without it, FolioSenseAI still runs with live market data and portfolio tracking; AI explanations stay disabled until you add a key from [console.anthropic.com](https://console.anthropic.com/).
 
-These commands install the GitHub release [v2.0](https://github.com/udhawan97/FolioSenseAI/releases/tag/release-v2.1).
+These commands install the GitHub release [v2.1](https://github.com/udhawan97/FolioSenseAI/releases/tag/release-v2.1).
 
 **Mac / Linux**
 
 ```bash
-curl -L -o FolioSenseAI-v2.0.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v2.1.zip
-unzip FolioSenseAI-v2.0.zip
+curl -L -o FolioSenseAI-v2.1.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v2.1.zip
+unzip FolioSenseAI-v2.1.zip
 cd FolioSenseAI-release-v2.1
 ./scripts/setup.sh
 ```
@@ -117,8 +117,8 @@ cd FolioSenseAI-release-v2.1
 **Windows PowerShell**
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v2.1.zip" -OutFile "FolioSenseAI-v2.0.zip"
-Expand-Archive -Path "FolioSenseAI-v2.0.zip" -DestinationPath .
+Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v2.1.zip" -OutFile "FolioSenseAI-v2.1.zip"
+Expand-Archive -Path "FolioSenseAI-v2.1.zip" -DestinationPath .
 cd FolioSenseAI-release-v2.1
 .\scripts\setup.ps1
 ```
