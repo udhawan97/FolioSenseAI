@@ -21,6 +21,11 @@ logger = logging.getLogger(__name__)
 _HISTORY_CACHE: dict[tuple[str, str, str], list[float]] = {}
 
 
+def _safe_log_value(value: Any) -> str:
+    """Prevent log forging by removing line breaks from untrusted values."""
+    return str(value).replace("\r", "").replace("\n", "")
+
+
 def _num(value) -> float | None:
     try:
         if value is None or value == "":
@@ -252,7 +257,7 @@ def _fetch_history_closes(ticker: str, period: str) -> list[float]:
     except Exception as exc:  # pylint: disable=broad-except
         logger.debug(
             "Timing history fetch failed for %s; exception_type=%s",
-            ticker,
+            _safe_log_value(ticker),
             type(exc).__name__,
         )
         return []
