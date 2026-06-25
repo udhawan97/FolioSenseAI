@@ -69,3 +69,51 @@ def test_sparse_data_returns_unavailable_without_raising():
     assert result["priceZoneLabel"] == "Unavailable"
     assert result["percentile"] is None
     assert "currentPrice" in result["missingFields"]
+
+
+def test_zero_percentile_at_one_year_low():
+    closes = list(range(50, 101))  # 50 values: 50..100
+    result = calculate_etf_price_signal(
+        {"ticker": "IBIT", "current_price": 49},  # below all closes
+        closes,
+    )
+
+    assert result["priceZoneLabel"] == "Bargain"
+    assert result["percentile"] == 0.0
+    assert result["basis"] == "1Y percentile"
+    assert result["dataWarnings"] == []
+
+
+def test_price_below_history_range_suppresses_signal():
+    closes = list(range(50, 101))
+    result = calculate_etf_price_signal(
+        {"ticker": "XYZ", "current_price": 10},  # <50% of min close (50) — likely bad data
+        closes,
+    )
+
+    assert result["priceZoneLabel"] == "Unavailable"
+    assert result["percentile"] is None
+    assert "price_below_history_range" in result["dataWarnings"]
+
+
+def test_price_above_history_range_suppresses_signal():
+    closes = list(range(50, 101))
+    result = calculate_etf_price_signal(
+        {"ticker": "XYZ", "current_price": 500},  # >2x max close (100) — likely bad data
+        closes,
+    )
+
+    assert result["priceZoneLabel"] == "Unavailable"
+    assert result["percentile"] is None
+    assert "price_above_history_range" in result["dataWarnings"]
+
+
+def test_sparse_history_adds_warning():
+    closes = list(range(80, 110))  # 30 values — above 20-day min but below 50
+    result = calculate_etf_price_signal(
+        {"ticker": "VOO", "current_price": 95},
+        closes,
+    )
+
+    assert result["priceZoneLabel"] == "Fair"
+    assert any("sparse_history" in w for w in result["dataWarnings"])

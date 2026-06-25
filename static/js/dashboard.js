@@ -42,6 +42,12 @@ const formatPct = (n) => {
 const isFiniteNumber = (n) => n !== null && n !== "" && Number.isFinite(Number(n));
 const formatOptionalPct = (n) => isFiniteNumber(n) ? formatPct(Number(n)) : "—";
 const formatAllocationPct = (n) => `${toNumber(n).toFixed(1)}%`;
+const formatPercentilePct = (n) => {
+    const v = Number(n);
+    if (v < 1) return "< 1%";
+    if (v > 99) return "> 99%";
+    return `${v.toFixed(0)}%`;
+};
 const colorClass = (v) => v >= 0 ? "text-success" : "text-danger";
 const valueClass = (v) => {
     if (!isFiniteNumber(v) || Number(v) === 0) return "text-secondary";
@@ -2894,7 +2900,7 @@ function renderTargetCell(rec) {
             return `<div class="target-signal-stack">
                         <div class="target-price-value target-zone-value price-zone-${escapeHtml(zoneClass)}">
                             <span>${escapeHtml(label)}</span>
-                            <span>${Number(signal.percentile).toFixed(0)}%</span>
+                            <span>${formatPercentilePct(signal.percentile)}</span>
                         </div>
                         ${trendHtml}
                         ${renderTargetKind("etf", "bi-activity", "ETF signal")}

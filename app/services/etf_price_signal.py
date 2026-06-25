@@ -78,6 +78,36 @@ def _pct(numerator: float, denominator: float) -> float | None:
     return round((numerator / denominator) * 100, 1)
 
 
+def _build_data_warnings(
+    current: float | None,
+    close_values: list[float],
+    basis: str,
+) -> list[str]:
+    """Return machine-readable warning keys for data quality issues."""
+    warnings: list[str] = []
+    n = len(close_values)
+    if basis == "1Y percentile" and n < 50:
+        warnings.append(f"sparse_history:{n}_days")
+    if current is not None and close_values:
+        hist_min = min(close_values)
+        hist_max = max(close_values)
+        if current < hist_min * 0.5:
+            warnings.append("price_below_history_range")
+            logger.warning(
+                "ETF price signal: current=%.4f is below half the 1Y min=%.4f — possible split-adjustment mismatch",
+                current,
+                hist_min,
+            )
+        elif current > hist_max * 2.0:
+            warnings.append("price_above_history_range")
+            logger.warning(
+                "ETF price signal: current=%.4f is above double the 1Y max=%.4f — possible split-adjustment mismatch",
+                current,
+                hist_max,
+            )
+    return warnings
+
+
 def _change_vs_lookback(current: float | None, closes: list[float], days: int) -> float | None:
     if current is None or len(closes) < days:
         return None
@@ -120,6 +150,8 @@ def calculate_etf_price_signal(
         percentile = round(max(0, min(100, (current - low_52) / (high_52 - low_52) * 100)), 1)
         basis = "52W range"
 
+    data_warnings = _build_data_warnings(current, close_values, basis)
+
     range_position = None
     if current is not None and low_52 is not None and high_52 is not None and high_52 > low_52:
         range_position = round(max(0, min(100, (current - low_52) / (high_52 - low_52) * 100)), 1)
@@ -147,6 +179,13 @@ def calculate_etf_price_signal(
     if ma_200 is None:
         missing_fields.append("twoHundredDayAverage")
 
+    price_range_bad = any(
+        w in data_warnings for w in ("price_below_history_range", "price_above_history_range")
+    )
+    if price_range_bad:
+        label = "Unavailable"
+        percentile = None
+
     return {
         "priceZoneLabel": label,
         "percentile": percentile,
@@ -158,6 +197,7 @@ def calculate_etf_price_signal(
         "basis": basis,
         "source": "yfinance",
         "missingFields": missing_fields,
+        "dataWarnings": data_warnings,
     }
 
 
