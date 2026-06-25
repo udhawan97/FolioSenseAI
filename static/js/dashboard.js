@@ -3223,10 +3223,16 @@ function _verdictLoadingLine(ticker) {
     return CLAUDE_FUNNY_MESSAGES[seed % CLAUDE_FUNNY_MESSAGES.length];
 }
 
+function _verdictKickerLabel() {
+    return _isClaudeApiLive === false
+        ? "Folio Sense is missing Claude (reunite the lovers for a more precise verdict)"
+        : FOLIO_SENSE_VERDICT_COPY.kicker;
+}
+
 function _verdictBrand(verdict) {
     const brand = verdict?.brand || {};
     return {
-        kicker: brand.kicker || FOLIO_SENSE_VERDICT_COPY.kicker,
+        kicker: brand.kicker || _verdictKickerLabel(),
         feelsPrefix: brand.feels_prefix || brand.feelsPrefix || FOLIO_SENSE_VERDICT_COPY.feelsPrefix,
     };
 }
@@ -3399,7 +3405,7 @@ function renderAiVerdictShimmer(section, ticker) {
     if (section._verdictShimmerTicker === ticker) return;
     section._verdictShimmerTicker = ticker;
     section.innerHTML = `
-        <div class="intel-label"><i class="bi bi-dice-5"></i> ${escapeHtml(FOLIO_SENSE_VERDICT_COPY.kicker)}</div>
+        <div class="intel-label"><i class="bi bi-dice-5"></i> ${escapeHtml(_verdictKickerLabel())}</div>
         <div class="verdict-shimmer">
             <div style="display:flex;align-items:center;gap:.55rem;border-bottom:1px solid var(--hairline-soft);padding-bottom:.5rem;margin-bottom:.1rem">
                 <div class="shimmer-line" style="width:5px;height:5px;border-radius:50%;flex-shrink:0"></div>
@@ -3440,7 +3446,7 @@ function _animateConfidence(el, target, reducedMotion) {
 function renderAiVerdict(section, verdict, ticker) {
     if (!verdict) {
         section.innerHTML = `
-            <div class="intel-label"><i class="bi bi-dice-5"></i> ${escapeHtml(FOLIO_SENSE_VERDICT_COPY.kicker)}</div>
+            <div class="intel-label"><i class="bi bi-dice-5"></i> ${escapeHtml(_verdictKickerLabel())}</div>
             <span class="intel-na">${escapeHtml(FOLIO_SENSE_VERDICT_COPY.unavailable)}</span>`;
         return;
     }
@@ -3489,7 +3495,7 @@ function renderAiVerdict(section, verdict, ticker) {
              aria-label="${escapeHtml(label)} verdict, ${conf}% confidence">
             <div class="verdict-header-bar">
                 <span class="verdict-status-dot" aria-hidden="true"></span>
-                <span class="verdict-header-label">AI Verdict</span>
+                <span class="verdict-header-label">${_isClaudeApiLive === false ? "Local Intelligence Verdict" : "AI Verdict"}</span>
                 <span class="verdict-header-sep" aria-hidden="true">·</span>
                 <span class="verdict-header-ticker">${escapeHtml(ticker)}</span>
                 ${anchorPill}
