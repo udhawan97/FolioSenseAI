@@ -2,13 +2,14 @@
 
 import asyncio
 
+from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app import database as app_database
-from app.models import Base, Holding, Portfolio, RealizedTrade
+from app.models import Base, Holding, Portfolio, PortfolioSnapshot, RealizedTrade
 from app.routers import portfolio as portfolio_router
 from app.schemas import HoldingCreate, HoldingUpdate
 
@@ -213,3 +214,70 @@ def test_holding_create_rejects_unsafe_ticker_characters():
 def test_holding_create_allows_common_yfinance_ticker_characters():
     assert HoldingCreate(ticker="brk.b", shares=1).ticker == "BRK.B"
     assert HoldingCreate(ticker="btc-usd", shares=1).ticker == "BTC-USD"
+
+
+def test_research_holding_can_be_added_without_shares(monkeypatch):
+    db = make_db()
+    monkeypatch.setattr(
+        portfolio_router,
+        "get_stock_data",
+        lambda ticker: {"ticker": ticker, "current_price": 100, "error": None},
+    )
+
+    result = asyncio.run(
+        portfolio_router.add_holding(
+            HoldingCreate(ticker="idea", is_watchlist=True),
+            db=db,
+        )
+    )
+
+    holding = db.query(Holding).filter(Holding.ticker == "IDEA").first()
+    assert result["ticker"] == "IDEA"
+    assert holding.is_watchlist is True
+    assert holding.shares == 0.0
+
+
+def test_add_holding_rejects_unresolved_ticker(monkeypatch):
+    db = make_db()
+    monkeypatch.setattr(
+        portfolio_router,
+        "get_stock_data",
+        lambda ticker: {"ticker": ticker, "current_price": 0.0, "error": "no quote"},
+    )
+
+    try:
+        asyncio.run(
+            portfolio_router.add_holding(
+                HoldingCreate(ticker="NOPE", shares=1),
+                db=db,
+            )
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 400
+        assert "Couldn't find ticker NOPE" in exc.detail
+    else:
+        raise AssertionError("Invalid ticker was accepted")
+
+
+def test_delete_realized_trade_adjusts_realized_total_and_today_snapshot(monkeypatch):
+    db = make_db()
+    add_holding(db, "SOLD", shares=2, avg_cost=100)
+    add_trade(db, "SOLD", shares_sold=1, sale_price=150, avg_cost=100)
+    trade = db.query(RealizedTrade).filter(RealizedTrade.ticker == "SOLD").first()
+    monkeypatch.setattr(
+        portfolio_router,
+        "get_all_quotes",
+        lambda _tickers: [quote("SOLD", 110)],
+    )
+
+    before = asyncio.run(portfolio_router.get_pnl(db=db))
+    result = asyncio.run(portfolio_router.remove_realized_trade(trade.id, db=db))
+    after = asyncio.run(portfolio_router.get_pnl(db=db))
+
+    snap = db.query(PortfolioSnapshot).filter(PortfolioSnapshot.portfolio_id == 1).one()
+    assert before["realized_gain"] == 50.0
+    assert before["trades"][0]["id"] == trade.id
+    assert result["ticker"] == "SOLD"
+    assert after["realized_gain"] == 0.0
+    assert after["trades"] == []
+    assert snap.realized_gain == 0.0

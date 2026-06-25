@@ -257,7 +257,7 @@
                         </button>
                     </div>
                     <div class="card-body p-0">
-                        <table class="table table-dark table-sm mb-0">
+                        <table class="table table-dark table-sm mb-0 allocation-table">
                             <thead class="text-secondary small">
                                 <tr>
                                     <th>Ticker</th>
@@ -486,6 +486,7 @@
                                                 <th class="text-end">Avg Cost</th>
                                                 <th class="text-end">Realized P&amp;L</th>
                                                 <th class="text-end">Total %</th>
+                                                <th class="text-end"></th>
                                             </tr>
                                         </thead>
                                         <tbody id="realized-table"></tbody>
@@ -735,19 +736,19 @@
             <div class="portfolio-manager-body">
                     <h6 class="text-secondary mb-3">Add New Holding</h6>
                     <form id="add-holding-form" class="row g-2 mb-4">
-                        <div class="col-4">
+                        <div class="col-12 col-sm-4">
                             <input type="text" class="form-control form-control-sm bg-dark
                                 border-secondary text-white"
                                 id="new-ticker" placeholder="Ticker (e.g. AAPL)"
                                 maxlength="10" required>
                         </div>
-                        <div class="col-4">
+                        <div class="col-12 col-sm-4">
                             <input type="number" class="form-control form-control-sm bg-dark
                                 border-secondary text-white"
                                 id="new-shares" placeholder="Shares" min="0.001"
                                 step="0.001" required>
                         </div>
-                        <div class="col-4">
+                        <div class="col-12 col-sm-4">
                             <input type="number" class="form-control form-control-sm bg-dark
                                 border-secondary text-white"
                                 id="new-avgcost" placeholder="Avg Cost (optional)"

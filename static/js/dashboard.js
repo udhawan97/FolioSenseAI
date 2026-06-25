@@ -42,6 +42,19 @@ const formatPct = (n) => {
 const isFiniteNumber = (n) => n !== null && n !== "" && Number.isFinite(Number(n));
 const formatOptionalPct = (n) => isFiniteNumber(n) ? formatPct(Number(n)) : "—";
 const formatAllocationPct = (n) => `${toNumber(n).toFixed(1)}%`;
+function apiErrorMessage(err, fallback = "Something went wrong") {
+    const detail = err?.detail ?? err?.message ?? err;
+    if (Array.isArray(detail)) {
+        return detail
+            .map(item => item?.msg || item?.message || String(item))
+            .filter(Boolean)
+            .join("; ") || fallback;
+    }
+    if (detail && typeof detail === "object") {
+        return detail.msg || detail.message || JSON.stringify(detail);
+    }
+    return detail ? String(detail) : fallback;
+}
 const formatPercentilePct = (n) => {
     const v = Number(n);
     if (v < 1) return "< 1%";
@@ -1659,7 +1672,7 @@ function renderRealizedTable(trades) {
     tbody.innerHTML = "";
 
     if (!trades.length) {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-secondary py-4">
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-secondary py-4">
             No realized trades yet — they appear here when you reduce a holding.</td></tr>`;
         return;
     }
@@ -1667,6 +1680,7 @@ function renderRealizedTable(trades) {
     trades.forEach(t => {
         const row = tbody.insertRow();
         const day = t.date ? new Date(t.date).toLocaleDateString() : "--";
+        const tickerArg = inlineJsString(t.ticker);
         row.innerHTML = `
             <td class="text-secondary small">${day}</td>
             <td class="fw-bold">${t.ticker}</td>
@@ -1675,6 +1689,13 @@ function renderRealizedTable(trades) {
             <td class="text-end">${formatCurrency(t.avg_cost)}</td>
             <td class="text-end ${colorClass(t.realized_gain)}">${formatSignedCurrency(t.realized_gain)}</td>
             <td class="text-end ${valueClass(t.total_return_pct)}">${formatOptionalPct(t.total_return_pct)}</td>
+            <td class="text-end">
+                <button class="btn btn-sm btn-outline-danger realized-delete-btn"
+                        onclick="removeTrade(${t.id}, ${tickerArg})"
+                        aria-label="Remove realized sale for ${escapeHtml(t.ticker)}">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
         `;
     });
 }
@@ -1698,13 +1719,119 @@ async function loadTrendData(tickers) {
     }
 }
 
+function setCellHtml(cell, html) {
+    if (cell && cell.innerHTML !== html) cell.innerHTML = html;
+}
+
+function trendSignature(history = []) {
+    const points = Array.isArray(history) ? history.slice(-TREND_DAYS) : [];
+    return `${currentTheme()}|${points.map(point => `${point.date || ""}:${point.close ?? ""}`).join("|")}`;
+}
+
+function holdingBadgeHtml(h) {
+    return h.is_watchlist
+        ? `<span class="badge watchlist-badge ms-1" title="Research mode — excluded from P&L"><i class="bi bi-flask me-1"></i>Research</span>`
+        : "";
+}
+
+function moveBadgeHtml(ticker) {
+    const exp = cachedExplanations[ticker];
+    return exp
+        ? `<div class="move-badge ${exp.attribution_type}" title="${exp.confidence} confidence">${ATTRIBUTION_SHORT[exp.attribution_type] || "?"}</div>`
+        : ``;
+}
+
+function dayChangeHtml(h) {
+    const up = h.day_change_pct >= 0;
+    return `
+        <div class="${colorClass(h.day_change_pct)}">
+            <i class="bi ${up ? "bi-caret-up-fill" : "bi-caret-down-fill"}"
+               style="font-size:.65rem;vertical-align:middle;opacity:.75"></i>
+            ${formatPct(h.day_change_pct)}
+        </div>
+        ${moveBadgeHtml(h.ticker)}
+    `;
+}
+
+function createHoldingRow(h) {
+    const row = document.createElement("tr");
+    row.dataset.ticker = h.ticker;
+    row.innerHTML = `
+        <td class="fw-bold holding-ticker-cell" data-field="ticker"></td>
+        <td class="d-none d-md-table-cell text-secondary small holding-name-cell" data-field="name"></td>
+        <td class="text-end" data-field="price"></td>
+        <td class="text-end" data-field="day"></td>
+        <td class="text-end d-none d-md-table-cell" data-field="value"></td>
+        <td class="text-end" data-field="allocation"></td>
+        <td class="text-end d-none d-sm-table-cell" data-field="target" id="target-cell-${h.ticker}"></td>
+        <td class="text-center d-none d-lg-table-cell" data-field="rec" id="rec-cell-${h.ticker}"></td>
+        <td class="text-center d-none d-xl-table-cell trend-cell" data-field="trend"></td>
+    `;
+    row.addEventListener("click", event => {
+        if (event.target.closest(".tip-trigger")) return;
+        toggleSummaryRow(row);
+    });
+    return row;
+}
+
+function updateHoldingRow(row, h, index, trendData = {}) {
+    row.dataset.ticker = h.ticker;
+    row.style.setProperty("--row-index", index);
+    row.classList.toggle("research-holding-row", !!h.is_watchlist);
+
+    const rec = cachedRecommendations[h.ticker];
+    const tickerHtml = `
+        <span class="holding-ticker-wrap">
+            <span class="ticker-dot" style="background:${chartColor(index)}"></span>
+            <span class="holding-ticker-symbol">${escapeHtml(h.ticker)}</span>${holdingBadgeHtml(h)}
+            <i class="bi bi-chevron-right row-chevron"></i>
+        </span>
+    `;
+
+    setCellHtml(row.querySelector('[data-field="ticker"]'), tickerHtml);
+    setCellHtml(row.querySelector('[data-field="name"]'), escapeHtml((h.name || h.ticker).substring(0, 34)));
+    setCellHtml(row.querySelector('[data-field="price"]'), formatCurrency(h.current_price));
+    setCellHtml(row.querySelector('[data-field="day"]'), dayChangeHtml(h));
+    setCellHtml(row.querySelector('[data-field="value"]'), formatCurrency(h.current_value));
+    setCellHtml(row.querySelector('[data-field="allocation"]'), formatAllocationPct(h.allocation_pct));
+    setCellHtml(row.querySelector('[data-field="target"]'), renderTargetCell(rec));
+    setCellHtml(row.querySelector('[data-field="rec"]'), renderAnalystRecCell(rec));
+
+    const trendCell = row.querySelector(".trend-cell");
+    if (!trendCell) return;
+    let canvas = trendCell.querySelector("canvas.trend-sparkline");
+    if (!canvas) {
+        canvas = document.createElement("canvas");
+        canvas.className = "trend-sparkline";
+        canvas.width = 150;
+        canvas.height = 32;
+        trendCell.appendChild(canvas);
+    }
+    canvas.setAttribute("aria-label", `${h.ticker} ${TREND_DAYS}-day trend`);
+    const sig = trendSignature(trendData[h.ticker]);
+    if (canvas.dataset.trendSig !== sig) {
+        canvas.dataset.trendSig = sig;
+        drawTrend(canvas, trendData[h.ticker]);
+    }
+}
+
+function removeHoldingRowPair(row) {
+    const expandRow = row.nextElementSibling?.classList.contains("summary-expand-row")
+        ? row.nextElementSibling
+        : null;
+    if (expandRow) expandRow.remove();
+    row.remove();
+}
+
 
 function updateHoldingsTable(holdings, trendData = {}) {
     const tbody = document.getElementById("holdings-table");
-    tbody.innerHTML = "";
+    if (!tbody) return;
 
     if (holdings.length === 0 && holdingsViewFilter === "research") {
+        tbody.querySelectorAll("tr").forEach(row => row.remove());
         const tr = tbody.insertRow();
+        tr.dataset.emptyState = "research";
         tr.innerHTML = `<td colspan="9" class="text-center py-4">
             <div class="research-empty-state">
                 <i class="bi bi-flask research-empty-icon"></i>
@@ -1716,61 +1843,34 @@ function updateHoldingsTable(holdings, trendData = {}) {
         return;
     }
 
+    tbody.querySelectorAll("tr[data-empty-state]").forEach(row => row.remove());
+
+    const desiredTickers = new Set(holdings.map(h => h.ticker));
+    const existingRows = new Map();
+    tbody.querySelectorAll("tr[data-ticker]").forEach(row => {
+        if (desiredTickers.has(row.dataset.ticker)) existingRows.set(row.dataset.ticker, row);
+        else removeHoldingRowPair(row);
+    });
+
+    let cursor = tbody.firstChild;
     holdings.forEach((h, i) => {
-        const row = tbody.insertRow();
-        row.dataset.ticker = h.ticker;
-        row.style.setProperty("--row-index", i);
-        const up = h.day_change_pct >= 0;
-        const exp = cachedExplanations[h.ticker];
-        const badgeHtml = exp
-            ? `<div class="move-badge ${exp.attribution_type}" title="${exp.confidence} confidence">${ATTRIBUTION_SHORT[exp.attribution_type] || "?"}</div>`
-            : ``;
+        let row = existingRows.get(h.ticker);
+        if (!row) row = createHoldingRow(h);
+        updateHoldingRow(row, h, i, trendData);
 
-        const rec = cachedRecommendations[h.ticker];
-
-        if (h.is_watchlist) {
-            row.classList.add("research-holding-row");
+        const expandRow = row.nextElementSibling?.classList.contains("summary-expand-row")
+            ? row.nextElementSibling
+            : null;
+        if (row === cursor) {
+            cursor = row.nextSibling;
+            if (cursor?.classList.contains("summary-expand-row")) cursor = cursor.nextSibling;
+            return;
         }
 
-        const researchBadge = h.is_watchlist
-            ? `<span class="badge watchlist-badge ms-1" title="Research mode — excluded from P&L"><i class="bi bi-flask me-1"></i>Research</span>`
-            : "";
-
-        row.innerHTML = `
-            <td class="fw-bold holding-ticker-cell">
-                <span class="holding-ticker-wrap">
-                    <span class="ticker-dot" style="background:${chartColor(i)}"></span>
-                    <span class="holding-ticker-symbol">${h.ticker}</span>${researchBadge}
-                    <i class="bi bi-chevron-right row-chevron"></i>
-                </span>
-            </td>
-            <td class="d-none d-md-table-cell text-secondary small holding-name-cell">${h.name.substring(0, 34)}</td>
-            <td class="text-end">${formatCurrency(h.current_price)}</td>
-            <td class="text-end">
-                <div class="${colorClass(h.day_change_pct)}">
-                    <i class="bi ${up ? "bi-caret-up-fill" : "bi-caret-down-fill"}"
-                       style="font-size:.65rem;vertical-align:middle;opacity:.75"></i>
-                    ${formatPct(h.day_change_pct)}
-                </div>
-                ${badgeHtml}
-            </td>
-            <td class="text-end d-none d-md-table-cell">${formatCurrency(h.current_value)}</td>
-            <td class="text-end">${formatAllocationPct(h.allocation_pct)}</td>
-            <td class="text-end d-none d-sm-table-cell" id="target-cell-${h.ticker}">${renderTargetCell(rec)}</td>
-            <td class="text-center d-none d-lg-table-cell" id="rec-cell-${h.ticker}">${renderAnalystRecCell(rec)}</td>
-            <td class="text-center d-none d-xl-table-cell trend-cell"></td>
-        `;
-        row.addEventListener("click", event => {
-            if (event.target.closest(".tip-trigger")) return;
-            toggleSummaryRow(row);
-        });
-        const canvas = document.createElement("canvas");
-        canvas.className = "trend-sparkline";
-        canvas.width = 150;
-        canvas.height = 32;
-        canvas.setAttribute("aria-label", `${h.ticker} ${TREND_DAYS}-day trend`);
-        row.querySelector(".trend-cell").appendChild(canvas);
-        drawTrend(canvas, trendData[h.ticker]);
+        const fragment = document.createDocumentFragment();
+        fragment.appendChild(row);
+        if (expandRow) fragment.appendChild(expandRow);
+        tbody.insertBefore(fragment, cursor);
     });
 
     const hasContent = intelligenceLoaded || intelligenceLoading || Object.keys(cachedIntelligence).length > 0;
@@ -2820,6 +2920,28 @@ function injectSummaryRows(tbody) {
     });
 }
 
+function renderExpandedTicker(ticker) {
+    const mainRow = document.querySelector(`tr[data-ticker="${CSS.escape(ticker)}"]`);
+    if (!mainRow) return;
+    const tbody = mainRow.closest("tbody");
+    if (tbody) injectSummaryRows(tbody);
+
+    const expandRow = mainRow.nextElementSibling;
+    if (!expandRow?.classList.contains("summary-expand-row")) return;
+    const coverageSection = expandRow.querySelector(".intel-coverage-section");
+    const moveSection = expandRow.querySelector(".intel-move-section");
+    const verdictSection = expandRow.querySelector(".intel-verdict-section");
+    if (coverageSection) renderHoldingCoverage(coverageSection, cachedIntelligence[ticker]);
+    if (moveSection) renderMoveExplainer(moveSection, cachedExplanations[ticker], cachedIntelligence[ticker]);
+    if (verdictSection) renderAiVerdict(verdictSection, cachedVerdicts[ticker], ticker);
+    if (holdingIntelSettled(ticker)) mainRow.classList.add("has-intel-ready");
+
+    const body = expandRow.querySelector(".summary-body.open");
+    if (body && body.style.maxHeight && body.style.maxHeight !== "none") {
+        requestAnimationFrame(() => { body.style.maxHeight = body.scrollHeight + "px"; });
+    }
+}
+
 function drawTrend(canvas, history = []) {
     const ctx = canvas.getContext("2d");
     const width = canvas.width;
@@ -3443,17 +3565,19 @@ const DASHBOARD_PET_QUOTES = [
 
 function applyClaudeApiStatus(claudeLive) {
     const navToggle = document.getElementById("pet-nav-toggle");
+    const pet = document.getElementById("dashboard-pet");
     const bubble = document.getElementById("dashboard-pet-bubble");
     const callout = document.getElementById("brand-intro-callout");
 
     if (claudeLive === false) {
         navToggle?.classList.add("claude-offline");
+        pet?.classList.add("claude-offline");
 
         if (bubble && !bubble.querySelector(".pet-offline-note")) {
             const note = document.createElement("span");
             note.className = "pet-offline-note";
             note.id = "pet-offline-note";
-            note.textContent = "Running on local logic — add Claude API to let me connect with my lost love, Claude.";
+            note.textContent = "Claude is offline, so I am using local signals only. Add an API key to restore live AI notes.";
             bubble.appendChild(note);
         }
 
@@ -3461,11 +3585,12 @@ function applyClaudeApiStatus(claudeLive) {
             const note = document.createElement("span");
             note.className = "brand-intro-offline-note";
             note.id = "brand-intro-offline-note";
-            note.textContent = "Running on local logic — add Claude API to reconnect.";
+            note.textContent = "Claude is offline. Local signals are still active.";
             callout.appendChild(note);
         }
     } else if (claudeLive === true) {
         navToggle?.classList.remove("claude-offline");
+        pet?.classList.remove("claude-offline");
         document.getElementById("pet-offline-note")?.remove();
         document.getElementById("brand-intro-offline-note")?.remove();
     }
@@ -3615,20 +3740,43 @@ async function loadAiCostStats() {
     const triggerLabel = document.getElementById("brand-cost-trigger-label");
     const breakdownEl = document.getElementById("brand-cost-breakdown");
     const notifEl = document.getElementById("brand-cost-notif");
+    const triggerEl = document.getElementById("brand-cost-trigger");
     if (!valueEl || !metaEl) return;
 
     try {
         const res = await fetch("/api/ai/cache/stats");
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
+        const billingActive = data.billing_active !== false;
+        const totalTokens = toNumber(data.estimated_total_tokens);
+        const claudeCachedCount = toNumber(data.claude_cached_summaries, toNumber(data.cached_summaries));
+        const localCachedCount = toNumber(data.local_cached_summaries);
+
+        if (!billingActive) {
+            applyClaudeApiStatus(false);
+            triggerEl?.classList.add("claude-offline");
+            notifEl?.classList.remove("brand-cost-notif--active");
+            notifEl?.setAttribute("aria-hidden", "true");
+            valueEl.textContent = "Billing paused";
+            metaEl.textContent = "Claude is offline. Local fallback notes do not spend tokens.";
+            if (triggerLabel) triggerLabel.textContent = "Claude offline";
+            if (breakdownEl) {
+                breakdownEl.textContent = `${localCachedCount.toLocaleString()} local cached notes · ${claudeCachedCount.toLocaleString()} Claude-backed · $0 new spend`;
+            }
+            _lastAiCostUsd = toNumber(data.estimated_cost_usd);
+            return;
+        }
+
         const cost = formatUsdTiny(data.estimated_cost_usd);
+        triggerEl?.classList.remove("claude-offline");
         valueEl.textContent = cost;
-        metaEl.textContent = `${toNumber(data.estimated_total_tokens).toLocaleString()} est. tokens across ${data.cached_summaries} cached summaries`;
+        metaEl.textContent = `${totalTokens.toLocaleString()} est. tokens across ${claudeCachedCount.toLocaleString()} Claude-backed cached summaries`;
         if (triggerLabel) triggerLabel.textContent = cost;
         if (breakdownEl) {
             const inputTok = toNumber(data.estimated_input_tokens).toLocaleString();
             const outputTok = toNumber(data.estimated_output_tokens).toLocaleString();
-            breakdownEl.textContent = `${inputTok} in · ${outputTok} out · $1/$5 per M`;
+            const localNote = localCachedCount ? ` · ${localCachedCount.toLocaleString()} local/free` : "";
+            breakdownEl.textContent = `${inputTok} in · ${outputTok} out · $1/$5 per M${localNote}`;
         }
         const newCost = toNumber(data.estimated_cost_usd);
         if (notifEl && _lastAiCostUsd !== null && newCost !== _lastAiCostUsd) {
@@ -3637,6 +3785,9 @@ async function loadAiCostStats() {
         }
         _lastAiCostUsd = newCost;
     } catch (err) {
+        triggerEl?.classList.add("claude-offline");
+        notifEl?.classList.remove("brand-cost-notif--active");
+        notifEl?.setAttribute("aria-hidden", "true");
         valueEl.textContent = "Unavailable";
         metaEl.textContent = "Could not load AI cost stats";
     }
@@ -4130,7 +4281,67 @@ async function verifyAndRefreshIncompleteIntelligence() {
     return updateIntelligenceLoadedState();
 }
 
-async function loadHoldingIntelligence() {
+async function loadTargetedHoldingIntelligence(ticker) {
+    const normalized = String(ticker || "").trim().toUpperCase();
+    if (!normalized) return;
+
+    const tbody = document.getElementById("holdings-table");
+    intelligenceRetryingTickers.add(normalized);
+    if (tbody) injectSummaryRows(tbody);
+    renderExpandedTicker(normalized);
+
+    try {
+        const [intelRes, moveRes, verdictRes] = await Promise.allSettled([
+            fetch(`/api/ai/intelligence/${encodeURIComponent(normalized)}?ai_holdings_fallback=true&retry=${Date.now()}`),
+            fetch("/api/ai/move-explanations/all"),
+            fetch(`/api/ai/investment-signal/${encodeURIComponent(normalized)}`),
+        ]);
+
+        if (intelRes.status === "fulfilled" && intelRes.value.ok) {
+            cachedIntelligence[normalized] = await intelRes.value.json();
+            if (marketPulseLoaded(cachedIntelligence[normalized])) {
+                intelligenceExhaustedTickers.delete(normalized);
+            }
+        } else if (!cachedIntelligence[normalized]) {
+            cachedIntelligence[normalized] = fallbackIntelligenceForTicker(normalized);
+            intelligenceExhaustedTickers.add(normalized);
+        }
+
+        if (moveRes.status === "fulfilled" && moveRes.value.ok) {
+            const moveData = await moveRes.value.json();
+            if (moveData.explanations?.[normalized]) {
+                cachedExplanations[normalized] = moveData.explanations[normalized];
+            }
+        }
+
+        if (verdictRes.status === "fulfilled" && verdictRes.value.ok) {
+            cachedVerdicts[normalized] = await verdictRes.value.json();
+        }
+    } catch (err) {
+        console.warn(`Unable to refresh intelligence for ${normalized}:`, err);
+        if (!cachedIntelligence[normalized]) {
+            cachedIntelligence[normalized] = fallbackIntelligenceForTicker(normalized);
+            intelligenceExhaustedTickers.add(normalized);
+        }
+    } finally {
+        intelligenceRetryingTickers.delete(normalized);
+        updateIntelligenceLoadedState();
+        renderExpandedTicker(normalized);
+        const holding = latestHoldings.find(h => h.ticker === normalized);
+        const row = document.querySelector(`tr[data-ticker="${CSS.escape(normalized)}"]`);
+        if (holding && row) setCellHtml(row.querySelector('[data-field="day"]'), dayChangeHtml(holding));
+    }
+}
+
+async function loadHoldingIntelligence(options = {}) {
+    const targetTicker = typeof options === "string"
+        ? options
+        : options?.targetTicker;
+    if (targetTicker) {
+        await loadTargetedHoldingIntelligence(targetTicker);
+        return;
+    }
+
     const tbody = document.getElementById("holdings-table");
     const btn = document.querySelector('[onclick="loadHoldingIntelligence()"]');
 
@@ -4348,10 +4559,10 @@ async function loadManageHoldings({ preserveExisting = false } = {}) {
             row.innerHTML = `
                 <td class="fw-bold">${tickerLabel}${watchlistBadge}</td>
                 <td>
-                    <input type="number" value="${h.shares}" min="0.001" step="0.001"
+                    <input type="number" value="${h.shares}" min="${isWatchlist ? "0" : "0.001"}" step="0.001"
                            class="form-control form-control-sm bg-dark border-secondary
                                   text-white d-inline" style="width:90px"
-                           id="shares-${h.id}">
+                           id="shares-${h.id}" data-watchlist="${isWatchlist ? "true" : "false"}">
                 </td>
                 <td>
                     <input type="number" value="${h.avg_cost || ""}" min="0.01" step="0.01"
@@ -4386,26 +4597,43 @@ async function loadManageHoldings({ preserveExisting = false } = {}) {
 
 
 async function updateHolding(holdingId) {
-    const shares = parseFloat(document.getElementById(`shares-${holdingId}`).value);
-    const avgCost = parseFloat(document.getElementById(`cost-${holdingId}`).value) || null;
+    const sharesInput = document.getElementById(`shares-${holdingId}`);
+    const costInput = document.getElementById(`cost-${holdingId}`);
+    const isWatchlist = sharesInput?.dataset.watchlist === "true";
+    const sharesRaw = sharesInput?.value?.trim() ?? "";
+    const shares = Number(sharesRaw);
+    const costRaw = costInput?.value?.trim() ?? "";
+    const avgCost = costRaw ? Number(costRaw) : null;
     const holdClass = document.getElementById(`anchor-${holdingId}`)?.checked ? "anchor" : "auto";
 
-    if (isNaN(shares) || shares <= 0) {
-        alert("Shares must be a positive number");
+    if (!isWatchlist && (!Number.isFinite(shares) || shares <= 0)) {
+        showToast("Shares must be a positive number", "danger");
         return;
     }
+    if (isWatchlist && sharesRaw && (!Number.isFinite(shares) || shares < 0)) {
+        showToast("Research shares must be zero or greater", "danger");
+        return;
+    }
+    if (costRaw && (!Number.isFinite(avgCost) || avgCost <= 0)) {
+        showToast("Average cost must be a positive number", "danger");
+        return;
+    }
+
+    const payload = { avg_cost: avgCost, hold_class: holdClass };
+    if (!isWatchlist || (Number.isFinite(shares) && shares > 0)) payload.shares = shares;
 
     const res = await fetch(`/api/portfolio/holdings/${holdingId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shares, avg_cost: avgCost, hold_class: holdClass }),
+        body: JSON.stringify(payload),
     });
     if (res.ok) {
         showToast("Holding updated!", "success");
         refreshPortfolioMutationInBackground();
         refreshAiVerdicts();
     } else {
-        showToast("Update failed", "danger");
+        const err = await res.json().catch(() => ({}));
+        showToast(apiErrorMessage(err, "Update failed"), "danger");
     }
 }
 
@@ -4549,31 +4777,123 @@ async function removeHolding(holdingId, ticker, isWatchlist = false) {
     }
 }
 
+async function removeTrade(tradeId, ticker) {
+    if (!confirm("Remove this realized sale from your P&L? This adjusts your realized gain.")) return;
+
+    const res = await fetch(`/api/portfolio/trades/${tradeId}`, { method: "DELETE" });
+    if (res.ok) {
+        showToast(`Removed realized sale for ${ticker}`, "warning");
+        await Promise.allSettled([loadPnl(), loadPortfolioValue()]);
+    } else {
+        const err = await res.json().catch(() => ({}));
+        showToast(apiErrorMessage(err, "Unable to remove realized sale"), "danger");
+    }
+}
+
+function syncAddHoldingSharesRequirement() {
+    const watchlist = document.getElementById("new-watchlist");
+    const shares = document.getElementById("new-shares");
+    if (!watchlist || !shares) return;
+    const researchMode = !!watchlist.checked;
+    shares.required = !researchMode;
+    shares.min = researchMode ? "0" : "0.001";
+    shares.placeholder = researchMode ? "Shares (optional)" : "Shares";
+}
+
+document.getElementById("new-watchlist")?.addEventListener("change", syncAddHoldingSharesRequirement);
+syncAddHoldingSharesRequirement();
+
 
 document.getElementById("add-holding-form")?.addEventListener("submit", async (e) => {
     e.preventDefault();
+    const msg = document.getElementById("add-msg");
     const ticker = document.getElementById("new-ticker").value.trim().toUpperCase();
-    const shares = parseFloat(document.getElementById("new-shares").value);
-    const avgCost = parseFloat(document.getElementById("new-avgcost").value) || null;
+    const sharesRaw = document.getElementById("new-shares").value.trim();
+    const shares = Number(sharesRaw);
+    const avgCostRaw = document.getElementById("new-avgcost").value.trim();
+    const avgCost = avgCostRaw ? Number(avgCostRaw) : null;
     const isWatchlist = document.getElementById("new-watchlist")?.checked || false;
+
+    if (!ticker) {
+        msg.className = "small text-danger";
+        msg.textContent = "Ticker is required";
+        return;
+    }
+    if (!isWatchlist && (!Number.isFinite(shares) || shares <= 0)) {
+        msg.className = "small text-danger";
+        msg.textContent = "Shares must be a positive number";
+        return;
+    }
+    if (isWatchlist && sharesRaw && (!Number.isFinite(shares) || shares < 0)) {
+        msg.className = "small text-danger";
+        msg.textContent = "Research shares must be zero or greater";
+        return;
+    }
+    if (avgCostRaw && (!Number.isFinite(avgCost) || avgCost <= 0)) {
+        msg.className = "small text-danger";
+        msg.textContent = "Average cost must be a positive number";
+        return;
+    }
+
+    const payload = { ticker, avg_cost: avgCost, is_watchlist: isWatchlist };
+    if (!isWatchlist || (Number.isFinite(shares) && shares > 0)) payload.shares = shares;
 
     const res = await fetch("/api/portfolio/holdings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ticker, shares, avg_cost: avgCost, is_watchlist: isWatchlist }),
+        body: JSON.stringify(payload),
     });
-    const msg = document.getElementById("add-msg");
     if (res.ok) {
+        const data = await res.json();
+        const optimisticShares = Number.isFinite(shares) ? shares : 0;
+        const optimisticPrice = avgCost || 0;
+        latestHoldings = latestHoldings
+            .filter(h => h.ticker !== ticker)
+            .concat([{
+                id: data.id,
+                ticker,
+                name: ticker,
+                shares: optimisticShares,
+                current_price: optimisticPrice,
+                avg_cost: avgCost || 0,
+                current_value: Math.round(optimisticShares * optimisticPrice * 100) / 100,
+                cost_basis: Math.round(optimisticShares * (avgCost || 0) * 100) / 100,
+                unrealized_gain: 0,
+                unrealized_gain_pct: 0,
+                total_return_pct: null,
+                day_change: 0,
+                day_change_pct: 0,
+                daily_value_change: 0,
+                allocation_pct: 0,
+                is_watchlist: isWatchlist,
+                hold_class: "auto",
+            }]);
+        updateHoldingsFilterCounts();
+        renderHoldings();
+
         msg.className = "small text-success";
         msg.textContent = isWatchlist ? `${ticker} added in research mode!` : `${ticker} added!`;
         e.target.reset();
-        document.getElementById("new-watchlist").checked = false;
+        syncAddHoldingSharesRequirement();
         loadManageHoldings({ preserveExisting: true });
         refreshPortfolioMutationInBackground();
+        if (intelligenceLoaded) {
+            msg.className = "small text-info";
+            msg.textContent = `${ticker} added. Loading intel for the new row...`;
+            loadHoldingIntelligence({ targetTicker: ticker })
+                .then(() => {
+                    msg.className = "small text-success";
+                    msg.textContent = `${ticker} intel ready.`;
+                })
+                .catch(() => {
+                    msg.className = "small text-warning";
+                    msg.textContent = `${ticker} added. Intel can be retried from Holding Intel.`;
+                });
+        }
     } else {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({}));
         msg.className = "small text-danger";
-        msg.textContent = err.detail || "Error adding holding";
+        msg.textContent = apiErrorMessage(err, "Error adding holding");
     }
 });
 

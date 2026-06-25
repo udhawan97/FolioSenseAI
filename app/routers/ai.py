@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.models import AISummary, Holding
 from app.services.ai_service import MODEL, generate_etf_profile_seed, generate_stock_summary
@@ -256,24 +257,34 @@ def _cache_is_fresh(cached: AISummary, current_price: float | None = None) -> bo
 async def get_ai_cache_stats(db: Session = Depends(get_db)):
     """
     Return cached AI summary counts with an estimated Anthropic token cost.
-    AISummary rows do not persist exact token usage, so this uses a text-length
-    estimate plus the prompt size used by generate_stock_summary.
+    Local fallback/deterministic cache rows are excluded because they do not
+    spend Claude tokens. AISummary rows do not persist exact token usage, so
+    Claude-backed rows use a text-length estimate plus the prompt size used by
+    generate_stock_summary.
     """
     summaries = db.query(AISummary).all()
     cached_count = len(summaries)
+    claude_summaries = [
+        summary for summary in summaries
+        if (getattr(summary, "model_used", "") or "").lower() not in {"fallback", "deterministic"}
+    ]
+    fallback_count = cached_count - len(claude_summaries)
     estimated_output_tokens = sum(
         _estimate_text_tokens(getattr(summary, "summary_text", ""))
-        for summary in summaries
+        for summary in claude_summaries
     )
-    estimated_input_tokens = cached_count * ESTIMATED_PROMPT_TOKENS_PER_SUMMARY
+    estimated_input_tokens = len(claude_summaries) * ESTIMATED_PROMPT_TOKENS_PER_SUMMARY
     estimated_cost_usd = (
         estimated_input_tokens / 1_000_000 * HAIKU_45_INPUT_USD_PER_MILLION
         + estimated_output_tokens / 1_000_000 * HAIKU_45_OUTPUT_USD_PER_MILLION
     )
+    claude_configured = bool(settings.ANTHROPIC_API_KEY.strip())
 
     return {
         "model": MODEL,
         "cached_summaries": cached_count,
+        "claude_cached_summaries": len(claude_summaries),
+        "local_cached_summaries": fallback_count,
         "estimated_input_tokens": estimated_input_tokens,
         "estimated_output_tokens": estimated_output_tokens,
         "estimated_total_tokens": estimated_input_tokens + estimated_output_tokens,
@@ -282,8 +293,17 @@ async def get_ai_cache_stats(db: Session = Depends(get_db)):
             "input_usd_per_million_tokens": HAIKU_45_INPUT_USD_PER_MILLION,
             "output_usd_per_million_tokens": HAIKU_45_OUTPUT_USD_PER_MILLION,
         },
+        "claude_configured": claude_configured,
+        "billing_active": claude_configured,
         "is_estimate": True,
-        "note": "Estimated from cached summaries; exact Anthropic token usage is not stored.",
+        "note": (
+            "Claude API billing is paused; local fallback cache rows are free."
+            if not claude_configured
+            else (
+                "Estimated from Claude-backed cached summaries; exact Anthropic "
+                "token usage is not stored."
+            )
+        ),
     }
 
 
@@ -1024,7 +1044,12 @@ async def get_all_investment_signals(db: Session = Depends(get_db)):  # pylint: 
         "disclaimer": _VERDICT_DISCLAIMER,
     }
 
-    return {"signals": signals, "count": len(signals), "portfolio_health": portfolio_health, "claude_live": claude_live}
+    return {
+        "signals": signals,
+        "count": len(signals),
+        "portfolio_health": portfolio_health,
+        "claude_live": claude_live,
+    }
 
 
 @router.get("/analyst-recommendation/{ticker}")

@@ -1,7 +1,7 @@
 import re
 from typing import Optional
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 # Pydantic schemas define the shape of data coming IN (requests) and going OUT (responses).
@@ -33,7 +33,9 @@ class HoldingCreate(BaseModel):
     """Data required to add a new holding."""
     ticker: str = Field(..., min_length=1, max_length=10,
                         description="Stock ticker symbol, e.g. VOO")
-    shares: float = Field(..., gt=0, description="Number of shares (must be > 0)")
+    shares: Optional[float] = Field(
+        default=0.0, ge=0, description="Number of shares (must be > 0 for positions)"
+    )
     avg_cost: Optional[float] = Field(None, gt=0, description="Average purchase price per share")
     notes: Optional[str] = Field(None, max_length=500)
     is_watchlist: Optional[bool] = False  # True = research-only, excluded from P&L
@@ -54,6 +56,12 @@ class HoldingCreate(BaseModel):
     @classmethod
     def valid_hold_class(cls, v):
         return _normalize_hold_class(v) or "auto"
+
+    @model_validator(mode="after")
+    def shares_required_for_positions(self):
+        if not self.is_watchlist and (self.shares is None or self.shares <= 0):
+            raise ValueError("shares must be greater than 0 unless research mode is on")
+        return self
 
 
 class HoldingUpdate(BaseModel):

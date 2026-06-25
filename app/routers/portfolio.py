@@ -327,10 +327,18 @@ async def add_holding(
             status_code=400, detail=f"{data.ticker} already in portfolio"
         )
 
+    # Intentional network check: catch invalid symbols before storing the holding.
+    quote = get_stock_data(data.ticker)
+    if quote.get("error") or (quote.get("current_price") or 0.0) <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Couldn't find ticker {data.ticker} — check the symbol",
+        )
+
     holding = Holding(
         portfolio_id=portfolio_id,
         ticker=data.ticker,
-        shares=data.shares,
+        shares=data.shares or 0.0,
         avg_cost=data.avg_cost,
         notes=data.notes,
         is_watchlist=data.is_watchlist or False,
@@ -404,6 +412,23 @@ async def remove_holding(holding_id: int, db: Session = Depends(get_db)):
         "message": "Holding removed from portfolio",
         "was_watchlist": bool(holding.is_watchlist),
     }
+
+
+@router.delete("/trades/{trade_id}")
+async def remove_realized_trade(trade_id: int, db: Session = Depends(get_db)):
+    """Delete one realized sale and refresh today's snapshot."""
+    trade = db.query(RealizedTrade).filter(RealizedTrade.id == trade_id).first()
+    if not trade:
+        raise HTTPException(status_code=404, detail="Realized trade not found")
+
+    portfolio_id = trade.portfolio_id
+    ticker = trade.ticker
+    db.delete(trade)
+    db.commit()
+
+    # Past snapshots remain history; only today's snapshot is corrected.
+    _upsert_daily_snapshot(portfolio_id, _compute_portfolio(portfolio_id, db), db)
+    return {"ticker": ticker, "message": f"Removed realized sale for {ticker}"}
 
 
 # ── Seed Endpoint ──────────────────────────────────────────────────────
@@ -504,6 +529,7 @@ async def get_pnl(portfolio_id: int = 1, db: Session = Depends(get_db)):
         "realized_gain": realized,
         "trades": [
             {
+                "id": t.id,
                 "ticker": t.ticker,
                 "shares_sold": round(t.shares_sold, 4),
                 "sale_price": t.sale_price,
