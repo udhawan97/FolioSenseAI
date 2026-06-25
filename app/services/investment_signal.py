@@ -37,6 +37,9 @@ class InvestmentSignal:  # pylint: disable=too-many-instance-attributes
     data_quality: str = "low"   # high | medium | low
     source_fields: list[str] = field(default_factory=list)
     generated_at: str = ""
+    flip_triggers: dict | None = None
+    signal_mix: list[dict] = field(default_factory=list)
+    freshness: dict | None = None
 
 
 def signal_to_dict(sig: InvestmentSignal) -> dict:
@@ -51,6 +54,9 @@ def signal_to_dict(sig: InvestmentSignal) -> dict:
         "data_quality": sig.data_quality,
         "source_fields": sig.source_fields,
         "generated_at": sig.generated_at,
+        "flip_triggers": sig.flip_triggers,
+        "signal_mix": sig.signal_mix,
+        "freshness": sig.freshness,
     }
 
 
@@ -81,6 +87,123 @@ def _append_source_once(source: list[str], fields: list[str]) -> None:
     for field_name in fields:
         if field_name not in source:
             source.append(field_name)
+
+
+def _range_price(low: float | None, high: float | None, pct: float) -> float | None:
+    if low is None or high is None or high <= low:
+        return None
+    return round(low + ((high - low) * pct), 2)
+
+
+def _flip_triggers_stock(rec: AnalystRec, stock_data: dict | None) -> dict | None:
+    if not stock_data:
+        return None
+    low = _num(stock_data.get("fifty_two_week_low"))
+    high = _num(stock_data.get("fifty_two_week_high"))
+    target = _num(rec.target_price)
+    if low is None or high is None or high <= low:
+        return None
+
+    add_price = _range_price(low, high, 0.35)
+    trim_price = _range_price(low, high, 0.82)
+    if target is not None and target > 0:
+        add_price = min(add_price or target, round(target * 0.92, 2))
+        trim_price = max(trim_price or target, round(target * 1.08, 2))
+    if add_price is None or trim_price is None or add_price >= trim_price:
+        return None
+    return {"add_price": add_price, "trim_price": trim_price}
+
+
+def _flip_triggers_etf(price_signal: dict) -> dict | None:
+    low = _num(price_signal.get("lowPrice"))
+    high = _num(price_signal.get("highPrice"))
+    add_price = _range_price(low, high, 0.25)
+    trim_price = _range_price(low, high, 0.80)
+    if add_price is None or trim_price is None or add_price >= trim_price:
+        return None
+    return {"add_price": add_price, "trim_price": trim_price}
+
+
+def _momentum_stance(action: str, market_mood: str) -> str:
+    improved = market_mood in ("hot", "warm")
+    weaker = market_mood in ("cooling", "cold")
+    if action == "add":
+        return "support" if improved else "against" if weaker else "neutral"
+    if action == "trim":
+        return "support" if weaker else "against" if improved else "neutral"
+    if market_mood == "neutral":
+        return "support"
+    return "neutral"
+
+
+def _quality_stance(data_quality: str) -> str:
+    if data_quality == "high":
+        return "support"
+    if data_quality == "low":
+        return "against"
+    return "neutral"
+
+
+def _stock_signal_mix(
+    *,
+    action: str,
+    analyst_action: str,
+    upside: float | None,
+    market_mood: str,
+    data_quality: str,
+) -> list[dict]:
+    analyst_supports = {
+        "add": analyst_action == "buy",
+        "hold": analyst_action == "hold",
+        "trim": analyst_action == "sell",
+    }.get(action, False)
+    if upside is None:
+        valuation = "neutral"
+    elif action == "add":
+        valuation = "support" if upside > 5 else "against" if upside < -5 else "neutral"
+    elif action == "trim":
+        valuation = "support" if upside < -5 else "against" if upside > 5 else "neutral"
+    else:
+        valuation = "support" if abs(upside) <= 5 else "neutral"
+    return [
+        {"label": "Analyst", "stance": "support" if analyst_supports else "neutral"},
+        {"label": "Valuation", "stance": valuation},
+        {"label": "Momentum", "stance": _momentum_stance(action, market_mood)},
+        {"label": "Quality", "stance": _quality_stance(data_quality)},
+    ]
+
+
+def _etf_signal_mix(
+    *,
+    action: str,
+    zone: str,
+    market_mood: str,
+    quality_label: str,
+    category_risk: str,
+) -> list[dict]:
+    valuation = {
+        "Bargain": "support" if action == "add" else "neutral",
+        "Fair": "support" if action == "hold" else "neutral",
+        "Elevated": "neutral",
+        "Rich": "support" if action == "trim" else "neutral",
+    }.get(zone, "neutral")
+    quality_text = f"{quality_label} {category_risk}".lower()
+    if "speculative" in quality_text or "poor" in quality_text or "insufficient" in quality_text:
+        quality_stance = "against"
+    elif "strong" in quality_text or "excellent" in quality_text or "good" in quality_text:
+        quality_stance = "support"
+    else:
+        quality_stance = "neutral"
+    return [
+        {"label": "Analyst", "stance": "neutral"},
+        {"label": "Valuation", "stance": valuation},
+        {"label": "Momentum", "stance": _momentum_stance(action, market_mood)},
+        {"label": "Quality", "stance": quality_stance},
+    ]
+
+
+def _freshness_payload(generated_at: str) -> dict:
+    return {"label": "Fresh now", "generated_at": generated_at}
 
 
 def _derive_etf_market_mood(price_signal: dict | None) -> str:  # pylint: disable=too-many-branches
@@ -277,7 +400,7 @@ def _apply_allocation_modifier(
             sig.confidence = _clamp(sig.confidence - _CONCENTRATION_CONF_PENALTY)
 
 
-# pylint: disable-next=too-many-branches
+# pylint: disable-next=too-many-branches,too-many-statements
 def _build_stock_signal(
     rec: AnalystRec,
     allocation_pct: Optional[float],
@@ -358,6 +481,14 @@ def _build_stock_signal(
             source,
             ["current_price", "day_change_pct", "fifty_two_week_high", "fifty_two_week_low"],
         )
+    generated_at = datetime.now(timezone.utc).isoformat()
+    signal_mix = _stock_signal_mix(
+        action=action,
+        analyst_action=analyst_action,
+        upside=upside,
+        market_mood=market_mood,
+        data_quality=quality,
+    )
 
     sig = InvestmentSignal(
         ticker=rec.ticker,
@@ -369,7 +500,10 @@ def _build_stock_signal(
         risks=risks[:2],
         data_quality=quality,
         source_fields=source,
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=generated_at,
+        flip_triggers=_flip_triggers_stock(rec, stock_data),
+        signal_mix=signal_mix,
+        freshness=_freshness_payload(generated_at),
     )
     _apply_allocation_modifier(sig, allocation_pct, is_watchlist)
     return sig
@@ -412,6 +546,14 @@ def _build_stock_no_analyst_signal(
             source,
             ["current_price", "day_change_pct", "fifty_two_week_high", "fifty_two_week_low"],
         )
+    generated_at = datetime.now(timezone.utc).isoformat()
+    signal_mix = _stock_signal_mix(
+        action=action,
+        analyst_action=rec.action,
+        upside=None,
+        market_mood=market_mood,
+        data_quality="low",
+    )
 
     sig = InvestmentSignal(
         ticker=rec.ticker,
@@ -423,7 +565,10 @@ def _build_stock_no_analyst_signal(
         risks=risks,
         data_quality="low",
         source_fields=source,
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=generated_at,
+        flip_triggers=_flip_triggers_stock(rec, stock_data),
+        signal_mix=signal_mix,
+        freshness=_freshness_payload(generated_at),
     )
     _apply_allocation_modifier(sig, allocation_pct, is_watchlist)
     return sig
@@ -509,7 +654,8 @@ def _build_etf_signal(
         risks.append("ETF price signals can lag during market dislocations")
 
     quality_str = "medium"
-    ql = (quality.get("qualityLabel") or "").lower()
+    quality_label = quality.get("qualityLabel") or ""
+    ql = quality_label.lower()
     if ql in ("excellent", "strong"):
         quality_str = "high"
     elif ql in ("poor", "insufficient data"):
@@ -524,6 +670,14 @@ def _build_etf_signal(
         zone=zone,
         security_type="ETF",
     )
+    generated_at = datetime.now(timezone.utc).isoformat()
+    signal_mix = _etf_signal_mix(
+        action=action,
+        zone=zone,
+        market_mood=market_mood,
+        quality_label=quality_label,
+        category_risk=category_risk,
+    )
 
     sig = InvestmentSignal(
         ticker=rec.ticker,
@@ -535,7 +689,10 @@ def _build_etf_signal(
         risks=risks[:2],
         data_quality=quality_str,
         source_fields=source,
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=generated_at,
+        flip_triggers=_flip_triggers_etf(price_signal),
+        signal_mix=signal_mix,
+        freshness=_freshness_payload(generated_at),
     )
     _apply_allocation_modifier(sig, allocation_pct, is_watchlist)
     return sig

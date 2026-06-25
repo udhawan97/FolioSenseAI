@@ -191,6 +191,9 @@ def calculate_etf_price_signal(
     return {
         "priceZoneLabel": label,
         "percentile": percentile,
+        "currentPrice": current,
+        "lowPrice": low_52,
+        "highPrice": high_52,
         "rangePositionPct": range_position,
         "vs200dPct": vs_200d,
         "vs50dPct": vs_50d,

@@ -2,6 +2,7 @@
 app/routers/ai.py
 AI-powered summary endpoints using Claude, plus move-explanation endpoints.
 """
+# pylint: disable=too-many-lines
 import logging
 from datetime import datetime, timedelta, timezone
 
@@ -37,6 +38,7 @@ from app.services.investment_signal import (
     signal_to_dict,
 )
 from app.services.ai_service import fallback_quip, generate_verdict_quips
+from app.services.verdict_scan_cache import attach_since_last_scan
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/ai", tags=["ai"])
@@ -642,6 +644,10 @@ _NEEDS_DATA_SIGNAL = {
     "risks": ["Insufficient data to form a view"],
     "data_quality": "low",
     "source_fields": [],
+    "flip_triggers": None,
+    "signal_mix": [],
+    "freshness": None,
+    "since_last_scan": None,
 }
 
 
@@ -780,16 +786,19 @@ async def get_investment_signal_single(ticker: str, db: Session = Depends(get_db
         stock_data=quote_data if not quote_data.get("error") else None,
     )
     sig_dict = signal_to_dict(sig)
+    scan_snapshot_changed = attach_since_last_scan(db, ticker, sig_dict)
 
     quip = fallback_quip(sig.action)
     sig_dict["quip"] = quip
     sig_dict["disclaimer"] = _VERDICT_DISCLAIMER
     sig_dict["brand"] = _brand_payload()
+    if scan_snapshot_changed:
+        db.commit()
     return sig_dict
 
 
 @router.get("/investment-signals/all")
-async def get_all_investment_signals(db: Session = Depends(get_db)):  # pylint: disable=too-many-statements
+async def get_all_investment_signals(db: Session = Depends(get_db)):  # pylint: disable=too-many-statements,too-many-branches
     """
     Return investment signals for all active portfolio holdings.
     Deterministic signals are computed fresh; quips are cached 24h in AISummary
@@ -802,6 +811,7 @@ async def get_all_investment_signals(db: Session = Depends(get_db)):  # pylint: 
 
     signals: dict[str, dict] = {}
     missing_quip_tickers: list[str] = []
+    scan_snapshot_changed = False
 
     for ticker in active_tickers:
         try:
@@ -818,6 +828,9 @@ async def get_all_investment_signals(db: Session = Depends(get_db)):  # pylint: 
                 stock_data=quote_data if not quote_data.get("error") else None,
             )
             sig_dict = signal_to_dict(sig)
+            scan_snapshot_changed = (
+                attach_since_last_scan(db, ticker, sig_dict) or scan_snapshot_changed
+            )
             sig_dict["disclaimer"] = _VERDICT_DISCLAIMER
             sig_dict["brand"] = _brand_payload()
 
@@ -937,6 +950,8 @@ async def get_all_investment_signals(db: Session = Depends(get_db)):  # pylint: 
                     "Failed to cache portfolio quip; exception_type=%s",
                     type(exc).__name__,
                 )
+        db.commit()
+    elif scan_snapshot_changed:
         db.commit()
 
     portfolio_health = {

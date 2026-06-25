@@ -3044,22 +3044,135 @@ function _verdictBrand(verdict) {
     };
 }
 
+function _verdictTip({ title, body, hint = "", icon = "bi-info-circle-fill", variant = "" }) {
+    return `<button class="tip-trigger target-tip-trigger" type="button"
+        data-tip-title="${escapeHtml(title)}"
+        data-tip-body="${escapeHtml(body)}"
+        ${hint ? `data-tip-hint="${escapeHtml(hint)}"` : ""}
+        data-tip-icon="${escapeHtml(icon)}"
+        ${variant ? `data-tip-variant="${escapeHtml(variant)}"` : ""}>
+        <i class="bi bi-info-circle"></i>
+    </button>`;
+}
+
+function _verdictInfoTip() {
+    return _verdictTip({
+        title: "How Folio Sense decides",
+        body: "Combines analyst consensus (for stocks) or price-zone + fund quality (for ETFs) with recent momentum and how big the position is. It defaults to Hold and only leans Add or Trim when the signals clearly point that way. It's a calculated read, not financial advice.",
+        hint: "Re-scan to refresh it with the latest market data.",
+        icon: "bi-dice-5-fill",
+    });
+}
+
+function _confidenceTip() {
+    return _verdictTip({
+        title: "Confidence",
+        body: "How strongly the underlying signals agree. Higher means more of them point the same way. A calm 30-60% on a Hold is normal - it just means there's no strong push either direction.",
+        icon: "bi-speedometer2",
+    });
+}
+
+function _renderFlipTriggers(verdict) {
+    const flips = verdict?.flip_triggers;
+    if (!flips?.add_price || !flips?.trim_price) return "";
+    return `<div class="verdict-flip-line">
+        <span class="verdict-face-label">What would change this:</span>
+        <span>Tilts Add near ${escapeHtml(formatCurrency(flips.add_price))} · Trim near ${escapeHtml(formatCurrency(flips.trim_price))}</span>
+        ${_verdictTip({
+            title: "What flips it",
+            body: "The rough price levels where the verdict would change. For ETFs we map the cheap zone (about the lowest quarter of the past year) and the expensive zone (about the top fifth) to a price; for stocks we frame it around the analyst target and the 52-week range. Approximate, and only shown when the data supports it.",
+            icon: "bi-signpost-split",
+        })}
+    </div>`;
+}
+
+function _renderSinceLastScan(verdict) {
+    const delta = verdict?.since_last_scan;
+    if (!delta?.label) return "";
+    return `<span class="verdict-mini-chip">
+        ${escapeHtml(delta.label)}
+        ${_verdictTip({
+            title: "Since your last check",
+            body: "Compares this verdict with the one from your previous scan, so you can see what moved as the market changed.",
+            icon: "bi-clock-history",
+        })}
+    </span>`;
+}
+
+function _renderFreshness(verdict) {
+    const fresh = verdict?.freshness;
+    if (!fresh?.label) return "";
+    return `<span class="verdict-mini-chip">
+        ${escapeHtml(fresh.label)}
+        ${_verdictTip({
+            title: "Freshness",
+            body: "Shows when this read was calculated from the latest scan data available to the dashboard. Re-scan to refresh market inputs.",
+            icon: "bi-arrow-repeat",
+        })}
+    </span>`;
+}
+
+function _renderSignalMix(verdict) {
+    const mix = Array.isArray(verdict?.signal_mix) ? verdict.signal_mix : [];
+    if (!mix.length) return "";
+    const dots = mix.map(item => {
+        const stance = ["support", "neutral", "against"].includes(item.stance)
+            ? item.stance
+            : "neutral";
+        return `<span class="signal-mix-item">
+            <span class="signal-mix-dot ${stance}" aria-hidden="true"></span>
+            ${escapeHtml(item.label || "Signal")}
+        </span>`;
+    }).join("");
+    return `<div class="signal-mix-strip">
+        <span class="verdict-face-label">What's behind it</span>
+        ${_verdictTip({
+            title: "Signal mix",
+            body: "Each input that fed the verdict. Green supports the call, grey is neutral, red pushes the other way. The blend is what sets the confidence above.",
+            icon: "bi-ui-checks-grid",
+        })}
+        <span class="signal-mix-items">${dots}</span>
+    </div>`;
+}
+
+function _renderQuip(quip) {
+    if (!quip) return "";
+    return `<div class="verdict-quote">
+        <span class="verdict-tea-label">Claude spilled:</span>
+        ${_verdictTip({
+            title: "Claude's take",
+            body: "Claude writes this one line from the same signals - it's color commentary, not a separate recommendation. It's cached so it barely costs anything and only refreshes when the verdict or market mood changes.",
+            variant: "ai",
+        })}
+        ${escapeHtml(quip)}
+    </div>`;
+}
+
 function renderAiVerdictShimmer(section, ticker) {
     if (section._verdictShimmerTicker === ticker) return;
     section._verdictShimmerTicker = ticker;
     section.innerHTML = `
         <div class="intel-label"><i class="bi bi-dice-5"></i> ${escapeHtml(FOLIO_SENSE_VERDICT_COPY.kicker)}</div>
         <div class="verdict-shimmer">
-            <div style="display:flex;align-items:center;gap:.6rem">
+            <div style="display:flex;align-items:center;gap:.55rem;border-bottom:1px solid var(--hairline-soft);padding-bottom:.5rem;margin-bottom:.1rem">
+                <div class="shimmer-line" style="width:5px;height:5px;border-radius:50%;flex-shrink:0"></div>
+                <div class="shimmer-line" style="width:52px;height:8px;border-radius:3px"></div>
+                <div class="shimmer-line" style="width:36px;height:8px;border-radius:3px;margin-left:auto"></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:.7rem">
                 <div class="verdict-die is-tumbling" aria-hidden="true">
                     <img src="/static/img/brand/folio-orbit-icon.svg" alt="">
                 </div>
-                <div class="shimmer-line" style="width:68px;height:22px;border-radius:999px"></div>
-                <div class="shimmer-line" style="flex:1;height:6px;border-radius:3px"></div>
-                <div class="shimmer-line" style="width:28px;height:10px;border-radius:3px"></div>
+                <div style="flex:1;display:grid;gap:.3rem">
+                    <div class="shimmer-line" style="width:72px;height:16px;border-radius:5px"></div>
+                    <div class="shimmer-line" style="width:120px;height:9px;border-radius:3px"></div>
+                </div>
+                <div style="display:grid;gap:.25rem;align-items:flex-end">
+                    <div class="shimmer-line" style="width:52px;height:32px;border-radius:6px"></div>
+                    <div class="shimmer-line" style="width:52px;height:7px;border-radius:3px"></div>
+                </div>
             </div>
-            <div class="shimmer-line" style="width:90%;height:10px;border-radius:4px"></div>
-            <div class="shimmer-line" style="width:75%;height:10px;border-radius:4px"></div>
+            <div class="shimmer-line" style="width:100%;height:3px;border-radius:999px"></div>
             <div class="verdict-loading-line">${escapeHtml(_verdictLoadingLine(ticker))}</div>
         </div>`;
 }
@@ -3110,42 +3223,52 @@ function renderAiVerdict(section, verdict, ticker) {
     const revealClass = shouldReveal ? "is-revealing" : "is-static";
     const meterWidth = shouldReveal ? "0%" : `${conf}%`;
     const initialConf = shouldReveal ? "0%" : `${conf}%`;
+    const metaChips = [_renderSinceLastScan(verdict), _renderFreshness(verdict)]
+        .filter(Boolean)
+        .join("");
 
     section.innerHTML = `
-        <div class="intel-label"><i class="bi bi-dice-5"></i> ${escapeHtml(brandCopy.kicker)}</div>
+        <div class="intel-label"><i class="bi bi-dice-5"></i> ${escapeHtml(brandCopy.kicker)} ${_verdictInfoTip()}</div>
         <div class="intel-verdict ${revealClass}" data-action="${escapeHtml(action)}"
              aria-label="${escapeHtml(label)} verdict, ${conf}% confidence">
-            <div class="verdict-feels-line">
-                <span>${escapeHtml(brandCopy.feelsPrefix)} this could be a</span>
-                <span class="verdict-chip verdict-chip--inline">
-                    <i class="bi ${escapeHtml(icon)}"></i>
-                    ${escapeHtml(label)}
-                </span>
-                <span class="verdict-feels-conf">· ${conf}%</span>
+            <div class="verdict-header-bar">
+                <span class="verdict-status-dot" aria-hidden="true"></span>
+                <span class="verdict-header-label">AI Verdict</span>
+                <span class="verdict-header-sep" aria-hidden="true">·</span>
+                <span class="verdict-header-ticker">${escapeHtml(ticker)}</span>
             </div>
-            <div class="verdict-head">
+            <div class="verdict-hero">
                 <div class="verdict-die ${dieClass}" aria-hidden="true">
                     <img src="/static/img/brand/folio-orbit-icon.svg" alt="">
                     <i class="bi ${escapeHtml(icon)} verdict-action-glyph"
                        style="color:var(--verdict-color)"></i>
                 </div>
-                <div class="verdict-chip">
-                    <i class="bi ${escapeHtml(icon)}"></i>
-                    ${escapeHtml(label)}
-                </div>
-                <div class="verdict-meter-wrap">
-                    <div class="verdict-meter"
-                         role="meter"
-                         aria-valuenow="${conf}"
-                         aria-valuemin="0"
-                         aria-valuemax="100"
-                         aria-label="Confidence">
-                        <div class="verdict-meter-fill" style="width:${meterWidth}"></div>
+                <div class="verdict-hero-text">
+                    <div class="verdict-hero-chip">
+                        <i class="bi ${escapeHtml(icon)}"></i>
+                        ${escapeHtml(label)}
                     </div>
+                    <div class="verdict-feels-line">${escapeHtml(brandCopy.feelsPrefix)} this could be a</div>
+                </div>
+                <div class="verdict-hero-conf">
                     <span class="verdict-conf-pct" data-conf-target="${conf}">${initialConf}</span>
+                    <span class="verdict-conf-label">how sure ${_confidenceTip()}</span>
                 </div>
             </div>
-            ${quip ? `<div class="verdict-quote"><i class="bi bi-chat-quote verdict-quote-icon" aria-hidden="true"></i><span><span class="verdict-tea-label">Claude spilled:</span> ${escapeHtml(quip)}</span></div>` : ""}
+            <div class="verdict-meter-wrap">
+                <div class="verdict-meter"
+                     role="meter"
+                     aria-valuenow="${conf}"
+                     aria-valuemin="0"
+                     aria-valuemax="100"
+                     aria-label="Confidence">
+                    <div class="verdict-meter-fill" style="width:${meterWidth}"></div>
+                </div>
+            </div>
+            ${_renderFlipTriggers(verdict)}
+            ${metaChips ? `<div class="verdict-mini-chip-row">${metaChips}</div>` : ""}
+            ${_renderSignalMix(verdict)}
+            ${_renderQuip(quip)}
             ${(reasonsHtml || risksHtml) ? `
             <div class="intel-spec-rows verdict-spec-rows">
                 ${reasonsHtml}
@@ -3191,6 +3314,7 @@ let _dashboardPetTimer = null;
 let _dashboardPetSheenTimer = null;
 let _dashboardPetSpeak = null;
 const DASHBOARD_PET_REACTION_RE = /[\u{2600}-\u{27BF}\u{1F300}-\u{1FAFF}]/u;
+const DASHBOARD_PET_TAP_EMOTICONS = ["✨", "👀", "💅", "📈", "☕", "💬", "🧠", "😌", "🫶", "💎"];
 
 const DASHBOARD_PET_QUOTES = [
     "Claude, your context window and my cash-flow model should get coffee.",
@@ -3258,13 +3382,18 @@ function initDashboardPet() {
         });
     }
 
-    function showQuote(nextIndex = null) {
+    function randomTapEmoticon() {
+        return DASHBOARD_PET_TAP_EMOTICONS[Math.floor(Math.random() * DASHBOARD_PET_TAP_EMOTICONS.length)];
+    }
+
+    function showQuote(nextIndex = null, { withEmoticon = false } = {}) {
         if (nextIndex === null) {
             _dashboardPetQuoteIndex = (_dashboardPetQuoteIndex + 1) % DASHBOARD_PET_QUOTES.length;
         } else {
             _dashboardPetQuoteIndex = nextIndex % DASHBOARD_PET_QUOTES.length;
         }
-        const message = DASHBOARD_PET_QUOTES[_dashboardPetQuoteIndex];
+        const baseMessage = DASHBOARD_PET_QUOTES[_dashboardPetQuoteIndex];
+        const message = withEmoticon ? `${baseMessage} ${randomTapEmoticon()}` : baseMessage;
         quote.textContent = message;
         animatePetForLine(message);
         if (!prefersReducedMotion() && !bubble.classList.contains("is-talking")) {
@@ -3327,7 +3456,7 @@ function initDashboardPet() {
     });
     navToggle.addEventListener("click", () => setVisible(!isVisible()));
     bubble.addEventListener("click", () => {
-        showQuote();
+        showQuote(null, { withEmoticon: true });
         schedulePetQuote();
     });
     iconShell?.addEventListener("animationend", (event) => {
@@ -4273,6 +4402,8 @@ function initKeyboardHelp() {
 function initTips() {
     const popover = document.getElementById("tip-popover");
     if (!popover) return;
+    if (document.documentElement.dataset.tipsDelegated === "true") return;
+    document.documentElement.dataset.tipsDelegated = "true";
 
     let hideTimeout = null;
     let activeTrigger = null;
@@ -4284,75 +4415,88 @@ function initTips() {
         popover.setAttribute("aria-hidden", "true");
     };
 
-    document.querySelectorAll(".tip-trigger").forEach(trigger => {
-        trigger.addEventListener("mouseenter", () => {
-            clearTimeout(hideTimeout);
-            activeTrigger = trigger;
-            const title   = trigger.dataset.tipTitle   || "";
-            const body    = trigger.dataset.tipBody    || "";
-            const hint    = trigger.dataset.tipHint    || "";
-            const icon    = trigger.dataset.tipIcon    || "bi-info-circle-fill";
-            const variant = trigger.dataset.tipVariant || "";
+    const tipTriggerFor = target => target instanceof Element
+        ? target.closest(".tip-trigger")
+        : null;
 
-            // Clear previous variant classes
-            popover.classList.remove("tip-variant-ai");
+    const showTip = trigger => {
+        clearTimeout(hideTimeout);
+        activeTrigger = trigger;
+        const title   = trigger.dataset.tipTitle   || "";
+        const body    = trigger.dataset.tipBody    || "";
+        const hint    = trigger.dataset.tipHint    || "";
+        const icon    = trigger.dataset.tipIcon    || "bi-info-circle-fill";
+        const variant = trigger.dataset.tipVariant || "";
 
-            if (variant === "ai") {
-                popover.classList.add("tip-variant-ai");
-                popover.innerHTML = `
-                    <div class="tip-ai-header">
-                        <span class="tip-ai-orbit" aria-hidden="true">
-                            <img src="/static/img/brand/folio-orbit-icon.svg" alt="">
-                        </span>
-                        <span class="tip-ai-title-wrap">
-                            <div class="tip-ai-name">${escapeHtml(title)}</div>
-                            <div class="tip-ai-badge">AI</div>
-                        </span>
-                    </div>
-                    <div class="tip-ai-body">${escapeHtml(body)}</div>
-                    <div class="tip-ai-footer">
-                        <span class="tip-ai-footer-dot" aria-hidden="true"></span>
-                        <span class="tip-ai-footer-label">Powered by Claude</span>
-                    </div>
-                `;
-            } else {
-                popover.innerHTML = `
-                    <i class="bi ${escapeHtml(icon)} tip-popover-icon" aria-hidden="true"></i>
-                    <div class="tip-popover-title">${escapeHtml(title)}</div>
-                    <div class="tip-popover-body">${escapeHtml(body)}</div>
-                    ${hint ? `<div class="tip-popover-hint"><i class="bi bi-hand-index-thumb" style="font-size:.6rem"></i> ${escapeHtml(hint)}</div>` : ""}
-                `;
-            }
+        popover.classList.remove("tip-variant-ai");
 
-            // Position below trigger, viewport-clamped
-            const rect = trigger.getBoundingClientRect();
-            const popW = Math.min(popover.offsetWidth || (variant === "ai" ? 304 : 252), window.innerWidth - 20);
-            const popH = popover.offsetHeight || 120;
-            let left   = rect.left + rect.width / 2 - popW / 2;
-            let top    = rect.bottom + 10;
-            left = Math.max(10, Math.min(left, window.innerWidth - popW - 10));
-            if (top + popH > window.innerHeight - 14) top = rect.top - popH - 10;
+        if (variant === "ai") {
+            popover.classList.add("tip-variant-ai");
+            popover.innerHTML = `
+                <div class="tip-ai-header">
+                    <span class="tip-ai-orbit" aria-hidden="true">
+                        <img src="/static/img/brand/folio-orbit-icon.svg" alt="">
+                    </span>
+                    <span class="tip-ai-title-wrap">
+                        <div class="tip-ai-name">${escapeHtml(title)}</div>
+                        <div class="tip-ai-badge">AI</div>
+                    </span>
+                </div>
+                <div class="tip-ai-body">${escapeHtml(body)}</div>
+                <div class="tip-ai-footer">
+                    <span class="tip-ai-footer-dot" aria-hidden="true"></span>
+                    <span class="tip-ai-footer-label">Powered by Claude</span>
+                </div>
+            `;
+        } else {
+            popover.innerHTML = `
+                <i class="bi ${escapeHtml(icon)} tip-popover-icon" aria-hidden="true"></i>
+                <div class="tip-popover-title">${escapeHtml(title)}</div>
+                <div class="tip-popover-body">${escapeHtml(body)}</div>
+                ${hint ? `<div class="tip-popover-hint"><i class="bi bi-hand-index-thumb" style="font-size:.6rem"></i> ${escapeHtml(hint)}</div>` : ""}
+            `;
+        }
 
-            popover.style.left = `${left}px`;
-            popover.style.top  = `${top}px`;
-            popover.setAttribute("aria-hidden", "false");
-            void popover.offsetWidth;
-            popover.classList.add("tip-visible");
-        });
+        const rect = trigger.getBoundingClientRect();
+        const popW = Math.min(
+            popover.offsetWidth || (variant === "ai" ? 304 : 252),
+            window.innerWidth - 20,
+        );
+        const popH = popover.offsetHeight || 120;
+        let left   = rect.left + rect.width / 2 - popW / 2;
+        let top    = rect.bottom + 10;
+        left = Math.max(10, Math.min(left, window.innerWidth - popW - 10));
+        if (top + popH > window.innerHeight - 14) top = rect.top - popH - 10;
 
-        trigger.addEventListener("mouseleave", () => {
-            hideTimeout = setTimeout(() => {
-                hideTip();
-            }, 160);
-        });
+        popover.style.left = `${left}px`;
+        popover.style.top  = `${top}px`;
+        popover.setAttribute("aria-hidden", "false");
+        void popover.offsetWidth;
+        popover.classList.add("tip-visible");
+    };
 
-        // Keyboard: show on focus, hide on blur
-        trigger.addEventListener("focus",  () => trigger.dispatchEvent(new MouseEvent("mouseenter")));
-        trigger.addEventListener("blur",   () => trigger.dispatchEvent(new MouseEvent("mouseleave")));
-
-        // Prevent card click when clicking the trigger icon
-        trigger.addEventListener("click", e => e.stopPropagation());
+    document.addEventListener("mouseover", event => {
+        const trigger = tipTriggerFor(event.target);
+        if (!trigger || trigger.contains(event.relatedTarget)) return;
+        showTip(trigger);
     });
+    document.addEventListener("mouseout", event => {
+        const trigger = tipTriggerFor(event.target);
+        if (!trigger || trigger !== activeTrigger || trigger.contains(event.relatedTarget)) return;
+        hideTimeout = setTimeout(hideTip, 160);
+    });
+    document.addEventListener("focusin", event => {
+        const trigger = tipTriggerFor(event.target);
+        if (trigger) showTip(trigger);
+    });
+    document.addEventListener("focusout", event => {
+        const trigger = tipTriggerFor(event.target);
+        if (trigger && trigger === activeTrigger) hideTimeout = setTimeout(hideTip, 160);
+    });
+    document.addEventListener("click", event => {
+        const trigger = tipTriggerFor(event.target);
+        if (trigger) event.stopPropagation();
+    }, true);
 
     window.addEventListener("scroll", hideTip, { passive: true, capture: true });
     window.addEventListener("resize", hideTip, { passive: true });

@@ -129,7 +129,8 @@ def generate_etf_profile_seed(ticker: str, name: str | None = None, limit: int =
     prompt = (
         f"{ticker}|{fund_name}|{limit}\n"
         "Return JSON only: "
-        "{\"aum\":12300000000,\"holdings\":[{\"ticker\":\"AAPL\",\"name\":\"Apple\",\"weight\":7.2}]}. "
+        "{\"aum\":12300000000,"
+        "\"holdings\":[{\"ticker\":\"AAPL\",\"name\":\"Apple\",\"weight\":7.2}]}. "
         "Use known ETF AUM in USD and top holdings; approximate weights %. Unknown fields: null/[]."
     )
 

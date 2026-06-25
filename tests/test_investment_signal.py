@@ -376,8 +376,31 @@ class TestSignalToDict:
         sig = build_investment_signal(_stock_rec("buy"))
         d = signal_to_dict(sig)
         for key in ("ticker", "action", "label", "confidence", "reasons",
-                    "market_mood", "risks", "data_quality", "source_fields", "generated_at"):
+                    "market_mood", "risks", "data_quality", "source_fields", "generated_at",
+                    "flip_triggers", "signal_mix", "freshness"):
             assert key in d, f"signal_to_dict missing key: {key}"
+
+    def test_stock_signal_includes_static_verdict_addons(self):
+        sig = build_investment_signal(
+            _stock_rec("buy"),
+            stock_data=_stock_quote(price=90, low=50, high=120),
+        )
+        d = signal_to_dict(sig)
+        assert d["flip_triggers"]["add_price"] < d["flip_triggers"]["trim_price"]
+        assert [item["label"] for item in d["signal_mix"]] == [
+            "Analyst", "Valuation", "Momentum", "Quality",
+        ]
+        assert d["freshness"]["label"] == "Fresh now"
+
+    def test_etf_signal_includes_static_verdict_addons(self):
+        sig = build_investment_signal(_etf_rec("Bargain", price_overrides={
+            "currentPrice": 80.0,
+            "lowPrice": 70.0,
+            "highPrice": 110.0,
+        }))
+        d = signal_to_dict(sig)
+        assert d["flip_triggers"] == {"add_price": 80.0, "trim_price": 102.0}
+        assert any(item["label"] == "Quality" for item in d["signal_mix"])
 
 
 # ── fallback_quip ──────────────────────────────────────────────────────────────
@@ -472,6 +495,7 @@ def test_verdict_quip_cache_uses_action_and_market_mood(monkeypatch):
     third = asyncio.run(ai_router.get_all_investment_signals(db))
     assert third["signals"]["NOW"]["market_mood"] == "cold"
     assert len(calls) == 2, "mood flip should request a fresh quip"
+    assert set(calls[0][0]) == {"ticker", "action", "confidence", "market_mood", "reason"}
 
 
 def test_portfolio_quip_cache_and_fallback(monkeypatch):

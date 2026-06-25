@@ -5494,6 +5494,7 @@ body > .dashboard-pet {
     contain: paint;
     backface-visibility: hidden;
     will-change: transform;
+    cursor: pointer;
     animation: petBubbleFloat 5.6s ease-in-out infinite;
 }
 
@@ -8177,27 +8178,46 @@ tr.research-holding-row:hover {
 
 /* ── AI Verdict section ─────────────────────────────────────────────────── */
 
-/* Full-width third row in .intel-grid */
 .intel-verdict-section {
     grid-column: 1 / -1;
-    padding: 0.65rem 0.9rem 0.8rem 2.55rem;
+    padding: 0.6rem 0.9rem 0.75rem 2.55rem;
     border-top: 1px solid var(--hairline-soft);
 }
 
+/* Card shell */
 .intel-verdict {
     display: grid;
-    gap: 0.6rem;
+    gap: 0;
     position: relative;
     overflow: hidden;
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 5%, var(--surface-1, transparent));
-    border: 1px solid color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 20%, transparent);
-    padding: 0.7rem 0.85rem;
+    border-radius: 14px;
+    background:
+        radial-gradient(ellipse 80% 60% at 50% -5%,
+            color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 12%, transparent) 0%,
+            transparent 68%),
+        var(--bg-base);
+    border: 1px solid color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 24%, transparent);
     box-shadow:
-        inset 0 1px 0 color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 28%, transparent),
-        0 2px 12px -4px color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 18%, transparent);
+        0 0 0 1px color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 8%, transparent) inset,
+        0 8px 28px -6px color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 22%, transparent);
 }
 
+/* Glowing top-center accent line */
+.intel-verdict::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 8%; right: 8%;
+    height: 1px;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 85%, white) 50%,
+        transparent 100%
+    );
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Reveal sweep */
 .intel-verdict.is-revealing::after {
     content: "";
     position: absolute;
@@ -8206,58 +8226,151 @@ tr.research-holding-row:hover {
     background: linear-gradient(
         100deg,
         transparent 0%,
-        rgba(255,255,255,.12) 48%,
-        transparent 62%
+        rgba(255,255,255,.09) 46%,
+        transparent 60%
     );
     opacity: 0;
     transform: translateX(-110%);
     will-change: transform, opacity;
-    animation: verdictRevealSweep 0.62s var(--ease) 0.08s 1 both;
+    animation: verdictRevealSweep 0.68s var(--ease) 0.05s 1 both;
 }
 
 @keyframes verdictRevealSweep {
     0%   { transform: translateX(-110%); opacity: 0; }
-    25%  { opacity: 1; }
+    20%  { opacity: 1; }
     100% { transform: translateX(110%); opacity: 0; }
 }
 
-.verdict-feels-line {
+/* ── Header bar ── */
+.verdict-header-bar {
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
-    gap: 0.34rem;
-    font-size: 0.82rem;
-    font-weight: 720;
-    line-height: 1.35;
-    color: var(--text-primary);
+    gap: 0.4rem;
+    padding: 0.48rem 0.9rem 0.38rem;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    border-bottom: 1px solid color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 12%, transparent);
+}
+
+.verdict-status-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--verdict-color, var(--accent-cyan));
+    box-shadow: 0 0 8px 1px color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 75%, transparent);
+    flex-shrink: 0;
+    animation: verdictDotPulse 2.6s ease-in-out infinite;
+}
+
+@keyframes verdictDotPulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.38; }
+}
+
+.verdict-header-label { color: var(--text-secondary); font-weight: 750; }
+.verdict-header-sep   { opacity: 0.3; }
+.verdict-header-ticker {
+    margin-left: auto;
+    color: var(--verdict-color, var(--accent-cyan));
+    opacity: 0.6;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── Hero row: die + action text + big confidence number ── */
+.verdict-hero {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.7rem 0.9rem 0.52rem;
+}
+
+.verdict-hero-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.verdict-hero-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 1.08rem;
+    font-weight: 780;
+    line-height: 1.15;
+    color: var(--verdict-color, var(--accent-cyan));
+    white-space: nowrap;
+}
+
+.verdict-hero-chip i { font-size: 0.92rem; opacity: 0.8; }
+
+.verdict-feels-line {
+    font-size: 0.7rem;
+    font-weight: 500;
+    line-height: 1.3;
+    color: var(--text-tertiary);
     opacity: 1;
     transform: translateY(0);
 }
 
 .intel-verdict.is-revealing .verdict-feels-line {
     opacity: 0;
-    transform: translateY(5px);
-    animation: verdictFeelsReveal 0.34s var(--ease) 0.32s 1 forwards;
+    transform: translateY(4px);
+    animation: verdictFeelsReveal 0.34s var(--ease) 0.3s 1 forwards;
 }
 
 @keyframes verdictFeelsReveal {
     to { opacity: 1; transform: translateY(0); }
 }
 
-/* Die slot + chip + meter row */
-.verdict-head {
+/* Big confidence number — right column of hero */
+.verdict-hero-conf {
     display: flex;
-    align-items: center;
-    gap: 0.7rem;
-    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.06rem;
+    padding-left: 0.9rem;
+    border-left: 1px solid color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 18%, transparent);
+    flex-shrink: 0;
 }
 
-/* Orbit mark in the die slot */
+.verdict-conf-pct {
+    font-size: 2.15rem;
+    font-weight: 800;
+    line-height: 1;
+    color: var(--verdict-color, var(--accent-cyan));
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.04em;
+    white-space: nowrap;
+    text-shadow: 0 0 24px color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 55%, transparent);
+}
+
+.verdict-conf-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.1rem;
+    font-size: 0.58rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    color: var(--text-tertiary);
+    text-align: right;
+}
+
+.verdict-conf-label .tip-trigger {
+    margin-left: 0.08rem;
+}
+
+/* ── Orbit die ── */
 .verdict-die {
-    width: 32px;
-    height: 32px;
-    border-radius: 10px;
-    border: 1px solid rgba(var(--verdict-color-rgb, 111,214,240), 0.28);
+    width: 42px;
+    height: 42px;
+    border-radius: 13px;
+    border: 1px solid color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 28%, transparent);
     background: color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 10%, transparent);
     display: grid;
     place-items: center;
@@ -8267,17 +8380,16 @@ tr.research-holding-row:hover {
 }
 
 .verdict-die img {
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
     border-radius: 5px;
     object-fit: contain;
 }
 
-/* Tumbling animation while loading */
 @keyframes verdictDieTumble {
     0%   { transform: rotate(0deg)   scale(1); }
-    30%  { transform: rotate(120deg) scale(0.9); }
-    60%  { transform: rotate(240deg) scale(1.08); }
+    30%  { transform: rotate(120deg) scale(0.88); }
+    60%  { transform: rotate(240deg) scale(1.1); }
     100% { transform: rotate(360deg) scale(1); }
 }
 
@@ -8286,12 +8398,11 @@ tr.research-holding-row:hover {
     animation: verdictDieTumble 0.7s var(--spring) infinite;
 }
 
-/* Settle: glyph snaps in */
 .verdict-action-glyph {
-    font-size: 1rem;
+    font-size: 1.1rem;
     position: absolute;
     opacity: 0;
-    transform: scale(0.5);
+    transform: scale(0.4);
     transition: opacity 0.28s var(--ease), transform 0.5s var(--spring);
 }
 
@@ -8306,70 +8417,32 @@ tr.research-holding-row:hover {
 }
 
 .verdict-die.is-settled {
-    box-shadow:
-        0 0 0 2px color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 28%, transparent),
-        0 0 14px color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 28%, transparent);
-    animation: verdictDieGlow 2.2s ease-in-out infinite alternate;
+    animation: verdictDieGlow 2.4s ease-in-out infinite alternate;
 }
 
 @keyframes verdictDieGlow {
     from {
         box-shadow:
             0 0 0 1.5px color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 22%, transparent),
-            0 0 8px  color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 18%, transparent);
+            0 0 10px     color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 20%, transparent);
     }
     to {
         box-shadow:
-            0 0 0 3px   color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 38%, transparent),
-            0 0 18px    color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 38%, transparent);
+            0 0 0 3.5px  color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 40%, transparent),
+            0 0 20px     color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 40%, transparent);
     }
 }
 
-/* Action chip */
-.verdict-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.32rem;
-    font-size: 0.75rem;
-    font-weight: 720;
-    padding: 0.2rem 0.65rem;
-    border-radius: 999px;
-    border: 1px solid color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 38%, transparent);
-    background: color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 14%, transparent);
-    color: var(--verdict-color, var(--accent-cyan));
-    white-space: nowrap;
-    letter-spacing: 0.01em;
-    box-shadow: 0 0 10px -2px color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 22%, transparent);
-}
-
-.verdict-chip i {
-    font-size: 0.8rem;
-}
-
-.verdict-chip--inline {
-    padding: 0.14rem 0.48rem;
-    font-size: 0.7rem;
-}
-
-.verdict-feels-conf {
-    color: var(--verdict-color, var(--accent-cyan));
-    font-variant-numeric: tabular-nums;
-}
-
-/* Segmented confidence meter */
+/* ── Thin confidence meter (full width under hero) ── */
 .verdict-meter-wrap {
-    display: flex;
-    align-items: center;
-    gap: 0.42rem;
-    flex: 1;
-    min-width: 120px;
+    padding: 0 0.9rem 0.62rem;
 }
 
 .verdict-meter {
-    flex: 1;
-    height: 6px;
+    width: 100%;
+    height: 3px;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 18%, transparent);
+    background: color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 14%, transparent);
     position: relative;
     overflow: hidden;
 }
@@ -8380,56 +8453,113 @@ tr.research-holding-row:hover {
     background: linear-gradient(
         90deg,
         var(--verdict-color, var(--accent-cyan)) 0%,
-        color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 65%, white) 100%
+        color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 60%, white) 100%
     );
-    transition: width 0.6s var(--ease);
-    box-shadow: 0 0 8px 0 color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 45%, transparent);
-    mask-image: repeating-linear-gradient(
-        90deg,
-        #000 0px, #000 calc(10% - 1.5px),
-        transparent calc(10% - 1.5px), transparent 10%
-    );
-    -webkit-mask-image: repeating-linear-gradient(
-        90deg,
-        #000 0px, #000 calc(10% - 1.5px),
-        transparent calc(10% - 1.5px), transparent 10%
-    );
+    transition: width 0.7s var(--ease);
+    box-shadow: 0 0 10px 0 color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 55%, transparent);
 }
 
-.verdict-conf-pct {
-    font-size: 0.78rem;
-    font-weight: 800;
-    color: var(--verdict-color, var(--accent-cyan));
-    font-variant-numeric: tabular-nums;
+.verdict-flip-line {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.18rem 0.35rem;
+    padding: 0 0.9rem 0.48rem;
+    font-size: 0.68rem;
+    line-height: 1.35;
+    color: var(--text-secondary);
+}
+
+.verdict-face-label {
+    color: var(--text-tertiary);
+    font-weight: 650;
+}
+
+.verdict-mini-chip-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding: 0 0.9rem 0.5rem;
+}
+
+.verdict-mini-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.12rem;
+    min-height: 22px;
+    padding: 0.12rem 0.36rem 0.12rem 0.48rem;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 22%, transparent);
+    background: color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 7%, transparent);
+    color: var(--text-secondary);
+    font-size: 0.64rem;
+    font-weight: 650;
+    line-height: 1.1;
+}
+
+.signal-mix-strip {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.24rem 0.42rem;
+    padding: 0 0.9rem 0.54rem;
+    font-size: 0.64rem;
+    color: var(--text-secondary);
+}
+
+.signal-mix-items {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.38rem;
+}
+
+.signal-mix-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.18rem;
     white-space: nowrap;
-    min-width: 30px;
-    text-align: right;
-    text-shadow: 0 0 10px color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 50%, transparent);
 }
 
-/* Witty quote callout */
+.signal-mix-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-tertiary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-tertiary) 18%, transparent);
+}
+
+.signal-mix-dot.support {
+    background: var(--accent-green);
+    box-shadow: 0 0 0 2px rgba(48, 209, 88, 0.16);
+}
+
+.signal-mix-dot.against {
+    background: var(--accent-red);
+    box-shadow: 0 0 0 2px rgba(255, 69, 58, 0.14);
+}
+
+/* ── Quote callout ── */
 .verdict-quote {
     display: flex;
     align-items: flex-start;
     gap: 0.5rem;
-    font-size: 0.76rem;
+    margin: 0 0.9rem;
+    font-size: 0.73rem;
     font-style: italic;
     color: var(--text-secondary);
-    line-height: 1.5;
-    padding: 0.45rem 0.75rem;
-    border-left: 3px solid color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 65%, transparent);
+    line-height: 1.55;
+    padding: 0.44rem 0.75rem;
+    border-left: 2px solid color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 62%, transparent);
     border-radius: 0 8px 8px 0;
-    background: color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 7%, transparent);
+    background: color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 6%, transparent);
     position: relative;
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 12%, transparent);
 }
 
-.verdict-quote-icon {
-    flex: 0 0 auto;
-    margin-top: 0.1rem;
-    font-size: 0.86rem;
-    font-style: normal;
-    color: var(--verdict-color, var(--accent-cyan));
+.verdict-quote .tip-trigger {
+    margin-left: 0.12rem;
+    margin-right: 0.14rem;
 }
 
 .verdict-tea-label {
@@ -8438,16 +8568,23 @@ tr.research-holding-row:hover {
     font-weight: 750;
 }
 
-/* Verdict reasons/risks rows */
+/* ── Spec rows ── */
 .verdict-spec-rows {
     display: grid;
-    gap: 0.2rem;
+    gap: 0.18rem;
+    padding: 0.35rem 0.9rem 0;
 }
 
-/* Shimmer skeleton while loading */
+/* ── Disclaimer row ── */
+.intel-verdict .intel-meta-row {
+    padding: 0 0.9rem 0.55rem;
+}
+
+/* ── Shimmer skeleton while loading ── */
 .verdict-shimmer {
     display: grid;
     gap: 0.52rem;
+    padding: 0.7rem 0.9rem;
 }
 
 .verdict-loading-line {
@@ -8456,17 +8593,18 @@ tr.research-holding-row:hover {
     line-height: 1.35;
 }
 
-/* Verdict color per action — set on .intel-verdict */
+/* ── Verdict color per action ── */
 .intel-verdict[data-action="add"]        { --verdict-color: var(--accent-green); }
 .intel-verdict[data-action="hold"]       { --verdict-color: var(--accent-yellow); }
 .intel-verdict[data-action="trim"]       { --verdict-color: var(--accent-red); }
 .intel-verdict[data-action="needs-data"] { --verdict-color: var(--text-tertiary); }
 
-/* Reduced-motion: die stays static, meter at final width, count-up skipped */
+/* ── Reduced-motion ── */
 @media (prefers-reduced-motion: reduce) {
-    .verdict-die.is-tumbling img { animation: none; }
-    .verdict-die.is-settled     { animation: none; }
-    .verdict-meter-fill { transition: none; }
+    .verdict-die.is-tumbling img  { animation: none; }
+    .verdict-die.is-settled       { animation: none; }
+    .verdict-status-dot           { animation: none; }
+    .verdict-meter-fill           { transition: none; }
     .intel-verdict.is-revealing::after,
     .intel-verdict.is-revealing .verdict-feels-line {
         animation: none;
@@ -8475,9 +8613,17 @@ tr.research-holding-row:hover {
     }
 }
 
-/* Light theme adjustments */
+/* ── Light theme ── */
+[data-bs-theme="light"] .intel-verdict {
+    background:
+        radial-gradient(ellipse 80% 60% at 50% -5%,
+            color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 8%, transparent) 0%,
+            transparent 68%),
+        rgba(255, 255, 255, 0.72);
+}
+
 [data-bs-theme="light"] .verdict-quote {
-    color: rgba(0, 0, 0, 0.65);
+    color: rgba(0, 0, 0, 0.62);
 }
 
 [data-bs-theme="light"] .intel-verdict-section {
