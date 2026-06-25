@@ -1,5 +1,6 @@
 import logging
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 import yfinance as yf
@@ -9,6 +10,9 @@ from app.services.security_type import classify_security
 
 logger = logging.getLogger(__name__)
 QUOTE_FETCH_ERROR = "Quote data is temporarily unavailable."
+
+_QUOTE_CACHE: dict[str, tuple[float, dict]] = {}
+_QUOTE_TTL = 60
 TICKER_PATTERN = re.compile(r"^[A-Z0-9.^-]{1,10}$")
 SUGGESTION_QUERY_PATTERN = re.compile(r"[^A-Za-z0-9 .^\-&]")
 SUPPORTED_QUOTE_TYPES = {
@@ -54,7 +58,13 @@ def get_stock_data(ticker: str) -> dict:
     yfinance pulls data from Yahoo Finance — no API key needed.
     Returns a dict with price, change, range, and metadata.
     On failure, returns a dict with an "error" key instead of raising an exception.
+    Results are cached for _QUOTE_TTL seconds to keep dashboard loads snappy.
     """
+    now = time.monotonic()
+    cached = _QUOTE_CACHE.get(ticker)
+    if cached and cached[0] > now:
+        return cached[1]
+
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
@@ -102,7 +112,7 @@ def get_stock_data(ticker: str) -> dict:
         def _r(val, n: int):
             return round(val, n) if val is not None else None
 
-        return {
+        result = {
             "ticker": ticker.upper(),
             "name": info.get("longName") or info.get("shortName") or ticker,
             "current_price": round(current_price, 2),
@@ -149,6 +159,8 @@ def get_stock_data(ticker: str) -> dict:
             "security_type": security_type,
             "error": None,
         }
+        _QUOTE_CACHE[ticker] = (now + _QUOTE_TTL, result)
+        return result
 
     except Exception as exc:
         logger.error(

@@ -702,6 +702,17 @@ async function loadPortfolioValue() {
         _lastDashboardSyncText = "Sync failed";
         const popUpdatedEl = document.getElementById("hud-pop-updated");
         if (popUpdatedEl) popUpdatedEl.textContent = _lastDashboardSyncText;
+        if (!_hasLoadedOnce) {
+            const tbody = document.getElementById("holdings-table");
+            if (tbody) {
+                tbody.querySelectorAll("tr[data-empty-state]").forEach(r => r.remove());
+                const tr = tbody.insertRow();
+                tr.dataset.emptyState = "error";
+                tr.innerHTML = `<td colspan="9" class="text-center py-4 text-secondary">
+                    <i class="bi bi-exclamation-circle me-2"></i>Could not load prices — check your connection and refresh.
+                </td>`;
+            }
+        }
     }
 }
 
