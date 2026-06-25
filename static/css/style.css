@@ -525,6 +525,18 @@ body > .navbar {
     line-height: 1.45;
 }
 
+.brand-intro-version {
+    position: absolute;
+    top: 0.6rem;
+    right: 0.72rem;
+    font-size: 0.58rem;
+    font-weight: 640;
+    letter-spacing: 0.04em;
+    color: rgba(111, 214, 240, 0.38);
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+}
+
 [data-bs-theme="light"] .brand-intro-callout {
     background:
         linear-gradient(135deg, rgba(111, 214, 240, 0.10), rgba(151, 172, 236, 0.09) 46%, rgba(48, 209, 88, 0.06)),
