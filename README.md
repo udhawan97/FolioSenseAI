@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite"/>
   <img src="https://img.shields.io/badge/Bootstrap-5-7952B3?style=flat-square&logo=bootstrap&logoColor=white" alt="Bootstrap 5"/>
   <img src="https://img.shields.io/badge/Chart.js-FF6384?style=flat-square&logo=chartdotjs&logoColor=white" alt="Chart.js"/>
-  <img src="https://img.shields.io/badge/release-v2.2-brightgreen?style=flat-square" alt="Release v2.2"/>
+  <img src="https://img.shields.io/badge/release-v2.3-brightgreen?style=flat-square" alt="Release v2.3"/>
 </p>
 
 <p align="center">
@@ -27,9 +27,9 @@
 
 ---
 
-> **v2.2 is here: FolioSenseAI got sharper, cleaner, and a little more expensive-looking without actually becoming expensive.**
+> **v2.3 is here: FolioSenseAI now handles offline Claude like a professional, not like someone refreshing the page with feelings.**
 >
-> FolioSenseAI tracks your holdings, pulls live prices from Yahoo Finance, validates the tickers before they enter the portfolio, and asks Claude AI to explain what on earth is happening. v2.2 adds a live Claude heartbeat, clearer AI cost accounting, cleaner portfolio math, and smoother dashboard polish. Responsible? Mostly. Charming? Unfortunately, yes.
+> FolioSenseAI tracks your holdings, pulls live prices from Yahoo Finance, validates tickers before they enter the portfolio, and asks Claude AI to explain what on earth is happening when an API key is present. v2.3 makes the no-key path clearer, labels local intelligence honestly, and tightens a security scan finding. Smooth under pressure. Attractive quality.
 
 ---
 
@@ -52,6 +52,7 @@
 - Allocation, return, and performance-history views
 - Market open/closed indicator with auto-refresh countdown — so you can watch it drop in real time
 - **Live feed HUD** with refresh state, force-refresh control, and Claude API heartbeat
+- **Claude offline guidance** with direct setup steps when AI features are paused
 - **Portfolio Butler companion** — a lightweight dashboard pet with witty market reactions and a polished top-bar toggle
 
 ### 🧠 Portfolio Intelligence *(the whole point)*
@@ -59,6 +60,7 @@
 - **Portfolio-level AI analysis** — diversification themes, concentration risks, notable movers
 - **Holding coverage** — ETF sectors, regions, themes, and benchmark context
 - **Folio Sense × Claude verdicts** — Add, Hold, Trim, or Needs Data calls with confidence, reasons, risks, and one-line color commentary
+- **Local Intelligence labels** that make offline verdicts clear when Claude is not connected
 - **Anchor Hold** — mark any position as a long-term anchor; Folio Sense never trims it, instead surfaces better add moments when price dips below its own trend; toggleable from the verdict card or Manage Holdings
 - **Market-mood awareness** — live price momentum now tempers marginal calls before the app gets too enthusiastic
 - **Portfolio health quip** — a coarse read on the whole book, including concentration and dominant action mix
@@ -107,23 +109,23 @@ You do not need to be a developer to run FolioSenseAI locally. Think of this lik
 
 The Anthropic API key is optional. Without it, FolioSenseAI still runs with live market data and portfolio tracking; AI explanations stay disabled until you add a key from [console.anthropic.com](https://console.anthropic.com/).
 
-These commands install the GitHub release [v2.2](https://github.com/udhawan97/FolioSenseAI/releases/tag/release-v2.2).
+These commands install the GitHub release [v2.3](https://github.com/udhawan97/FolioSenseAI/releases/tag/release-v2.3).
 
 **Mac / Linux**
 
 ```bash
-curl -L -o FolioSenseAI-v2.2.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v2.2.zip
-unzip FolioSenseAI-v2.2.zip
-cd FolioSenseAI-release-v2.2
+curl -L -o FolioSenseAI-v2.3.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v2.3.zip
+unzip FolioSenseAI-v2.3.zip
+cd FolioSenseAI-release-v2.3
 ./scripts/setup.sh
 ```
 
 **Windows PowerShell**
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v2.2.zip" -OutFile "FolioSenseAI-v2.2.zip"
-Expand-Archive -Path "FolioSenseAI-v2.2.zip" -DestinationPath .
-cd FolioSenseAI-release-v2.2
+Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v2.3.zip" -OutFile "FolioSenseAI-v2.3.zip"
+Expand-Archive -Path "FolioSenseAI-v2.3.zip" -DestinationPath .
+cd FolioSenseAI-release-v2.3
 .\scripts\setup.ps1
 ```
 
@@ -253,6 +255,25 @@ pip install --upgrade certifi
 | `http://localhost:8000` | The dashboard |
 | `http://localhost:8000/docs` | Swagger API docs (surprisingly pretty) |
 | `http://localhost:8000/health` | Health check endpoint |
+
+---
+
+## 🪄 What's New In v2.3
+
+**FolioSenseAI v2.3 is the graceful-offline release: clearer no-key behavior, sharper local labels, cleaner day-change polish, and one less thing for CodeQL to side-eye.**
+
+- Added **Claude offline setup guidance** directly in the brand callout, including the Anthropic Console link, `.env` key name, and restart steps.
+- Updated verdict copy so offline results show **Local Intelligence Verdict** instead of implying Claude is actively whispering into the dashboard.
+- Added dynamic verdict kicker updates so reconnecting Claude restores the Folio Sense × Claude label automatically.
+- Improved **day-change rendering** with a reusable styled cell, cleaner caret alignment, and less inline styling.
+- Hardened timing-signal logging by sanitizing untrusted ticker values before they reach log output.
+- Preserved the local-first experience: live market data, deterministic signals, portfolio math, and cached/fallback notes still work when Claude is offline.
+
+### v2.3 Release Notes
+
+**For users:** v2.3 makes FolioSenseAI much less cryptic when Claude is not connected. The app now shows what is local, what is AI-backed, and exactly how to restore Claude. No guessing, no séance, no “why is this button judging me?” energy.
+
+**For developers:** v2.3 bumps the FastAPI app to `2.3.0`, updates dashboard release metadata, sanitizes ticker values in timing-signal logging, replaces inline day-change icon styling with CSS, and improves offline/online verdict label synchronization in `dashboard.js`.
 
 ---
 
