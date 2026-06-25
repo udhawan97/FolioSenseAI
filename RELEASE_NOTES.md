@@ -14,6 +14,9 @@ FolioSenseAI v2.4 is the mode-control release: a polished Claude AI / Local Inte
 - **Smarter offline state**: the mode toggle disables cleanly when Claude is offline and opens the setup guidance instead of pretending a network problem is a personality trait.
 - **Quote caching**: live quote reads are cached for 60 seconds in `stock_service`, cutting repeated Yahoo Finance calls during tight dashboard refresh loops.
 - **Last-sync resilience**: the HUD keeps the last good sync timestamp when a refresh fails, marks the state clearly, and avoids replacing usable data with panic confetti.
+- **Sync state before render**: HUD timestamp and loaded-state are committed as soon as data arrives from the API, so a Chart.js or rendering error cannot flip the sync indicator back to "failed."
+- **In-flight guard**: a `_portfolioValueInFlight` flag prevents overlapping `loadPortfolioValue` calls from racing to create duplicate chart canvases and triggering false refresh failures.
+- **% column polish**: the percentage column in the target-trend list is wider and `white-space: nowrap`; `formatSignalPct` drops the decimal when the value hits triple digits so the string stays compact for any holding.
 - **Toggle polish**: placement, labels, title text, and dashboard pet copy now make the Claude/local relationship clearer and a little more charming.
 
 ## Developer Notes
@@ -24,6 +27,10 @@ FolioSenseAI v2.4 is the mode-control release: a polished Claude AI / Local Inte
 - Updated dashboard signal fetches to append `?force_local=true` when Local Intel mode is active.
 - Added `_QUOTE_CACHE` and `_QUOTE_TTL = 60` to `app/services/stock_service.py`.
 - Added HUD sync failure handling so stale-but-valid data remains visible after a failed refresh.
+- Moved HUD DOM update (timestamp, `_hasLoadedOnce`) to run immediately after API response, before any rendering — rendering errors can no longer affect sync display.
+- Added `_portfolioValueInFlight` guard to `loadPortfolioValue` to prevent concurrent calls from racing on the chart canvas.
+- Wrapped all rendering code in an inner `try/catch`; a render error now warns to the console instead of surfacing "Refresh failed" to the user.
+- Widened `.target-trend-list` percentage column (`2.7rem → 3rem`), added `white-space: nowrap` to `.target-trend-line strong`, and updated `formatSignalPct` to drop the decimal at ≥100.
 - Added `.pet-mode-toggle` CSS and related state styling.
 - Bumped the dashboard script cache key to load the new frontend behavior.
 

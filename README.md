@@ -269,13 +269,15 @@ pip install --upgrade certifi
 - Added persistent local-mode preference via browser storage, with verdict labels and helper copy updating in place.
 - Added a 60-second quote cache around Yahoo Finance calls to make repeated dashboard loads and validations snappier.
 - Improved the **Last synced** HUD behavior so failed refreshes keep the last good timestamp and explain when stale prices are being shown.
+- Fixed a race condition where overlapping `loadPortfolioValue` calls could fight over the chart canvas and produce false "Refresh failed" flashes; HUD state is now committed before rendering so a rendering error never clears a good sync time.
+- Tightened the percentage column in the target-trend list so triple-digit values never wrap or truncate.
 - Polished the mode toggle placement, disabled/offline state, and dashboard pet copy so Claude and Local Intelligence can share the room like adults with excellent boundaries.
 
 ### v2.4 Release Notes
 
 **For users:** v2.4 gives you a clean choice: let Claude add personality to verdicts, or switch to Local Intel for deterministic, no-API quips. The dashboard also feels faster on repeat quote reads and behaves more gracefully when a refresh fails.
 
-**For developers:** v2.4 bumps the FastAPI app to `2.4.0`, adds the `force_local` query path on the batch investment-signal endpoint, introduces a short-lived quote cache in `stock_service`, updates dashboard fetches to honor forced-local mode, improves HUD sync failure state, and bumps the dashboard script cache key.
+**For developers:** v2.4 bumps the FastAPI app to `2.4.0`, adds the `force_local` query path on the batch investment-signal endpoint, introduces a short-lived quote cache in `stock_service`, updates dashboard fetches to honor forced-local mode, adds an in-flight guard and pre-render HUD commit to fix sync-state race conditions, widens the percentage column in the target-trend list, and bumps the dashboard script cache key.
 
 ---
 
