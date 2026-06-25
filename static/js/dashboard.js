@@ -3078,9 +3078,16 @@ function _confidenceTip() {
 function _renderFlipTriggers(verdict) {
     const flips = verdict?.flip_triggers;
     if (!flips?.add_price || !flips?.trim_price) return "";
-    return `<div class="verdict-flip-line">
-        <span class="verdict-face-label">What would change this:</span>
-        <span>Tilts Add near ${escapeHtml(formatCurrency(flips.add_price))} · Trim near ${escapeHtml(formatCurrency(flips.trim_price))}</span>
+    return `<div class="verdict-insight-row verdict-flip-line">
+        <span class="verdict-row-icon"><i class="bi bi-signpost-split" aria-hidden="true"></i></span>
+        <span class="verdict-row-copy">
+            <span class="verdict-face-label">Could flip at</span>
+            <span class="verdict-price-pair">
+                <span><i class="bi bi-arrow-up-right" aria-hidden="true"></i> Add near ${escapeHtml(formatCurrency(flips.add_price))}</span>
+                <span class="verdict-price-sep" aria-hidden="true"></span>
+                <span><i class="bi bi-arrow-down-right" aria-hidden="true"></i> Trim near ${escapeHtml(formatCurrency(flips.trim_price))}</span>
+            </span>
+        </span>
         ${_verdictTip({
             title: "What flips it",
             body: "The rough price levels where the verdict would change. For ETFs we map the cheap zone (about the lowest quarter of the past year) and the expensive zone (about the top fifth) to a price; for stocks we frame it around the analyst target and the 52-week range. Approximate, and only shown when the data supports it.",
@@ -3093,6 +3100,7 @@ function _renderSinceLastScan(verdict) {
     const delta = verdict?.since_last_scan;
     if (!delta?.label) return "";
     return `<span class="verdict-mini-chip">
+        <i class="bi bi-clock-history" aria-hidden="true"></i>
         ${escapeHtml(delta.label)}
         ${_verdictTip({
             title: "Since your last check",
@@ -3106,6 +3114,7 @@ function _renderFreshness(verdict) {
     const fresh = verdict?.freshness;
     if (!fresh?.label) return "";
     return `<span class="verdict-mini-chip">
+        <i class="bi bi-arrow-repeat" aria-hidden="true"></i>
         ${escapeHtml(fresh.label)}
         ${_verdictTip({
             title: "Freshness",
@@ -3127,8 +3136,9 @@ function _renderSignalMix(verdict) {
             ${escapeHtml(item.label || "Signal")}
         </span>`;
     }).join("");
-    return `<div class="signal-mix-strip">
-        <span class="verdict-face-label">What's behind it</span>
+    return `<div class="verdict-insight-row signal-mix-strip">
+        <span class="verdict-row-icon"><i class="bi bi-ui-checks-grid" aria-hidden="true"></i></span>
+        <span class="verdict-face-label">Signal mix</span>
         ${_verdictTip({
             title: "Signal mix",
             body: "Each input that fed the verdict. Green supports the call, grey is neutral, red pushes the other way. The blend is what sets the confidence above.",
