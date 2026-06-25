@@ -6,7 +6,7 @@ from app.database import get_db
 from app.models import Portfolio, Holding, RealizedTrade, PortfolioSnapshot
 from app.schemas import HoldingCreate, HoldingUpdate, PortfolioCreate
 from app.config import settings
-from app.services.stock_service import get_all_quotes, get_stock_data
+from app.services.stock_service import get_all_quotes, get_stock_data, validate_ticker_symbol
 
 # All routes in this file are grouped under the /api/portfolio prefix
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
@@ -328,11 +328,14 @@ async def add_holding(
         )
 
     # Intentional network check: catch invalid symbols before storing the holding.
-    quote = get_stock_data(data.ticker)
-    if quote.get("error") or (quote.get("current_price") or 0.0) <= 0:
+    validation = validate_ticker_symbol(data.ticker)
+    if not validation["valid"]:
         raise HTTPException(
             status_code=400,
-            detail=f"Couldn't find ticker {data.ticker} — check the symbol",
+            detail={
+                "message": validation["message"],
+                "suggestions": validation["suggestions"],
+            },
         )
 
     holding = Holding(

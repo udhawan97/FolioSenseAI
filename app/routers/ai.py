@@ -12,7 +12,12 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models import AISummary, Holding
-from app.services.ai_service import MODEL, generate_etf_profile_seed, generate_stock_summary
+from app.services.ai_service import (
+    MODEL,
+    claude_api_heartbeat,
+    generate_etf_profile_seed,
+    generate_stock_summary,
+)
 from app.services.move_explainer import (
     HoldingMoveSummary,
     _day_change_pct_cached,
@@ -304,6 +309,16 @@ async def get_ai_cache_stats(db: Session = Depends(get_db)):
                 "token usage is not stored."
             )
         ),
+    }
+
+
+@router.get("/heartbeat")
+async def get_claude_heartbeat():
+    """Return a lightweight Claude API reachability check for the dashboard HUD."""
+    return {
+        **claude_api_heartbeat(),
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+        "model": MODEL,
     }
 
 

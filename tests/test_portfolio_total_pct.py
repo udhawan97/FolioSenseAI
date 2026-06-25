@@ -12,6 +12,7 @@ from app import database as app_database
 from app.models import Base, Holding, Portfolio, PortfolioSnapshot, RealizedTrade
 from app.routers import portfolio as portfolio_router
 from app.schemas import HoldingCreate, HoldingUpdate
+from app.services import stock_service
 
 
 def make_db():
@@ -220,8 +221,8 @@ def test_research_holding_can_be_added_without_shares(monkeypatch):
     db = make_db()
     monkeypatch.setattr(
         portfolio_router,
-        "get_stock_data",
-        lambda ticker: {"ticker": ticker, "current_price": 100, "error": None},
+        "validate_ticker_symbol",
+        lambda ticker: {"valid": True, "ticker": ticker, "quote": quote(ticker, 100), "suggestions": []},
     )
 
     result = asyncio.run(
@@ -241,8 +242,13 @@ def test_add_holding_rejects_unresolved_ticker(monkeypatch):
     db = make_db()
     monkeypatch.setattr(
         portfolio_router,
-        "get_stock_data",
-        lambda ticker: {"ticker": ticker, "current_price": 0.0, "error": "no quote"},
+        "validate_ticker_symbol",
+        lambda ticker: {
+            "valid": False,
+            "ticker": ticker,
+            "message": f"Couldn't find ticker {ticker} — check the symbol",
+            "suggestions": [{"ticker": "AAPL", "name": "Apple Inc.", "exchange": "NASDAQ"}],
+        },
     )
 
     try:
@@ -254,9 +260,47 @@ def test_add_holding_rejects_unresolved_ticker(monkeypatch):
         )
     except HTTPException as exc:
         assert exc.status_code == 400
-        assert "Couldn't find ticker NOPE" in exc.detail
+        assert "Couldn't find ticker NOPE" in exc.detail["message"]
+        assert exc.detail["suggestions"][0]["ticker"] == "AAPL"
     else:
         raise AssertionError("Invalid ticker was accepted")
+
+
+def test_validate_ticker_symbol_rejects_unsafe_shape_without_quote_call(monkeypatch):
+    called = False
+
+    def fake_get_stock_data(_ticker):
+        nonlocal called
+        called = True
+        return quote("AAPL", 100)
+
+    monkeypatch.setattr(stock_service, "get_stock_data", fake_get_stock_data)
+    monkeypatch.setattr(stock_service, "suggest_tickers", lambda _ticker, limit=3: [])
+
+    result = stock_service.validate_ticker_symbol("AAPL; DROP")
+
+    assert result["valid"] is False
+    assert "letters, numbers" in result["message"]
+    assert called is False
+
+
+def test_validate_ticker_symbol_requires_resolved_quote(monkeypatch):
+    monkeypatch.setattr(
+        stock_service,
+        "get_stock_data",
+        lambda ticker: {"ticker": ticker, "current_price": 0.0, "error": None},
+    )
+    monkeypatch.setattr(
+        stock_service,
+        "suggest_tickers",
+        lambda _ticker, limit=3: [{"ticker": "AAPL", "name": "Apple Inc.", "exchange": "NASDAQ"}],
+    )
+
+    result = stock_service.validate_ticker_symbol("APPL")
+
+    assert result["valid"] is False
+    assert "Couldn't find ticker APPL" in result["message"]
+    assert result["suggestions"][0]["name"] == "Apple Inc."
 
 
 def test_delete_realized_trade_adjusts_realized_total_and_today_snapshot(monkeypatch):

@@ -10,6 +10,8 @@ from sqlalchemy.pool import StaticPool
 from app.config import settings
 from app.models import AISummary, Base
 from app.routers.ai import get_ai_cache_stats
+from app.services import ai_service
+from app.services.ai_service import claude_api_heartbeat
 
 
 def _make_db():
@@ -68,3 +70,37 @@ def test_ai_cache_stats_marks_billing_paused_without_api_key(monkeypatch):
     assert stats["claude_configured"] is False
     assert stats["billing_active"] is False
     assert "paused" in stats["note"]
+
+
+def test_claude_heartbeat_reports_missing_key(monkeypatch):
+    monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "")
+
+    result = claude_api_heartbeat()
+
+    assert result["live"] is False
+    assert result["status"] == "missing_key"
+
+
+def test_claude_heartbeat_reports_live_api(monkeypatch):
+    class _Messages:
+        @staticmethod
+        def count_tokens(**_kwargs):
+            raise AssertionError("heartbeat must not call token-counting APIs")
+
+    class _Models:
+        @staticmethod
+        def list(**_kwargs):
+            return []
+
+    class _Client:
+        messages = _Messages()
+        models = _Models()
+
+    monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setattr(ai_service, "client", _Client())
+
+    result = claude_api_heartbeat()
+
+    assert result["live"] is True
+    assert result["status"] == "ok"
+    assert "input_tokens" not in result

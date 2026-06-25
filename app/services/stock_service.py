@@ -1,4 +1,5 @@
 import logging
+import re
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 import yfinance as yf
@@ -8,10 +9,42 @@ from app.services.security_type import classify_security
 
 logger = logging.getLogger(__name__)
 QUOTE_FETCH_ERROR = "Quote data is temporarily unavailable."
+TICKER_PATTERN = re.compile(r"^[A-Z0-9.^-]{1,10}$")
+SUGGESTION_QUERY_PATTERN = re.compile(r"[^A-Za-z0-9 .^\-&]")
+SUPPORTED_QUOTE_TYPES = {
+    "EQUITY",
+    "ETF",
+    "MUTUALFUND",
+    "CRYPTOCURRENCY",
+    "INDEX",
+}
 
 # Tickers fetched when no specific list is provided.
 # Configure with DEFAULT_HOLDINGS=VOO,QQQ,... in .env.
 DEFAULT_HOLDINGS: list[str] = settings.DEFAULT_HOLDINGS
+
+
+def normalize_ticker(ticker: str) -> str:
+    """Normalize user-entered symbols before validation or storage."""
+    return (ticker or "").strip().upper()
+
+
+def ticker_shape_is_safe(ticker: str) -> bool:
+    """Keep ticker input narrow enough to be safe in logs, URLs, and storage."""
+    return bool(TICKER_PATTERN.fullmatch(normalize_ticker(ticker)))
+
+
+def _clean_suggestion_query(query: str) -> str:
+    """Allow company-name searches while stripping punctuation used in injections."""
+    return SUGGESTION_QUERY_PATTERN.sub("", (query or "").strip())[:80]
+
+
+def quote_resolves(quote: dict) -> bool:
+    """Return True only when Yahoo returned usable market data for a symbol."""
+    if not quote or quote.get("error"):
+        return False
+    price = quote.get("current_price") or 0.0
+    return price > 0
 
 
 def get_stock_data(ticker: str) -> dict:
@@ -131,6 +164,82 @@ def get_stock_data(ticker: str) -> dict:
             "day_change_pct": 0.0,
             "error": QUOTE_FETCH_ERROR,
         }
+
+
+def suggest_tickers(query: str, limit: int = 3) -> list[dict]:
+    """Return likely ticker matches from Yahoo Finance search."""
+    query = _clean_suggestion_query(query)
+    if not query:
+        return []
+
+    try:
+        search = yf.Search(
+            query,
+            max_results=max(limit, 3),
+            news_count=0,
+            lists_count=0,
+            include_research=False,
+            raise_errors=False,
+            timeout=5,
+        )
+        suggestions = []
+        seen = set()
+        for item in search.quotes or []:
+            symbol = str(item.get("symbol") or "").upper().strip()
+            if not symbol or symbol in seen or not ticker_shape_is_safe(symbol):
+                continue
+            quote_type = str(item.get("quoteType") or item.get("typeDisp") or "").upper()
+            if quote_type and quote_type not in SUPPORTED_QUOTE_TYPES:
+                continue
+            seen.add(symbol)
+            suggestions.append({
+                "ticker": symbol,
+                "name": item.get("longname") or item.get("shortname") or symbol,
+                "exchange": item.get("exchDisp") or item.get("exchange") or "",
+            })
+            if len(suggestions) >= limit:
+                break
+        return suggestions
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.warning(
+            "Ticker search failed; exception_type=%s",
+            type(exc).__name__,
+        )
+        return []
+
+
+def validate_ticker_symbol(ticker: str, suggestion_limit: int = 3) -> dict:
+    """
+    Validate that a user-entered ticker is safe and resolves to live quote data.
+
+    The shape check protects the app from injection-shaped strings before any
+    network call. The quote check prevents arbitrary safe-looking text from
+    becoming a portfolio holding.
+    """
+    normalized = normalize_ticker(ticker)
+    if not ticker_shape_is_safe(normalized):
+        return {
+            "valid": False,
+            "ticker": normalized,
+            "message": "Ticker can use only letters, numbers, '.', '-', or '^' and must be 10 characters or fewer.",
+            "suggestions": suggest_tickers(ticker, limit=suggestion_limit),
+        }
+
+    quote = get_stock_data(normalized)
+    if not quote_resolves(quote):
+        return {
+            "valid": False,
+            "ticker": normalized,
+            "message": f"Couldn't find ticker {normalized} — check the symbol",
+            "suggestions": suggest_tickers(normalized, limit=suggestion_limit),
+        }
+
+    return {
+        "valid": True,
+        "ticker": normalized,
+        "quote": quote,
+        "suggestions": [],
+    }
 
 
 def get_all_quotes(tickers: Optional[list[str]] = None) -> list[dict]:

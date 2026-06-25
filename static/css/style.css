@@ -611,6 +611,24 @@ body > .navbar {
     box-shadow: 0 0 0 3px rgba(48, 209, 88, 0.12), 0 0 12px rgba(48, 209, 88, 0.65);
 }
 
+.brand-lockup.claude-live .brand-character::after {
+    background: var(--accent-green);
+    box-shadow: 0 0 0 3px rgba(48, 209, 88, 0.12),
+                0 0 12px rgba(48, 209, 88, 0.65);
+}
+
+.brand-lockup.claude-checking .brand-character::after {
+    background: var(--accent-yellow);
+    box-shadow: 0 0 0 3px rgba(255, 214, 10, 0.11),
+                0 0 11px rgba(255, 214, 10, 0.50);
+}
+
+.brand-lockup.claude-offline .brand-character::after {
+    background: #e05252;
+    box-shadow: 0 0 0 3px rgba(224, 82, 82, 0.13),
+                0 0 12px rgba(224, 82, 82, 0.58);
+}
+
 .brand-icon {
     width: 100%;
     height: 100%;
@@ -2339,6 +2357,63 @@ body > .portfolio-manager-popover.is-visible .portfolio-manager-panel {
 
 [data-bs-theme="light"] .portfolio-manager-table thead th {
     background: rgba(255, 255, 255, 0.96);
+}
+
+.add-msg-with-suggestions {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+}
+
+.ticker-suggestion-list {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+}
+
+.ticker-suggestion-chip {
+    display: inline-grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: center;
+    column-gap: 0.32rem;
+    row-gap: 0.02rem;
+    max-width: 220px;
+    min-height: 30px;
+    padding: 0.24rem 0.48rem;
+    border: 1px solid rgba(111, 214, 240, 0.22);
+    border-radius: 8px;
+    background: rgba(111, 214, 240, 0.07);
+    color: var(--text-secondary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.ticker-suggestion-chip:hover {
+    border-color: rgba(111, 214, 240, 0.38);
+    background: rgba(111, 214, 240, 0.12);
+}
+
+.ticker-suggestion-chip strong {
+    color: var(--text-primary);
+    font-size: 0.68rem;
+}
+
+.ticker-suggestion-chip span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.64rem;
+}
+
+.ticker-suggestion-chip em {
+    grid-column: 2;
+    color: var(--text-tertiary);
+    font-size: 0.56rem;
+    font-style: normal;
 }
 
 @media (max-width: 575.98px) {
@@ -5455,6 +5530,22 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
     transform: scale(1);
 }
 
+.pet-nav-toggle.claude-live::after {
+    background: var(--accent-green);
+    opacity: 0.9;
+    transform: scale(1);
+    box-shadow: 0 0 0 3px rgba(48, 209, 88, 0.12),
+                0 0 10px rgba(48, 209, 88, 0.42);
+}
+
+.pet-nav-toggle.claude-checking::after {
+    background: var(--accent-yellow);
+    opacity: 0.86;
+    transform: scale(1);
+    box-shadow: 0 0 0 3px rgba(255, 214, 10, 0.11),
+                0 0 9px rgba(255, 214, 10, 0.34);
+}
+
 .pet-nav-toggle:hover,
 .pet-nav-toggle:focus-visible {
     color: var(--text-primary);
@@ -5483,6 +5574,8 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
     background: #e05252;
     opacity: 0.9;
     transform: scale(1);
+    box-shadow: 0 0 0 3px rgba(224, 82, 82, 0.13),
+                0 0 10px rgba(224, 82, 82, 0.42);
 }
 
 .pet-offline-note {
@@ -6806,17 +6899,24 @@ body > .dashboard-pet {
 .hud-status-pill {
     display: inline-flex;
     align-items: center;
-    gap: 0.32rem;
-    padding: 0.18rem 0.55rem 0.18rem 0.42rem;
-    border-radius: 20px;
-    background: rgba(255,255,255,0.045);
-    border: 1px solid rgba(255,255,255,0.09);
+    gap: 0.14rem;
+    padding: 0.14rem 0.22rem 0.14rem 0.28rem;
+    border-radius: 999px;
+    background:
+        radial-gradient(circle at 14% 20%, rgba(90, 200, 250, 0.20), transparent 34%),
+        linear-gradient(135deg, rgba(255,255,255,0.078), rgba(255,255,255,0.026)),
+        rgba(6, 10, 18, 0.82);
+    border: 1px solid rgba(111, 214, 240, 0.16);
     font-size: 0.6rem;
     font-variant-numeric: tabular-nums;
-    letter-spacing: 0.06em;
+    letter-spacing: 0;
     color: rgba(235,235,245,0.42);
     white-space: nowrap;
-    transition: border-color 0.3s ease, background 0.3s ease;
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.06),
+        0 0 0 1px rgba(90, 200, 250, 0.04),
+        0 10px 26px rgba(0,0,0,0.20);
+    transition: border-color 0.3s ease, background 0.3s ease, box-shadow 0.3s ease, transform 0.2s ease;
     position: relative;
     overflow: hidden;
 }
@@ -6825,7 +6925,7 @@ body > .dashboard-pet {
     position: absolute;
     inset: 0;
     border-radius: inherit;
-    background: linear-gradient(90deg, transparent 0%, rgba(100,210,255,0.03) 50%, transparent 100%);
+    background: linear-gradient(90deg, transparent 0%, rgba(100,210,255,0.075) 50%, transparent 100%);
     /* background-position sweep → opacity pulse; no repaint */
     animation: hud-scan 4s linear infinite;
     pointer-events: none;
@@ -6837,8 +6937,9 @@ body > .dashboard-pet {
 
 .hud-pulse-dot {
     display: inline-block;
-    width: 5px;
-    height: 5px;
+    width: 6px;
+    height: 6px;
+    margin: 0 0.2rem 0 0.04rem;
     border-radius: 50%;
     background: var(--accent-cyan, #5ac8fa);
     box-shadow: 0 0 5px 1px rgba(90,200,250,0.6);
@@ -6851,23 +6952,123 @@ body > .dashboard-pet {
     50%       { opacity: 0.4; }
 }
 
+.hud-status-chip {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.18rem;
+    min-height: 1.26rem;
+    padding: 0.14rem 0.34rem;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.035);
+    border: 1px solid rgba(255,255,255,0.06);
+    color: rgba(235,235,245,0.62);
+    line-height: 1;
+}
+.hud-status-chip i {
+    color: rgba(90,200,250,0.72);
+    font-size: 0.72rem;
+    line-height: 1;
+}
+.hud-chip-label {
+    display: none;
+    color: rgba(235,235,245,0.38);
+    font-size: 0.52rem;
+    font-weight: 700;
+    line-height: 1;
+    text-transform: uppercase;
+}
+.hud-status-chip-refresh {
+    background: rgba(90,200,250,0.09);
+    border-color: rgba(90,200,250,0.18);
+}
+.hud-status-chip-claude {
+    min-width: 2.62rem;
+    justify-content: center;
+    background: rgba(48, 209, 88, 0.07);
+    border-color: rgba(48, 209, 88, 0.16);
+}
+.hud-status-chip-claude i {
+    color: rgba(48, 209, 88, 0.78);
+}
+.hud-status-pill.claude-offline .hud-status-chip-claude {
+    background: rgba(255, 69, 58, 0.095);
+    border-color: rgba(255, 69, 58, 0.20);
+}
+.hud-status-pill.claude-offline .hud-status-chip-claude i {
+    color: rgba(255, 69, 58, 0.86);
+}
+.hud-status-pill.claude-checking .hud-status-chip-claude {
+    background: rgba(255, 214, 10, 0.09);
+    border-color: rgba(255, 214, 10, 0.18);
+}
+.hud-status-pill.claude-checking .hud-status-chip-claude i {
+    color: rgba(255, 214, 10, 0.86);
+}
 .hud-status-updated {
-    color: rgba(235,235,245,0.5);
+    color: rgba(235,235,245,0.66);
     font-size: 0.58rem;
-    letter-spacing: 0.04em;
+    font-weight: 700;
+    letter-spacing: 0;
 }
 .hud-status-divider {
     color: rgba(235,235,245,0.2);
     font-size: 0.55rem;
 }
 .hud-status-countdown {
-    color: rgba(90,200,250,0.65);
-    font-size: 0.58rem;
-    letter-spacing: 0.03em;
+    min-width: 2.12rem;
+    color: rgba(90,200,250,0.92);
+    font-size: 0.64rem;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-align: right;
     transition: color 0.5s ease;
 }
+.hud-status-claude {
+    min-width: 1.16rem;
+    color: rgba(48, 209, 88, 0.88);
+    font-size: 0.56rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-align: left;
+    text-transform: uppercase;
+    transition: color 0.24s ease;
+}
+.hud-status-chevron {
+    position: relative;
+    z-index: 1;
+    display: inline-grid;
+    place-items: center;
+    width: 1rem;
+    height: 1rem;
+    color: rgba(235,235,245,0.30);
+    transition: color 0.2s ease, transform 0.2s ease;
+}
+.hud-status-chevron i {
+    font-size: 0.58rem;
+    line-height: 1;
+}
+.hud-status-pill.claude-live .hud-pulse-dot {
+    background: var(--accent-green);
+    box-shadow: 0 0 5px 1px rgba(48, 209, 88, 0.58);
+}
+.hud-status-pill.claude-offline .hud-pulse-dot {
+    background: var(--accent-red);
+    box-shadow: 0 0 5px 1px rgba(255, 69, 58, 0.58);
+}
+.hud-status-pill.claude-offline .hud-status-claude {
+    color: rgba(255, 69, 58, 0.76);
+}
+.hud-status-pill.claude-checking .hud-pulse-dot {
+    background: var(--accent-yellow);
+    box-shadow: 0 0 5px 1px rgba(255, 214, 10, 0.50);
+}
+.hud-status-pill.claude-checking .hud-status-claude {
+    color: rgba(255, 214, 10, 0.78);
+}
 .hud-status-countdown.is-soon {
-    color: rgba(255,159,10,0.8);
+    color: rgba(255,159,10,0.94);
     animation: hud-countdown-tick 1s ease-in-out infinite;
 }
 @keyframes hud-countdown-tick {
@@ -6886,9 +7087,24 @@ body > .dashboard-pet {
 /* hover / active lift */
 .hud-status-pill:hover,
 .hud-status-pill[aria-expanded="true"] {
-    background: rgba(90,200,250,0.07);
-    border-color: rgba(90,200,250,0.22);
+    background:
+        radial-gradient(circle at 14% 20%, rgba(90, 200, 250, 0.28), transparent 34%),
+        linear-gradient(135deg, rgba(255,255,255,0.105), rgba(255,255,255,0.036)),
+        rgba(6, 10, 18, 0.88);
+    border-color: rgba(90,200,250,0.34);
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.10),
+        0 0 20px rgba(90, 200, 250, 0.10),
+        0 14px 32px rgba(0,0,0,0.24);
+    transform: translateY(-1px);
     cursor: pointer;
+}
+.hud-status-pill[aria-expanded="true"] .hud-status-chevron {
+    color: rgba(90,200,250,0.78);
+    transform: rotate(180deg);
+}
+.hud-status-pill:hover .hud-status-chevron {
+    color: rgba(90,200,250,0.70);
 }
 .hud-status-pill:hover .hud-pulse-dot {
     animation-duration: 1s;
@@ -6901,30 +7117,83 @@ body > .dashboard-pet {
 /* flash on data refresh */
 @keyframes hud-flash {
     0%   { background: rgba(90,200,250,0.18); border-color: rgba(90,200,250,0.4); }
-    100% { background: rgba(255,255,255,0.045); border-color: rgba(255,255,255,0.09); }
+    100% {
+        background:
+            radial-gradient(circle at 14% 20%, rgba(90, 200, 250, 0.20), transparent 34%),
+            linear-gradient(135deg, rgba(255,255,255,0.078), rgba(255,255,255,0.026)),
+            rgba(6, 10, 18, 0.82);
+        border-color: rgba(111, 214, 240, 0.16);
+    }
 }
 .hud-status-pill.is-refreshed {
     animation: hud-flash 0.8s ease-out forwards;
 }
 
 [data-bs-theme="light"] .hud-status-pill {
-    background: rgba(0,0,0,0.04);
-    border-color: rgba(0,0,0,0.10);
+    background:
+        radial-gradient(circle at 14% 20%, rgba(0,122,255,0.12), transparent 34%),
+        linear-gradient(135deg, rgba(255,255,255,0.95), rgba(246,248,252,0.84)),
+        rgba(255,255,255,0.86);
+    border-color: rgba(0,122,255,0.14);
     color: rgba(60,60,67,0.5);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.80), 0 10px 24px rgba(15,23,42,0.08);
 }
-[data-bs-theme="light"] .hud-status-updated { color: rgba(60,60,67,0.55); }
+[data-bs-theme="light"] .hud-status-chip {
+    background: rgba(255,255,255,0.60);
+    border-color: rgba(15,23,42,0.07);
+    color: rgba(60,60,67,0.72);
+}
+[data-bs-theme="light"] .hud-chip-label { color: rgba(60,60,67,0.45); }
+[data-bs-theme="light"] .hud-status-chip-refresh {
+    background: rgba(0,122,255,0.075);
+    border-color: rgba(0,122,255,0.15);
+}
+[data-bs-theme="light"] .hud-status-chip-claude {
+    background: rgba(20, 135, 92, 0.075);
+    border-color: rgba(20, 135, 92, 0.14);
+}
+[data-bs-theme="light"] .hud-status-pill.claude-offline .hud-status-chip-claude {
+    background: rgba(210, 52, 52, 0.08);
+    border-color: rgba(210, 52, 52, 0.18);
+}
+[data-bs-theme="light"] .hud-status-updated { color: rgba(60,60,67,0.72); }
 [data-bs-theme="light"] .hud-status-divider  { color: rgba(60,60,67,0.25); }
-[data-bs-theme="light"] .hud-status-countdown { color: rgba(0,122,255,0.65); }
+[data-bs-theme="light"] .hud-status-countdown { color: rgba(0,122,255,0.86); }
+[data-bs-theme="light"] .hud-status-claude { color: rgba(20, 135, 92, 0.82); }
+[data-bs-theme="light"] .hud-status-pill.claude-offline .hud-status-claude {
+    color: rgba(210, 52, 52, 0.82);
+}
 [data-bs-theme="light"] .hud-pulse-dot {
     background: var(--accent-blue, #007aff);
     box-shadow: 0 0 5px 1px rgba(0,122,255,0.45);
 }
 @keyframes hud-flash-light {
     0%   { background: rgba(0,122,255,0.12); border-color: rgba(0,122,255,0.3); }
-    100% { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.10); }
+    100% {
+        background:
+            radial-gradient(circle at 14% 20%, rgba(0,122,255,0.12), transparent 34%),
+            linear-gradient(135deg, rgba(255,255,255,0.95), rgba(246,248,252,0.84)),
+            rgba(255,255,255,0.86);
+        border-color: rgba(0,122,255,0.14);
+    }
 }
 [data-bs-theme="light"] .hud-status-pill.is-refreshed {
     animation: hud-flash-light 0.8s ease-out forwards;
+}
+
+@media (max-width: 767.98px) {
+    .hud-status-pill {
+        gap: 0.18rem;
+        padding: 0.18rem 0.28rem;
+    }
+    .hud-status-chip {
+        gap: 0.18rem;
+        padding: 0.16rem 0.34rem;
+    }
+    .hud-chip-label,
+    .hud-status-chip-sync {
+        display: none;
+    }
 }
 
 /* ── HUD status popover ──────────────────────────────────────────────────── */
@@ -7021,6 +7290,77 @@ body > .dashboard-pet {
     gap: 0.58rem;
 }
 
+.hud-refresh-all-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.32rem;
+    width: 100%;
+    min-height: 30px;
+    margin-top: 0.02rem;
+    border: 1px solid rgba(235, 245, 255, 0.105);
+    border-radius: 7px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.052), rgba(255, 255, 255, 0.026));
+    color: rgba(245, 247, 250, 0.78);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.055),
+        0 1px 1px rgba(0, 0, 0, 0.10);
+    font-size: 0.65rem;
+    font-weight: 650;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    transition:
+        background 0.18s var(--ease),
+        border-color 0.18s var(--ease),
+        color 0.18s var(--ease),
+        transform 0.18s var(--ease);
+}
+
+.hud-refresh-all-btn i {
+    font-size: 0.76rem;
+    opacity: 0.78;
+}
+
+.hud-refresh-all-btn:hover {
+    border-color: rgba(235, 245, 255, 0.17);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.070), rgba(255, 255, 255, 0.038));
+    color: rgba(255, 255, 255, 0.90);
+}
+
+.hud-refresh-all-btn:active {
+    transform: scale(0.99);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.038), rgba(255, 255, 255, 0.026));
+}
+
+.hud-refresh-all-btn:disabled {
+    cursor: default;
+    opacity: 0.65;
+}
+
+.hud-refresh-all-btn.is-refreshing i {
+    animation: refreshSpin 0.9s linear infinite;
+}
+
+[data-bs-theme="light"] .hud-refresh-all-btn {
+    border-color: rgba(15, 23, 42, 0.10);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.90), rgba(248, 250, 252, 0.78));
+    color: rgba(15, 23, 42, 0.68);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.90),
+        0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+[data-bs-theme="light"] .hud-refresh-all-btn:hover {
+    border-color: rgba(15, 23, 42, 0.16);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.90));
+    color: rgba(15, 23, 42, 0.82);
+}
+
 .hud-popover-row {
     display: grid;
     grid-template-columns: 20px 1fr;
@@ -7085,6 +7425,14 @@ body > .dashboard-pet {
     background: linear-gradient(90deg, rgba(255,159,10,0.5), rgba(255,159,10,0.9));
     box-shadow: 0 0 6px rgba(255,159,10,0.5);
 }
+.hud-claude-progress-fill {
+    background: linear-gradient(90deg, rgba(48, 209, 88, 0.42), rgba(48, 209, 88, 0.88));
+    box-shadow: 0 0 6px rgba(48, 209, 88, 0.42);
+}
+.hud-claude-progress-fill.is-offline {
+    background: linear-gradient(90deg, rgba(255, 69, 58, 0.42), rgba(255, 69, 58, 0.88));
+    box-shadow: 0 0 6px rgba(255, 69, 58, 0.42);
+}
 
 @keyframes hudProgressGlint {
     0%, 32% { transform: translateX(-120%); opacity: 0; }
@@ -7144,8 +7492,12 @@ body > .dashboard-pet {
 [data-bs-theme="light"] .hud-popover-divider { background: rgba(0,122,255,0.06); }
 [data-bs-theme="light"] .hud-status-pill:hover,
 [data-bs-theme="light"] .hud-status-pill[aria-expanded="true"] {
-    background: rgba(0,122,255,0.06);
-    border-color: rgba(0,122,255,0.2);
+    background:
+        radial-gradient(circle at 14% 20%, rgba(0,122,255,0.18), transparent 34%),
+        linear-gradient(135deg, rgba(255,255,255,0.98), rgba(241,247,255,0.90)),
+        rgba(255,255,255,0.92);
+    border-color: rgba(0,122,255,0.24);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 14px 30px rgba(15,23,42,0.10);
 }
 
 [data-bs-theme="light"] .shortcut-pill {

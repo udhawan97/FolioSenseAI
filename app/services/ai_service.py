@@ -6,6 +6,7 @@ Claude AI integration for generating stock and portfolio summaries.
 import json
 import logging
 import re
+from time import perf_counter
 
 import anthropic
 from app.config import settings
@@ -15,6 +16,38 @@ logger = logging.getLogger(__name__)
 client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
 
 MODEL = "claude-haiku-4-5-20251001"
+
+
+def claude_api_heartbeat(timeout: float = 2.0) -> dict:
+    """Check whether the configured Claude API key can reach Anthropic."""
+    if not settings.ANTHROPIC_API_KEY.strip():
+        return {
+            "live": False,
+            "status": "missing_key",
+            "latency_ms": None,
+            "message": "Claude API key is not configured",
+        }
+
+    start = perf_counter()
+    try:
+        client.models.list(limit=1, timeout=timeout)
+        return {
+            "live": True,
+            "status": "ok",
+            "latency_ms": round((perf_counter() - start) * 1000),
+            "message": "Claude API reachable",
+        }
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.debug(
+            "Claude heartbeat failed; exception_type=%s",
+            type(exc).__name__,
+        )
+        return {
+            "live": False,
+            "status": type(exc).__name__,
+            "latency_ms": round((perf_counter() - start) * 1000),
+            "message": "Claude API heartbeat failed",
+        }
 
 # Rotating fallback quips per action (no Claude required)
 _FALLBACK_QUIPS: dict[str, list[str]] = {

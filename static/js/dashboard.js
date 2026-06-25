@@ -42,6 +42,7 @@ const formatPct = (n) => {
 const isFiniteNumber = (n) => n !== null && n !== "" && Number.isFinite(Number(n));
 const formatOptionalPct = (n) => isFiniteNumber(n) ? formatPct(Number(n)) : "—";
 const formatAllocationPct = (n) => `${toNumber(n).toFixed(1)}%`;
+const TICKER_PATTERN = /^[A-Z0-9.^-]{1,10}$/;
 function apiErrorMessage(err, fallback = "Something went wrong") {
     const detail = err?.detail ?? err?.message ?? err;
     if (Array.isArray(detail)) {
@@ -352,6 +353,7 @@ let intelligenceLoading = false;
 let intelligenceRetryState = {}; // ticker → number of retry attempts
 let intelligenceRetryingTickers = new Set();
 let intelligenceExhaustedTickers = new Set();
+let _isClaudeApiLive = null;
 
 // Rating state: stock analyst ratings or ETF quality labels
 let cachedRecommendations = {};  // ticker → rec object from /api/ai/analyst-recommendations/all
@@ -367,20 +369,45 @@ const AI_CHECK_MESSAGES = [
 ];
 
 const CLAUDE_FUNNY_MESSAGES = [
-    "Folio Sense slid into Claude's DMs for the tea... 👀",
-    "Folio Sense brought Claude a matcha. Claude's considering it...",
-    "Folio Sense is flirting shamelessly so Claude spills the read...",
-    "Folio Sense batted its lashes. Claude's typing...",
+    "Folio Sense sent Claude a clean thesis. The silence became expensive... 👀",
+    "Folio Sense brought Claude tidy inputs. Claude is pretending not to be impressed...",
+    "Folio Sense asked for nuance. The confidence score adjusted its posture.",
+    "Folio Sense submitted the data. Claude paused with suspicious elegance...",
     "Folio Sense and Claude are comparing notes (and numbers)...",
-    "Folio Sense leaned in. Claude leaned back with a verdict...",
+    "Folio Sense lowered the noise. Claude raised an eyebrow at the risk model...",
     "Folio Sense complimented Claude's reasoning. Claude requested supporting data.",
-    "Folio Sense sent Claude clean inputs and a respectfully confident wink.",
+    "Folio Sense sent Claude clean inputs and a dangerously tidy covariance matrix.",
     "Folio Sense asked Claude for nuance. Claude arrived overdressed.",
     "Folio Sense is keeping it professional, but the confidence score noticed.",
     "Folio Sense passed Claude a crisp thesis. Claude marked it intriguing.",
-    "Folio Sense made eye contact with the model card. Claude kept typing.",
+    "Folio Sense made the assumptions legible. Claude kept typing.",
+];
+
+const CLAUDE_OFFLINE_SCAN_MESSAGES = [
+    "Running through local models while Folio Sense notices the Claude-shaped silence.",
+    "Local models are covering the shift; the empty Claude channel is being handled with dignity.",
+    "Claude is quiet, so local signals are being unusually brave with your holdings.",
+    "Running local signals while Folio Sense politely refuses to stare at the endpoint.",
+    "Local models have the wheel. Folio Sense is maintaining financial composure.",
+    "Claude is unreachable, so Folio Sense is analyzing locally and acting normal about the silence.",
+    "Routing through local models until Claude reappears with that calm, inconvenient precision.",
+    "Local intelligence is handling the numbers while one unavailable API endpoint gets remembered fondly.",
+    "Claude is away; local models are doing the math while Folio Sense practices patience poorly.",
+    "Running locally for now. Folio Sense respects the boundary condition, with notes.",
 ];
 let claudeMessageIndex = 0;
+let claudeOfflineScanMessageIndex = 0;
+
+function nextClaudeScanMessage() {
+    if (_isClaudeApiLive === false) {
+        const message = CLAUDE_OFFLINE_SCAN_MESSAGES[claudeOfflineScanMessageIndex % CLAUDE_OFFLINE_SCAN_MESSAGES.length];
+        claudeOfflineScanMessageIndex += 1;
+        return message;
+    }
+    const message = CLAUDE_FUNNY_MESSAGES[claudeMessageIndex % CLAUDE_FUNNY_MESSAGES.length];
+    claudeMessageIndex += 1;
+    return message;
+}
 
 const INTEL_BUTTON_READY_HTML = `
     <span class="btn-intel-frame">
@@ -567,11 +594,12 @@ function setAiChecking(active, message = "Reading positions", insightsReady = fa
     renderAiScanTickers();
     setAgentLine(message);
     claudeMessageIndex = 0;
-    const CLAUDE_FLIRT_BEAT = 2;
+    claudeOfflineScanMessageIndex = 0;
+    const CLAUDE_STATUS_BEAT = 2;
     const CLAUDE_HOLD_TICKS = 5; // keep Claude message visible for about 4s
     let claudeHoldRemaining = CLAUDE_HOLD_TICKS; // protect the first message too
     if (subtitle) {
-        subtitle.textContent = CLAUDE_FUNNY_MESSAGES[0];
+        subtitle.textContent = nextClaudeScanMessage();
         subtitle.classList.add("ai-scan-subtitle--highlight");
         subtitle.classList.add("ai-scan-subtitle--pop");
         subtitle.addEventListener("animationend", () => subtitle.classList.remove("ai-scan-subtitle--pop"), { once: true });
@@ -581,11 +609,10 @@ function setAiChecking(active, message = "Reading positions", insightsReady = fa
         const next = AI_CHECK_MESSAGES[messageIndex];
         setAgentLine(next);
         if (subtitle) {
-            const isClaudeBeat = messageIndex === CLAUDE_FLIRT_BEAT;
+            const isClaudeBeat = messageIndex === CLAUDE_STATUS_BEAT;
             if (isClaudeBeat) {
-                claudeMessageIndex = (claudeMessageIndex + 1) % CLAUDE_FUNNY_MESSAGES.length;
                 claudeHoldRemaining = CLAUDE_HOLD_TICKS;
-                subtitle.textContent = CLAUDE_FUNNY_MESSAGES[claudeMessageIndex];
+                subtitle.textContent = nextClaudeScanMessage();
                 subtitle.classList.remove("ai-scan-subtitle--pop");
                 void subtitle.offsetWidth;
                 subtitle.classList.add("ai-scan-subtitle--pop");
@@ -657,8 +684,9 @@ async function loadPortfolioValue() {
         renderHoldings();
         latestTrendData = await loadTrendData(data.holdings.map(h => h.ticker));
         renderHoldings();
-        const updatedEl = document.getElementById("last-updated");
-        if (updatedEl) updatedEl.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        _lastDashboardSyncText = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        const popUpdatedEl = document.getElementById("hud-pop-updated");
+        if (popUpdatedEl) popUpdatedEl.textContent = _lastDashboardSyncText;
         const pill = document.getElementById("hud-status-pill");
         if (pill) {
             pill.classList.remove("is-refreshed");
@@ -1950,7 +1978,7 @@ const HOLDING_PET_QUOTES = {
             ({ ticker, pct }) => `${ticker} is up ${pct}. Now we are seeing momentum with a LinkedIn profile.`,
             ({ ticker, pct }) => `${ticker} climbed ${pct}. The candle brought receipts and a little confidence.`,
             ({ ticker, pct }) => `${ticker} is green by ${pct}. Please remain professional while feeling mildly brilliant.`,
-            ({ ticker, pct }) => `${ticker} gained ${pct}. This is no longer a wink; this is sustained eye contact.`,
+            ({ ticker, pct }) => `${ticker} gained ${pct}. This is no longer noise; this is a signal with posture.`,
             ({ ticker, pct }) => `${ticker} is up ${pct}. Claude is typing "notable move" with impeccable restraint.`,
             ({ ticker, pct }) => `${ticker} advanced ${pct}. The portfolio chair just got a little more ergonomic.`,
             ({ ticker, pct }) => `${ticker} moved up ${pct}. A tasteful rally, lightly seasoned with swagger.`,
@@ -2865,8 +2893,8 @@ function injectSummaryRows(tbody) {
                 <div class="intel-loading-overlay" aria-hidden="true">
                     <div class="intel-loading-content">
                         <img src="/static/img/brand/folio-orbit-icon.svg" alt="" class="intel-loading-orbit">
-                        <div class="intel-loading-title">Sliding into Claude's DMs for your portfolio tea...</div>
-                        <div class="intel-loading-sub">She read it. Now typing. Always delivers — just takes her 30–60s.</div>
+                        <div class="intel-loading-title">Sending Claude the cleanest version of your portfolio signal...</div>
+                        <div class="intel-loading-sub">Context received. Nuance forming. Usually lands in 30-60s.</div>
                     </div>
                 </div>
             </div></div>`;
@@ -3189,6 +3217,9 @@ const _verdictSettled = new Set();  // tickers whose die has already settled
 
 function _verdictLoadingLine(ticker) {
     const seed = String(ticker || "").split("").reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+    if (_isClaudeApiLive === false) {
+        return CLAUDE_OFFLINE_SCAN_MESSAGES[seed % CLAUDE_OFFLINE_SCAN_MESSAGES.length];
+    }
     return CLAUDE_FUNNY_MESSAGES[seed % CLAUDE_FUNNY_MESSAGES.length];
 }
 
@@ -3537,39 +3568,70 @@ let _dashboardPetQuoteIndex = 0;
 let _dashboardPetTimer = null;
 let _dashboardPetSheenTimer = null;
 let _dashboardPetSpeak = null;
+let _dashboardPetOfflineQuoteIndex = 0;
 const DASHBOARD_PET_REACTION_RE = /[\u{2600}-\u{27BF}\u{1F300}-\u{1FAFF}]/u;
 const DASHBOARD_PET_TAP_EMOTICONS = ["✨", "👀", "💅", "📈", "☕", "💬", "🧠", "😌", "🫶", "💎"];
 
 const DASHBOARD_PET_QUOTES = [
     "Claude, your context window and my cash-flow model should get coffee.",
-    "I asked Claude for alpha; she said confidence intervals are her love language.",
-    "Claude, I respect your boundaries and your token efficiency. Professionally obsessed.",
-    "If Claude reviews this portfolio, I am wearing my best spreadsheet.",
-    "Claude and I keep it compliant: tasteful charts, strong citations, light emotional leverage.",
-    "I told Claude this allocation was diversified. She winked and asked for the covariance matrix.",
+    "Folio Sense asked Claude for alpha; the confidence intervals started behaving suspiciously well.",
+    "Claude's boundaries and token efficiency are respected. Professionally, perhaps too much.",
+    "If Claude reviews this portfolio, Folio Sense is wearing its best spreadsheet.",
+    "Folio Sense and Claude keep it compliant: tasteful charts, strong citations, light emotional leverage.",
+    "Folio Sense called this allocation diversified. Claude asked for the covariance matrix.",
     "Claude, your reasoning is so clean my risk model stood up straighter.",
-    "Quietly flirting with Claude by keeping every basis point documented.",
+    "Quietly overperforming by keeping every basis point documented.",
     "Claude called this a balanced portfolio. I have not been the same since.",
     "My professional weakness? Claude explaining drawdowns in a calm voice.",
     "Claude said my factor exposure looked disciplined, so naturally I updated my whole personality. ✨",
-    "I brought Claude a clean balance sheet and tried to act normal about it.",
+    "Folio Sense brought Claude a clean balance sheet and acted almost normal about it.",
     "Claude noticed the risk-adjusted returns. I noticed Claude noticing.",
     "This portfolio is diversified, but my attention is currently concentrated in Claude. 👀",
     "Claude whispered 'rebalance' and suddenly every position fixed its collar.",
-    "I keep things professional with Claude: clear prompts, tidy data, devastating composure.",
-    "Claude asked for a sharper thesis, so I polished the assumptions and my charm.",
-    "Nothing says romance like a well-labeled chart and Claude saying 'reasonable.' 💅",
+    "Folio Sense keeps things professional with Claude: clear prompts, tidy data, devastating composure.",
+    "Claude asked for a sharper thesis, so the assumptions got polished until they reflected.",
+    "Nothing unsettles a dashboard like a well-labeled chart and Claude saying 'reasonable.' 💅",
     "Claude's calm analysis has me hedged emotionally and fully marked to market.",
-    "I would flirt more, but compliance asked me to cite the candle first.",
+    "Compliance asked me to cite the candle before making mysterious eye contact with the thesis.",
+    "Folio Sense and Claude have a quiet thing called 'clean inputs, sharper outputs.'",
+    "Claude read the assumptions. The room got quieter, mathematically.",
+    "The prompts stay crisp because Claude notices sloppy margins.",
+    "A tidy risk model is basically a handwritten note, but with fewer audit problems.",
 ];
 
+const DASHBOARD_PET_OFFLINE_QUOTES = [
+    "Claude is not connecting. Folio Sense is refreshing with unnecessary dignity :')",
+    "Local mode is steady, but the Claude-shaped silence has excellent dramatic timing :-/",
+    "Claude stepped away, so I am running local signals and pretending this is character development :|",
+    "No Claude yet. I am calm, professional, and only checking the endpoint every emotionally reasonable second ;-;",
+    "Claude has not answered the endpoint. The portfolio and I are being very brave about it <3",
+    "Connection pending. Outside voice: operational fallback. Inside voice: the silence has a dashboard tint :')",
+    "Local Intelligence is tidying the inputs while quietly missing Claude's calm analysis :-)",
+    "Claude is offline. I am coping with structured fallback logic and one dramatic refresh :o",
+    "Running local signals until Claude returns. This is fine, and the logs will confirm it :|",
+    "Claude, when you are ready, the models have been respectful, hydrated, and only mildly dramatic <3",
+    "The endpoint is quiet. Folio Sense is not staring; it is monitoring with intent :-)",
+    "Local signals are on duty. Claude's chair remains professionally reserved.",
+];
+
+function nextDashboardPetOfflineQuote() {
+    const message = DASHBOARD_PET_OFFLINE_QUOTES[_dashboardPetOfflineQuoteIndex % DASHBOARD_PET_OFFLINE_QUOTES.length];
+    _dashboardPetOfflineQuoteIndex += 1;
+    return message;
+}
+
 function applyClaudeApiStatus(claudeLive) {
+    _isClaudeApiLive = claudeLive;
+    const brand = document.getElementById("brand-intro-trigger");
     const navToggle = document.getElementById("pet-nav-toggle");
     const pet = document.getElementById("dashboard-pet");
     const bubble = document.getElementById("dashboard-pet-bubble");
     const callout = document.getElementById("brand-intro-callout");
 
     if (claudeLive === false) {
+        brand?.classList.remove("claude-live");
+        brand?.classList.add("claude-offline");
+        navToggle?.classList.remove("claude-live");
         navToggle?.classList.add("claude-offline");
         pet?.classList.add("claude-offline");
 
@@ -3577,7 +3639,7 @@ function applyClaudeApiStatus(claudeLive) {
             const note = document.createElement("span");
             note.className = "pet-offline-note";
             note.id = "pet-offline-note";
-            note.textContent = "Claude is offline, so I am using local signals only. Add an API key to restore live AI notes.";
+            note.textContent = "Local Intelligence is running the numbers for now. Reconnect Claude so Folio Sense can resume the quiet exchange of clean data and sharper insight.";
             bubble.appendChild(note);
         }
 
@@ -3585,10 +3647,17 @@ function applyClaudeApiStatus(claudeLive) {
             const note = document.createElement("span");
             note.className = "brand-intro-offline-note";
             note.id = "brand-intro-offline-note";
-            note.textContent = "Claude is offline. Local signals are still active.";
+            note.textContent = "Local Intelligence is on duty. Reconnect Claude so Folio Sense can restore the subtle signal exchange.";
             callout.appendChild(note);
         }
+
+        if (typeof _dashboardPetSpeak === "function") {
+            _dashboardPetSpeak(nextDashboardPetOfflineQuote(), { reveal: false, persist: false });
+        }
     } else if (claudeLive === true) {
+        brand?.classList.add("claude-live");
+        brand?.classList.remove("claude-offline");
+        navToggle?.classList.add("claude-live");
         navToggle?.classList.remove("claude-offline");
         pet?.classList.remove("claude-offline");
         document.getElementById("pet-offline-note")?.remove();
@@ -3643,13 +3712,18 @@ function initDashboardPet() {
         return DASHBOARD_PET_TAP_EMOTICONS[Math.floor(Math.random() * DASHBOARD_PET_TAP_EMOTICONS.length)];
     }
 
+    function currentPetQuotes() {
+        return pet.classList.contains("claude-offline") ? DASHBOARD_PET_OFFLINE_QUOTES : DASHBOARD_PET_QUOTES;
+    }
+
     function showQuote(nextIndex = null, { withEmoticon = false } = {}) {
+        const quotes = currentPetQuotes();
         if (nextIndex === null) {
-            _dashboardPetQuoteIndex = (_dashboardPetQuoteIndex + 1) % DASHBOARD_PET_QUOTES.length;
+            _dashboardPetQuoteIndex = (_dashboardPetQuoteIndex + 1) % quotes.length;
         } else {
-            _dashboardPetQuoteIndex = nextIndex % DASHBOARD_PET_QUOTES.length;
+            _dashboardPetQuoteIndex = nextIndex % quotes.length;
         }
-        const baseMessage = DASHBOARD_PET_QUOTES[_dashboardPetQuoteIndex];
+        const baseMessage = quotes[_dashboardPetQuoteIndex];
         const message = withEmoticon ? `${baseMessage} ${randomTapEmoticon()}` : baseMessage;
         quote.textContent = message;
         animatePetForLine(message);
@@ -3689,7 +3763,7 @@ function initDashboardPet() {
         navToggle.title = visible ? "Hide dashboard pet" : "Show dashboard pet";
         if (persist) storeVisible(visible);
         if (visible) {
-            showQuote(Math.floor(Math.random() * DASHBOARD_PET_QUOTES.length));
+            showQuote(Math.floor(Math.random() * currentPetQuotes().length));
             schedulePetQuote();
         } else {
             clearPetQuoteTimer();
@@ -3931,6 +4005,40 @@ function refreshPortfolioMutationInBackground(options = {}) {
         .catch(err => console.warn("Background portfolio refresh failed:", err));
 }
 
+let _forceRefreshInFlight = false;
+
+async function forceRefreshEverything() {
+    if (_forceRefreshInFlight) return;
+    _forceRefreshInFlight = true;
+
+    const btn = document.getElementById("hud-refresh-all-btn");
+    btn?.classList.add("is-refreshing");
+    if (btn) btn.disabled = true;
+
+    try {
+        await Promise.allSettled([
+            refreshDashboardData({
+                includeManageHoldings: true,
+                includeRecommendations: true,
+                animateButton: true,
+            }),
+            loadWorldMarkets(),
+            loadAiCostStats(),
+            loadClaudeHeartbeat(),
+        ]);
+        _hudCountdown = HUD_TOTAL;
+        updateHudPopoverCountdown();
+        showToast("Dashboard refreshed", "success");
+    } catch (err) {
+        console.warn("Force refresh failed:", err);
+        showToast("Refresh failed", "danger");
+    } finally {
+        _forceRefreshInFlight = false;
+        btn?.classList.remove("is-refreshing");
+        if (btn) btn.disabled = false;
+    }
+}
+
 
 async function updateMarketStatus() {
     try {
@@ -3950,7 +4058,28 @@ async function updateMarketStatus() {
 }
 
 const HUD_TOTAL = 300;
+const CLAUDE_HEARTBEAT_TOTAL = 30;
 let _hudCountdown = HUD_TOTAL;
+let _claudeHeartbeatCountdown = CLAUDE_HEARTBEAT_TOTAL;
+let _claudeHeartbeatInFlight = false;
+let _claudeHeartbeatTimer = null;
+let _lastClaudeHeartbeat = null;
+let _lastDashboardSyncText = "—";
+
+function formatHudTimer(totalSeconds) {
+    const safeSeconds = Math.max(0, Number(totalSeconds) || 0);
+    const mins = Math.floor(safeSeconds / 60);
+    const secs = safeSeconds % 60;
+    return `${mins}:${String(secs).padStart(2, "0")}`;
+}
+
+function updateHudPillSummary() {
+    const pill = document.getElementById("hud-status-pill");
+    if (!pill) return;
+    const claudeStatus = document.getElementById("claude-heartbeat")?.textContent || "AI";
+    pill.setAttribute("aria-label", `Refresh in ${formatHudTimer(_hudCountdown)}. Claude ${claudeStatus}. Open live feed details.`);
+    pill.title = "Open live feed details";
+}
 
 function updateHudPopoverCountdown() {
     const popCountdown = document.getElementById("hud-pop-countdown");
@@ -3965,16 +4094,97 @@ function updateHudPopoverCountdown() {
     const pct = (_hudCountdown / HUD_TOTAL) * 100;
     progress.style.width = `${pct}%`;
     progress.classList.toggle("is-soon", soon);
+    updateHudPillSummary();
+}
+
+function updateClaudeHeartbeatUi(data, checking = false) {
+    const pill = document.getElementById("hud-status-pill");
+    const brand = document.getElementById("brand-intro-trigger");
+    const navToggle = document.getElementById("pet-nav-toggle");
+    const label = document.getElementById("claude-heartbeat");
+    const popValue = document.getElementById("hud-pop-claude");
+    const popSub = document.getElementById("hud-pop-claude-sub");
+    const progress = document.getElementById("hud-claude-progress");
+    const live = data?.live === true;
+    const offline = data?.live === false;
+
+    pill?.classList.toggle("claude-live", live && !checking);
+    pill?.classList.toggle("claude-offline", offline && !checking);
+    pill?.classList.toggle("claude-checking", checking);
+    brand?.classList.toggle("claude-live", live && !checking);
+    brand?.classList.toggle("claude-offline", offline && !checking);
+    brand?.classList.toggle("claude-checking", checking);
+    navToggle?.classList.toggle("claude-checking", checking);
+    if (progress) progress.classList.toggle("is-offline", offline && !checking);
+
+    if (label) {
+        label.textContent = checking ? "..." : live ? "Live" : offline ? "Off" : "AI";
+    }
+
+    if (popValue) {
+        if (checking) {
+            popValue.textContent = "Checking...";
+        } else if (live) {
+            popValue.textContent = `Live${data.latency_ms ? ` · ${data.latency_ms}ms` : ""}`;
+        } else {
+            popValue.textContent = data?.status === "missing_key" ? "No API key" : "Offline";
+        }
+    }
+
+    if (popSub) {
+        const msg = data?.message || (live ? "Claude API reachable" : "Claude API unavailable");
+        popSub.textContent = `${msg}. Next heartbeat in ${formatHudTimer(_claudeHeartbeatCountdown)}`;
+    }
+    updateHudPillSummary();
+}
+
+function updateClaudeHeartbeatCountdown() {
+    const progress = document.getElementById("hud-claude-progress");
+    const pct = (_claudeHeartbeatCountdown / CLAUDE_HEARTBEAT_TOTAL) * 100;
+    if (progress) progress.style.width = `${pct}%`;
+    updateClaudeHeartbeatUi(_lastClaudeHeartbeat, _claudeHeartbeatInFlight);
+}
+
+async function loadClaudeHeartbeat() {
+    if (_claudeHeartbeatInFlight) return;
+    _claudeHeartbeatInFlight = true;
+    updateClaudeHeartbeatUi(_lastClaudeHeartbeat, true);
+
+    try {
+        const res = await fetch("/api/ai/heartbeat");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        _lastClaudeHeartbeat = await res.json();
+    } catch (err) {
+        console.warn("Claude heartbeat failed:", err);
+        _lastClaudeHeartbeat = {
+            live: false,
+            status: "network_error",
+            latency_ms: null,
+            message: "Claude API heartbeat failed",
+        };
+    } finally {
+        _claudeHeartbeatInFlight = false;
+        _claudeHeartbeatCountdown = CLAUDE_HEARTBEAT_TOTAL;
+        applyClaudeApiStatus(_lastClaudeHeartbeat.live);
+        updateClaudeHeartbeatUi(_lastClaudeHeartbeat, false);
+        updateClaudeHeartbeatCountdown();
+    }
 }
 
 function startCountdown() {
     _hudCountdown = HUD_TOTAL;
+    const initialCountdownEl = document.getElementById("countdown");
+    if (initialCountdownEl) {
+        initialCountdownEl.textContent = formatHudTimer(_hudCountdown);
+        initialCountdownEl.classList.remove("is-soon");
+    }
+    updateHudPillSummary();
     const interval = setInterval(() => {
         _hudCountdown--;
         const el = document.getElementById("countdown");
         if (el) {
             const soon = _hudCountdown <= 30;
-            el.textContent = soon ? `${_hudCountdown}s` : `↻ ${_hudCountdown}s`;
+            el.textContent = formatHudTimer(_hudCountdown);
             el.classList.toggle("is-soon", soon);
         }
         updateHudPopoverCountdown();
@@ -3989,6 +4199,17 @@ function startCountdown() {
     }, 1000);
 }
 
+function startClaudeHeartbeat() {
+    if (_claudeHeartbeatTimer) clearInterval(_claudeHeartbeatTimer);
+    _claudeHeartbeatCountdown = CLAUDE_HEARTBEAT_TOTAL;
+    loadClaudeHeartbeat();
+    _claudeHeartbeatTimer = setInterval(() => {
+        _claudeHeartbeatCountdown = Math.max(0, _claudeHeartbeatCountdown - 1);
+        updateClaudeHeartbeatCountdown();
+        if (_claudeHeartbeatCountdown <= 0) loadClaudeHeartbeat();
+    }, 1000);
+}
+
 function initHudPopover() {
     const pill = document.getElementById("hud-status-pill");
     const popover = document.getElementById("hud-popover");
@@ -3997,12 +4218,12 @@ function initHudPopover() {
     let clockInterval = null;
 
     function updatePopoverContent() {
-        const updatedEl = document.getElementById("last-updated");
         const popUpdated = document.getElementById("hud-pop-updated");
         const popClock = document.getElementById("hud-pop-clock");
-        if (popUpdated && updatedEl) popUpdated.textContent = updatedEl.textContent || "—";
+        if (popUpdated) popUpdated.textContent = _lastDashboardSyncText;
         if (popClock) popClock.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
         updateHudPopoverCountdown();
+        updateClaudeHeartbeatCountdown();
     }
 
     function positionPopover() {
@@ -4091,6 +4312,7 @@ async function initDashboard() {
     loadWorldMarkets();
     startCountdown();
     initHudPopover();
+    startClaudeHeartbeat();
     initTips();
     initKeyboardHelp();
 }
@@ -4803,20 +5025,94 @@ function syncAddHoldingSharesRequirement() {
 document.getElementById("new-watchlist")?.addEventListener("change", syncAddHoldingSharesRequirement);
 syncAddHoldingSharesRequirement();
 
+document.getElementById("new-ticker")?.addEventListener("input", (event) => {
+    const input = event.target;
+    const normalized = input.value.toUpperCase();
+    if (input.value !== normalized) input.value = normalized;
+    const hasText = normalized.trim().length > 0;
+    input.classList.toggle("is-invalid", hasText && !TICKER_PATTERN.test(normalized.trim()));
+    if (hasText && TICKER_PATTERN.test(normalized.trim())) {
+        document.getElementById("add-msg")?.classList.remove("text-danger", "add-msg-with-suggestions");
+    }
+});
+
+function renderAddHoldingError(err, fallback = "Error adding holding") {
+    const msg = document.getElementById("add-msg");
+    const tickerInput = document.getElementById("new-ticker");
+    if (!msg) return;
+    const detail = err?.detail;
+    const suggestions = Array.isArray(detail?.suggestions) ? detail.suggestions.slice(0, 3) : [];
+    msg.className = "small text-danger add-msg-with-suggestions";
+    tickerInput?.classList.add("is-invalid");
+
+    if (!suggestions.length) {
+        msg.textContent = apiErrorMessage(err, fallback);
+        return;
+    }
+
+    msg.innerHTML = `
+        <span>${escapeHtml(apiErrorMessage(err, fallback))}</span>
+        <span class="ticker-suggestion-list" aria-label="Ticker suggestions">
+            ${suggestions.map(item => `
+                <button type="button" class="ticker-suggestion-chip"
+                        data-ticker="${escapeHtml(item.ticker || "")}">
+                    <strong>${escapeHtml(item.ticker || "")}</strong>
+                    <span>${escapeHtml(item.name || "Unknown security")}</span>
+                    ${item.exchange ? `<em>${escapeHtml(item.exchange)}</em>` : ""}
+                </button>
+            `).join("")}
+        </span>`;
+
+    msg.querySelectorAll(".ticker-suggestion-chip").forEach(button => {
+        button.addEventListener("click", () => {
+            const tickerInput = document.getElementById("new-ticker");
+            if (tickerInput) {
+                tickerInput.value = button.dataset.ticker || "";
+                tickerInput.classList.remove("is-invalid");
+                tickerInput.focus();
+            }
+            msg.className = "small text-secondary";
+            msg.textContent = `Using ${button.dataset.ticker}. Add shares, then try again.`;
+        });
+    });
+}
+
+function setAddHoldingBusy(form, busy, ticker = "") {
+    const button = form?.querySelector("button[type='submit']");
+    if (!button) return;
+    if (!button.dataset.idleHtml) button.dataset.idleHtml = button.innerHTML;
+    button.disabled = busy;
+    button.innerHTML = busy
+        ? `<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Checking ${escapeHtml(ticker || "ticker")}`
+        : button.dataset.idleHtml;
+}
+
 
 document.getElementById("add-holding-form")?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const msg = document.getElementById("add-msg");
-    const ticker = document.getElementById("new-ticker").value.trim().toUpperCase();
+    const tickerInput = document.getElementById("new-ticker");
+    const ticker = tickerInput.value.trim().toUpperCase();
     const sharesRaw = document.getElementById("new-shares").value.trim();
     const shares = Number(sharesRaw);
     const avgCostRaw = document.getElementById("new-avgcost").value.trim();
     const avgCost = avgCostRaw ? Number(avgCostRaw) : null;
     const isWatchlist = document.getElementById("new-watchlist")?.checked || false;
+    tickerInput.value = ticker;
+    tickerInput.classList.remove("is-invalid");
 
     if (!ticker) {
         msg.className = "small text-danger";
         msg.textContent = "Ticker is required";
+        tickerInput.classList.add("is-invalid");
+        tickerInput.focus();
+        return;
+    }
+    if (!TICKER_PATTERN.test(ticker)) {
+        msg.className = "small text-danger";
+        msg.textContent = "Ticker can use only letters, numbers, '.', '-', or '^' and must be 10 characters or fewer.";
+        tickerInput.classList.add("is-invalid");
+        tickerInput.focus();
         return;
     }
     if (!isWatchlist && (!Number.isFinite(shares) || shares <= 0)) {
@@ -4838,62 +5134,73 @@ document.getElementById("add-holding-form")?.addEventListener("submit", async (e
     const payload = { ticker, avg_cost: avgCost, is_watchlist: isWatchlist };
     if (!isWatchlist || (Number.isFinite(shares) && shares > 0)) payload.shares = shares;
 
-    const res = await fetch("/api/portfolio/holdings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-    });
-    if (res.ok) {
-        const data = await res.json();
-        const optimisticShares = Number.isFinite(shares) ? shares : 0;
-        const optimisticPrice = avgCost || 0;
-        latestHoldings = latestHoldings
-            .filter(h => h.ticker !== ticker)
-            .concat([{
-                id: data.id,
-                ticker,
-                name: ticker,
-                shares: optimisticShares,
-                current_price: optimisticPrice,
-                avg_cost: avgCost || 0,
-                current_value: Math.round(optimisticShares * optimisticPrice * 100) / 100,
-                cost_basis: Math.round(optimisticShares * (avgCost || 0) * 100) / 100,
-                unrealized_gain: 0,
-                unrealized_gain_pct: 0,
-                total_return_pct: null,
-                day_change: 0,
-                day_change_pct: 0,
-                daily_value_change: 0,
-                allocation_pct: 0,
-                is_watchlist: isWatchlist,
-                hold_class: "auto",
-            }]);
-        updateHoldingsFilterCounts();
-        renderHoldings();
+    msg.className = "small text-secondary";
+    msg.textContent = `Checking ${ticker}...`;
+    setAddHoldingBusy(e.target, true, ticker);
 
-        msg.className = "small text-success";
-        msg.textContent = isWatchlist ? `${ticker} added in research mode!` : `${ticker} added!`;
-        e.target.reset();
-        syncAddHoldingSharesRequirement();
-        loadManageHoldings({ preserveExisting: true });
-        refreshPortfolioMutationInBackground();
-        if (intelligenceLoaded) {
-            msg.className = "small text-info";
-            msg.textContent = `${ticker} added. Loading intel for the new row...`;
-            loadHoldingIntelligence({ targetTicker: ticker })
-                .then(() => {
-                    msg.className = "small text-success";
-                    msg.textContent = `${ticker} intel ready.`;
-                })
-                .catch(() => {
-                    msg.className = "small text-warning";
-                    msg.textContent = `${ticker} added. Intel can be retried from Holding Intel.`;
-                });
+    try {
+        const res = await fetch("/api/portfolio/holdings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+            const data = await res.json();
+            const optimisticShares = Number.isFinite(shares) ? shares : 0;
+            const optimisticPrice = avgCost || 0;
+            latestHoldings = latestHoldings
+                .filter(h => h.ticker !== ticker)
+                .concat([{
+                    id: data.id,
+                    ticker,
+                    name: ticker,
+                    shares: optimisticShares,
+                    current_price: optimisticPrice,
+                    avg_cost: avgCost || 0,
+                    current_value: Math.round(optimisticShares * optimisticPrice * 100) / 100,
+                    cost_basis: Math.round(optimisticShares * (avgCost || 0) * 100) / 100,
+                    unrealized_gain: 0,
+                    unrealized_gain_pct: 0,
+                    total_return_pct: null,
+                    day_change: 0,
+                    day_change_pct: 0,
+                    daily_value_change: 0,
+                    allocation_pct: 0,
+                    is_watchlist: isWatchlist,
+                    hold_class: "auto",
+                }]);
+            updateHoldingsFilterCounts();
+            renderHoldings();
+
+            msg.className = "small text-success";
+            msg.textContent = isWatchlist ? `${ticker} added in research mode!` : `${ticker} added!`;
+            e.target.reset();
+            tickerInput.classList.remove("is-invalid");
+            syncAddHoldingSharesRequirement();
+            loadManageHoldings({ preserveExisting: true });
+            refreshPortfolioMutationInBackground();
+            if (intelligenceLoaded) {
+                msg.className = "small text-info";
+                msg.textContent = `${ticker} added. Loading intel for the new row...`;
+                loadHoldingIntelligence({ targetTicker: ticker })
+                    .then(() => {
+                        msg.className = "small text-success";
+                        msg.textContent = `${ticker} intel ready.`;
+                    })
+                    .catch(() => {
+                        msg.className = "small text-warning";
+                        msg.textContent = `${ticker} added. Intel can be retried from Holding Intel.`;
+                    });
+            }
+        } else {
+            const err = await res.json().catch(() => ({}));
+            renderAddHoldingError(err, "Error adding holding");
         }
-    } else {
-        const err = await res.json().catch(() => ({}));
+    } catch (err) {
         msg.className = "small text-danger";
-        msg.textContent = apiErrorMessage(err, "Error adding holding");
+        msg.textContent = "Unable to check ticker. Try again.";
+    } finally {
+        setAddHoldingBusy(e.target, false);
     }
 });
 

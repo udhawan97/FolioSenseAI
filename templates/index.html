@@ -47,7 +47,7 @@
                     <span class="brand-intro-version">v2.1</span>
                     <span class="brand-intro-kicker">Folio Sense AI</span>
                     <span class="brand-intro-title">Portfolio butler, at your service</span>
-                    <span class="brand-intro-copy">Claude and I are in a productive relationship; everything works beautifully when she's not mad at me. Now, let's keep those bags of money behaving like a portfolio.</span>
+                    <span class="brand-intro-copy">Folio Sense and Claude keep things quiet: clean signals, sharper context, and just enough mystery to make the risk model sit up straight. Now, let's keep those bags of money behaving like a portfolio.</span>
                 </div>
                 <button class="brand-cost-trigger" id="brand-cost-trigger" type="button"
                         aria-expanded="false" aria-controls="brand-cost-callout" title="View AI token cost">
@@ -64,11 +64,20 @@
             </div>
             <div class="d-flex align-items-center gap-3">
                 <button class="hud-status-pill" id="hud-status-pill" type="button"
-                        aria-expanded="false" aria-controls="hud-popover" title="View refresh status">
+                        aria-expanded="false" aria-controls="hud-popover"
+                        aria-label="Refresh in 5:00. Claude AI. Open live feed details."
+                        title="Open live feed details">
                     <span class="hud-pulse-dot" aria-hidden="true"></span>
-                    <span class="hud-status-updated" id="last-updated">—</span>
-                    <span class="hud-status-divider" aria-hidden="true">·</span>
-                    <span class="hud-status-countdown" id="countdown" aria-live="polite"></span>
+                    <span class="hud-status-chip hud-status-chip-refresh" aria-label="Next auto-refresh">
+                        <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+                        <span class="hud-chip-label">Refresh</span>
+                        <span class="hud-status-countdown" id="countdown" aria-live="polite">5:00</span>
+                    </span>
+                    <span class="hud-status-chip hud-status-chip-claude" aria-label="Claude status">
+                        <i class="bi bi-stars" aria-hidden="true"></i>
+                        <span class="hud-status-claude" id="claude-heartbeat" aria-live="polite">AI</span>
+                    </span>
+                    <span class="hud-status-chevron" aria-hidden="true"><i class="bi bi-chevron-down"></i></span>
                 </button>
                 <div class="hud-popover" id="hud-popover" role="tooltip" aria-hidden="true">
                     <div class="hud-popover-header">
@@ -97,6 +106,23 @@
                                 </div>
                             </div>
                         </div>
+                        <div class="hud-popover-divider"></div>
+                        <div class="hud-popover-row" id="hud-claude-row">
+                            <span class="hud-popover-row-icon"><i class="bi bi-stars"></i></span>
+                            <div>
+                                <div class="hud-popover-row-label">Claude heartbeat</div>
+                                <div class="hud-popover-row-value" id="hud-pop-claude">Checking...</div>
+                                <div class="hud-popover-row-sub" id="hud-pop-claude-sub">Next heartbeat in 30s</div>
+                                <div class="hud-progress-track hud-claude-progress-track">
+                                    <div class="hud-progress-fill hud-claude-progress-fill" id="hud-claude-progress"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <button class="hud-refresh-all-btn" id="hud-refresh-all-btn"
+                                type="button" onclick="forceRefreshEverything()">
+                            <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+                            <span>Refresh all</span>
+                        </button>
                     </div>
                 </div>
                 <button class="shortcut-pill" type="button" onclick="showKeyboardHelp()"
@@ -593,7 +619,7 @@
                         </div>
                         <div class="ai-scan-copy">
                             <div class="ai-scan-title" id="ai-scan-title">AI checking holdings</div>
-                            <div class="ai-scan-subtitle ai-scan-subtitle--highlight" id="ai-scan-subtitle">Sliding into Claude's DMs for your portfolio tea...</div>
+                            <div class="ai-scan-subtitle ai-scan-subtitle--highlight" id="ai-scan-subtitle">Sending Claude the cleanest version of your portfolio signal...</div>
                         </div>
                     </div>
                     <!-- Research rows -->
@@ -740,7 +766,9 @@
                             <input type="text" class="form-control form-control-sm bg-dark
                                 border-secondary text-white"
                                 id="new-ticker" placeholder="Ticker (e.g. AAPL)"
-                                maxlength="10" required>
+                                maxlength="10" pattern="[A-Za-z0-9.^-]{1,10}"
+                                autocomplete="off" autocapitalize="characters"
+                                spellcheck="false" required>
                         </div>
                         <div class="col-12 col-sm-4">
                             <input type="number" class="form-control form-control-sm bg-dark
