@@ -876,7 +876,10 @@ async def get_investment_signal_single(ticker: str, db: Session = Depends(get_db
 
 
 @router.get("/investment-signals/all")
-async def get_all_investment_signals(force_local: bool = False, db: Session = Depends(get_db)):  # pylint: disable=too-many-statements,too-many-branches
+async def get_all_investment_signals(  # pylint: disable=too-many-statements,too-many-branches
+    db: Session = Depends(get_db),
+    force_local: bool = False,
+):
     """
     Return investment signals for all active portfolio holdings.
     Deterministic signals are computed fresh; quips are cached 24h in AISummary

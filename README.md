@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite"/>
   <img src="https://img.shields.io/badge/Bootstrap-5-7952B3?style=flat-square&logo=bootstrap&logoColor=white" alt="Bootstrap 5"/>
   <img src="https://img.shields.io/badge/Chart.js-FF6384?style=flat-square&logo=chartdotjs&logoColor=white" alt="Chart.js"/>
-  <img src="https://img.shields.io/badge/release-v2.3-brightgreen?style=flat-square" alt="Release v2.3"/>
+  <img src="https://img.shields.io/badge/release-v2.4-brightgreen?style=flat-square" alt="Release v2.4"/>
 </p>
 
 <p align="center">
@@ -27,9 +27,9 @@
 
 ---
 
-> **v2.3 is here: FolioSenseAI now handles offline Claude like a professional, not like someone refreshing the page with feelings.**
+> **v2.4 is here: FolioSenseAI now lets Claude and Local Intelligence take turns without making it weird.**
 >
-> FolioSenseAI tracks your holdings, pulls live prices from Yahoo Finance, validates tickers before they enter the portfolio, and asks Claude AI to explain what on earth is happening when an API key is present. v2.3 makes the no-key path clearer, labels local intelligence honestly, and tightens a security scan finding. Smooth under pressure. Attractive quality.
+> FolioSenseAI tracks your holdings, pulls live prices from Yahoo Finance, validates tickers before they enter the portfolio, and lets you choose between Claude-backed quips or deterministic Local Intelligence for verdicts. v2.4 adds a polished mode toggle, snappier quote caching, and a last-sync HUD that keeps its composure when market data has a little moment. Very adult. Still hot.
 
 ---
 
@@ -53,6 +53,7 @@
 - Market open/closed indicator with auto-refresh countdown — so you can watch it drop in real time
 - **Live feed HUD** with refresh state, force-refresh control, and Claude API heartbeat
 - **Claude offline guidance** with direct setup steps when AI features are paused
+- **Last-sync resilience** that keeps the last good market-data timestamp visible if a refresh fails
 - **Portfolio Butler companion** — a lightweight dashboard pet with witty market reactions and a polished top-bar toggle
 
 ### 🧠 Portfolio Intelligence *(the whole point)*
@@ -61,6 +62,7 @@
 - **Holding coverage** — ETF sectors, regions, themes, and benchmark context
 - **Folio Sense × Claude verdicts** — Add, Hold, Trim, or Needs Data calls with confidence, reasons, risks, and one-line color commentary
 - **Local Intelligence labels** that make offline verdicts clear when Claude is not connected
+- **Claude / Local Intelligence toggle** — choose deterministic local quips without disconnecting your API key
 - **Anchor Hold** — mark any position as a long-term anchor; Folio Sense never trims it, instead surfaces better add moments when price dips below its own trend; toggleable from the verdict card or Manage Holdings
 - **Market-mood awareness** — live price momentum now tempers marginal calls before the app gets too enthusiastic
 - **Portfolio health quip** — a coarse read on the whole book, including concentration and dominant action mix
@@ -109,23 +111,23 @@ You do not need to be a developer to run FolioSenseAI locally. Think of this lik
 
 The Anthropic API key is optional. Without it, FolioSenseAI still runs with live market data and portfolio tracking; AI explanations stay disabled until you add a key from [console.anthropic.com](https://console.anthropic.com/).
 
-These commands install the GitHub release [v2.3](https://github.com/udhawan97/FolioSenseAI/releases/tag/release-v2.3).
+These commands install the GitHub release [v2.4](https://github.com/udhawan97/FolioSenseAI/releases/tag/release-v2.4).
 
 **Mac / Linux**
 
 ```bash
-curl -L -o FolioSenseAI-v2.3.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v2.3.zip
-unzip FolioSenseAI-v2.3.zip
-cd FolioSenseAI-release-v2.3
+curl -L -o FolioSenseAI-v2.4.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v2.4.zip
+unzip FolioSenseAI-v2.4.zip
+cd FolioSenseAI-release-v2.4
 ./scripts/setup.sh
 ```
 
 **Windows PowerShell**
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v2.3.zip" -OutFile "FolioSenseAI-v2.3.zip"
-Expand-Archive -Path "FolioSenseAI-v2.3.zip" -DestinationPath .
-cd FolioSenseAI-release-v2.3
+Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v2.4.zip" -OutFile "FolioSenseAI-v2.4.zip"
+Expand-Archive -Path "FolioSenseAI-v2.4.zip" -DestinationPath .
+cd FolioSenseAI-release-v2.4
 .\scripts\setup.ps1
 ```
 
@@ -255,6 +257,25 @@ pip install --upgrade certifi
 | `http://localhost:8000` | The dashboard |
 | `http://localhost:8000/docs` | Swagger API docs (surprisingly pretty) |
 | `http://localhost:8000/health` | Health check endpoint |
+
+---
+
+## 🪄 What's New In v2.4
+
+**FolioSenseAI v2.4 is the mode-control release: Claude when you want the charm, Local Intelligence when you want deterministic quiet, and fresher-feeling market data without extra drama.**
+
+- Added a **Claude AI / Local Intel toggle** in the top bar so you can skip Claude quip generation for the session while keeping the rest of the dashboard live.
+- Added `force_local=true` support to `/api/ai/investment-signals/all`, returning deterministic fallback quips without spending Claude calls.
+- Added persistent local-mode preference via browser storage, with verdict labels and helper copy updating in place.
+- Added a 60-second quote cache around Yahoo Finance calls to make repeated dashboard loads and validations snappier.
+- Improved the **Last synced** HUD behavior so failed refreshes keep the last good timestamp and explain when stale prices are being shown.
+- Polished the mode toggle placement, disabled/offline state, and dashboard pet copy so Claude and Local Intelligence can share the room like adults with excellent boundaries.
+
+### v2.4 Release Notes
+
+**For users:** v2.4 gives you a clean choice: let Claude add personality to verdicts, or switch to Local Intel for deterministic, no-API quips. The dashboard also feels faster on repeat quote reads and behaves more gracefully when a refresh fails.
+
+**For developers:** v2.4 bumps the FastAPI app to `2.4.0`, adds the `force_local` query path on the batch investment-signal endpoint, introduces a short-lived quote cache in `stock_service`, updates dashboard fetches to honor forced-local mode, improves HUD sync failure state, and bumps the dashboard script cache key.
 
 ---
 
@@ -398,7 +419,7 @@ Full interactive docs at `/docs` when running locally. Here's the cheat sheet:
 | `GET` | `/api/ai/intelligence/{ticker}` | Coverage and benchmark context for one holding |
 | `GET` | `/api/ai/intelligence/all/batch` | Coverage and benchmark context for all holdings |
 | `GET` | `/api/ai/investment-signal/{ticker}` | Folio Sense × Claude verdict for one holding |
-| `GET` | `/api/ai/investment-signals/all` | Folio Sense × Claude verdicts for all holdings |
+| `GET` | `/api/ai/investment-signals/all` | Folio Sense × Claude verdicts for all holdings; add `?force_local=true` for deterministic local quips |
 | `GET` | `/api/ai/analyst-recommendation/{ticker}` | Analyst take and ETF quality label for one holding |
 | `GET` | `/api/ai/analyst-recommendations/all` | Analyst takes and ETF quality labels for all holdings |
 | `GET` | `/api/ai/cache/stats` | Cache stats and estimated API cost |

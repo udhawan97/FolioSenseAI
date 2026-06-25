@@ -1,68 +1,56 @@
-# FolioSenseAI v2.3 Release Notes
+# FolioSenseAI v2.4 Release Notes
 
 Release date: June 25, 2026
 
 ## Headline
 
-FolioSenseAI v2.3 is the graceful-offline release: clearer behavior when Claude is not connected, more honest Local Intelligence labels, cleaner day-change UI polish, and a security hardening pass for timing-signal logs. It is less dramatic, more reliable, and still very good at making your portfolio feel seen.
+FolioSenseAI v2.4 is the mode-control release: a polished Claude AI / Local Intel toggle, deterministic verdict quips on demand, faster repeated quote reads, and a last-sync HUD that stays graceful when refreshes fail. Claude gets the charm. Local Intelligence gets the quiet competence. You get to choose. Flirty? Only in the most professionally documented way.
 
 ## What's New
 
-- **Claude offline guidance**: the brand callout now gives direct setup steps when no Anthropic API key is configured, including where to get a key, what to add to `.env`, and how to restart the app.
-- **Local Intelligence labeling**: verdict headers and kickers now switch to local-language when Claude is offline, then restore Folio Sense × Claude labeling when the API is live again.
-- **Cleaner offline UX**: the dashboard explains that AI features are paused while local market data, deterministic signals, and cached/fallback notes continue to work.
-- **Day-change polish**: the daily percentage move now uses a reusable styled cell for cleaner caret alignment and less inline styling.
-- **Security hardening**: timing-signal logging now strips line breaks from ticker values before logging, closing a log-injection scan finding.
+- **Claude AI / Local Intel toggle**: switch verdict quips into deterministic local mode for the session without removing your Anthropic API key.
+- **Forced-local verdict path**: `/api/ai/investment-signals/all?force_local=true` skips Claude quip generation and uses fallback/local quips for holdings and portfolio health.
+- **Persistent mode preference**: the dashboard remembers your local-mode choice in browser storage and updates verdict labels/kickers in place.
+- **Smarter offline state**: the mode toggle disables cleanly when Claude is offline and opens the setup guidance instead of pretending a network problem is a personality trait.
+- **Quote caching**: live quote reads are cached for 60 seconds in `stock_service`, cutting repeated Yahoo Finance calls during tight dashboard refresh loops.
+- **Last-sync resilience**: the HUD keeps the last good sync timestamp when a refresh fails, marks the state clearly, and avoids replacing usable data with panic confetti.
+- **Toggle polish**: placement, labels, title text, and dashboard pet copy now make the Claude/local relationship clearer and a little more charming.
 
 ## Developer Notes
 
-- Bumped FastAPI metadata version to `2.3.0`.
-- Updated the dashboard intro badge to `v2.3`.
-- Added `_safe_log_value()` in `app/services/timing_signal.py` and applied it to untrusted ticker logging.
-- Added `.day-chg-cell` CSS and moved day-change icon styling out of inline HTML.
-- Wrapped verdict kicker text in `.verdict-kicker-label` so online/offline Claude state can update rendered verdicts in place.
-- Expanded offline callout markup and styles for API-key setup guidance.
+- Bumped FastAPI metadata version to `2.4.0`.
+- Updated the dashboard intro badge to `v2.4`.
+- Added `force_local: bool = False` to `get_all_investment_signals()`.
+- Updated dashboard signal fetches to append `?force_local=true` when Local Intel mode is active.
+- Added `_QUOTE_CACHE` and `_QUOTE_TTL = 60` to `app/services/stock_service.py`.
+- Added HUD sync failure handling so stale-but-valid data remains visible after a failed refresh.
+- Added `.pet-mode-toggle` CSS and related state styling.
+- Bumped the dashboard script cache key to load the new frontend behavior.
 
 ## Upgrade Notes
 
 No database migration or `.env` change is required. Existing installs continue to run as before.
 
-If you want Claude-backed explanations, make sure `.env` contains:
+The new Local Intel mode is client-side selectable. With Claude configured, users can switch between Claude-backed quips and deterministic local quips. Without Claude configured, the app continues in offline/local mode and shows setup guidance.
 
-```env
-ANTHROPIC_API_KEY=sk-ant-your-real-key-goes-here
-```
-
-Then restart the app:
+If you use GitHub release archives, install v2.4 with:
 
 ```bash
-./scripts/start.sh
-```
-
-Windows:
-
-```powershell
-.\scripts\start.ps1
-```
-
-If you use GitHub release archives, install v2.3 with:
-
-```bash
-curl -L -o FolioSenseAI-v2.3.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v2.3.zip
-unzip FolioSenseAI-v2.3.zip
-cd FolioSenseAI-release-v2.3
+curl -L -o FolioSenseAI-v2.4.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v2.4.zip
+unzip FolioSenseAI-v2.4.zip
+cd FolioSenseAI-release-v2.4
 ./scripts/setup.sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v2.3.zip" -OutFile "FolioSenseAI-v2.3.zip"
-Expand-Archive -Path "FolioSenseAI-v2.3.zip" -DestinationPath .
-cd FolioSenseAI-release-v2.3
+Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v2.4.zip" -OutFile "FolioSenseAI-v2.4.zip"
+Expand-Archive -Path "FolioSenseAI-v2.4.zip" -DestinationPath .
+cd FolioSenseAI-release-v2.4
 .\scripts\setup.ps1
 ```
 
 ## Final Word
 
-v2.3 does not make investment decisions for you. It simply keeps the dashboard honest about whether Claude is in the room, keeps local intelligence useful when Claude is not, and closes a security wrinkle with the quiet confidence of someone who read the log file before flirting with production.
+v2.4 still is not financial advice. It is a more controllable, more resilient dashboard that lets Claude bring the sparkle when invited and lets Local Intelligence keep working when you prefer the numbers without the perfume.
