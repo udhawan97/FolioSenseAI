@@ -3666,8 +3666,15 @@ function applyClaudeApiStatus(claudeLive) {
   <li>Open <code>.env</code> in your FolioSenseAI folder</li>
   <li>Add the line: <code>ANTHROPIC_API_KEY=sk-ant-…</code></li>
   <li>Save, then restart: <code>Ctrl+C</code> → <code>./scripts/start.sh</code></li>
-</ol>`;
+</ol>
+<p class="brand-offline-reunion">"Add your key, and you will finally reunite two lost loves."</p>`;
             callout.appendChild(note);
+        }
+
+        const modeToggleEl = document.getElementById("pet-mode-toggle");
+        if (modeToggleEl) {
+            modeToggleEl.classList.add("claude-offline");
+            modeToggleEl.title = "Claude is offline — click to see how to add your API key";
         }
 
         if (typeof _dashboardPetSpeak === "function") {
@@ -3681,6 +3688,14 @@ function applyClaudeApiStatus(claudeLive) {
         pet?.classList.remove("claude-offline");
         document.getElementById("pet-offline-note")?.remove();
         document.getElementById("brand-intro-offline-note")?.remove();
+
+        const modeToggleEl = document.getElementById("pet-mode-toggle");
+        if (modeToggleEl) {
+            modeToggleEl.classList.remove("claude-offline");
+            modeToggleEl.title = _forcedLocalMode
+                ? "Switch back to Folio Sense × Claude"
+                : "Switch to Local Intelligence — skip Claude for this session";
+        }
 
         if (!_forcedLocalMode) {
             document.querySelectorAll(".verdict-kicker-label").forEach(el => {
@@ -3862,6 +3877,10 @@ function initDashboardPet() {
 
     modeToggle?.addEventListener("click", (e) => {
         e.stopPropagation();
+        if (modeToggle.classList.contains("claude-offline")) {
+            document.getElementById("brand-intro-trigger")?.click();
+            return;
+        }
         applyForcedLocalMode(!_forcedLocalMode, true);
     });
 }

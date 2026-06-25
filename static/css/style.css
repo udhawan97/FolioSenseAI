@@ -1246,6 +1246,9 @@ table tbody tr:hover {
     -webkit-mask:
         linear-gradient(#000 0 0) content-box,
         linear-gradient(#000 0 0);
+    mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
     -webkit-mask-composite: xor;
     mask-composite: exclude;
     z-index: 0;
@@ -5647,6 +5650,13 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.4; }
     padding: 0.05em 0.25em;
     border-radius: 3px;
 }
+.brand-offline-reunion {
+    margin: 0.55rem 0 0;
+    color: var(--text-tertiary);
+    font-size: 0.61rem;
+    font-style: italic;
+    line-height: 1.4;
+}
 
 /* ── Living dashboard pet ───────────────────────────────────────────────── */
 body > .dashboard-pet {
@@ -5782,6 +5792,23 @@ body > .dashboard-pet {
     display: inline-flex;
     align-items: center;
     gap: 0.28rem;
+}
+
+.pet-mode-toggle.claude-offline {
+    opacity: 0.45;
+    cursor: not-allowed;
+    user-select: none;
+    background: var(--surface);
+    color: var(--text-tertiary);
+    border-color: var(--hairline);
+    pointer-events: auto;
+}
+
+.pet-mode-toggle.claude-offline:hover {
+    opacity: 0.6;
+    background: var(--surface);
+    color: var(--text-tertiary);
+    border-color: var(--hairline);
 }
 
 .dashboard-pet-quote {
