@@ -876,11 +876,12 @@ async def get_investment_signal_single(ticker: str, db: Session = Depends(get_db
 
 
 @router.get("/investment-signals/all")
-async def get_all_investment_signals(db: Session = Depends(get_db)):  # pylint: disable=too-many-statements,too-many-branches
+async def get_all_investment_signals(force_local: bool = False, db: Session = Depends(get_db)):  # pylint: disable=too-many-statements,too-many-branches
     """
     Return investment signals for all active portfolio holdings.
     Deterministic signals are computed fresh; quips are cached 24h in AISummary
     (summary_type='verdict') with price-drift invalidation.
+    Pass force_local=true to skip Claude quip generation and use deterministic fallbacks.
     """
     active_tickers = _active_portfolio_tickers(db)
     holding_meta = _holding_meta(db)
@@ -974,6 +975,17 @@ async def get_all_investment_signals(db: Session = Depends(get_db)):  # pylint: 
         include_portfolio_quip = True
 
     # Batch-generate quips for stale/missing tickers
+    if force_local:
+        for ticker in missing_quip_tickers:
+            signals[ticker]["quip"] = fallback_quip(signals[ticker].get("action", "needs-data"))
+        if include_portfolio_quip:
+            portfolio_quip = _portfolio_fallback_quip(
+                portfolio_state["dominant_action"],
+                portfolio_state["concentration_band"],
+            )
+        missing_quip_tickers = []
+        include_portfolio_quip = False
+
     claude_live: bool | None = None
     if missing_quip_tickers or include_portfolio_quip:
         quip_inputs = [

@@ -71,6 +71,7 @@ const TREND_DAYS = 7;
 const THEME_KEY = "foliosense-theme";
 const TEXT_SIZE_KEY = "foliosense-text-size";
 const DASHBOARD_PET_KEY = "foliosense-dashboard-pet-visible";
+const PET_MODE_KEY = "foliosense-force-local-mode";
 const PERFORMANCE_RANGE_KEY = "foliosense-performance-range";
 
 const PERFORMANCE_RANGES = {
@@ -354,6 +355,7 @@ let intelligenceRetryState = {}; // ticker → number of retry attempts
 let intelligenceRetryingTickers = new Set();
 let intelligenceExhaustedTickers = new Set();
 let _isClaudeApiLive = null;
+let _forcedLocalMode = false;
 
 // Rating state: stock analyst ratings or ETF quality labels
 let cachedRecommendations = {};  // ticker → rec object from /api/ai/analyst-recommendations/all
@@ -3222,7 +3224,7 @@ function _verdictLoadingLine(ticker) {
 }
 
 function _verdictKickerLabel() {
-    return _isClaudeApiLive === false
+    return (_isClaudeApiLive === false || _forcedLocalMode)
         ? "Folio Sense is missing Claude (reunite the lovers for a more precise verdict)"
         : FOLIO_SENSE_VERDICT_COPY.kicker;
 }
@@ -3493,7 +3495,7 @@ function renderAiVerdict(section, verdict, ticker) {
              aria-label="${escapeHtml(label)} verdict, ${conf}% confidence">
             <div class="verdict-header-bar">
                 <span class="verdict-status-dot" aria-hidden="true"></span>
-                <span class="verdict-header-label">${_isClaudeApiLive === false ? "Local Intelligence Verdict" : "AI Verdict"}</span>
+                <span class="verdict-header-label">${(_isClaudeApiLive === false || _forcedLocalMode) ? "Local Intelligence Verdict" : "AI Verdict"}</span>
                 <span class="verdict-header-sep" aria-hidden="true">·</span>
                 <span class="verdict-header-ticker">${escapeHtml(ticker)}</span>
                 ${anchorPill}
@@ -3680,12 +3682,14 @@ function applyClaudeApiStatus(claudeLive) {
         document.getElementById("pet-offline-note")?.remove();
         document.getElementById("brand-intro-offline-note")?.remove();
 
-        document.querySelectorAll(".verdict-kicker-label").forEach(el => {
-            el.textContent = FOLIO_SENSE_VERDICT_COPY.kicker;
-        });
-        document.querySelectorAll(".verdict-header-label").forEach(el => {
-            el.textContent = "AI Verdict";
-        });
+        if (!_forcedLocalMode) {
+            document.querySelectorAll(".verdict-kicker-label").forEach(el => {
+                el.textContent = FOLIO_SENSE_VERDICT_COPY.kicker;
+            });
+            document.querySelectorAll(".verdict-header-label").forEach(el => {
+                el.textContent = "AI Verdict";
+            });
+        }
     }
 }
 
@@ -3695,6 +3699,7 @@ function initDashboardPet() {
     const navToggle = document.getElementById("pet-nav-toggle");
     const bubble = document.getElementById("dashboard-pet-bubble");
     const quote = document.getElementById("dashboard-pet-quote");
+    const modeToggle = document.getElementById("pet-mode-toggle");
     const iconShell = pet?.querySelector(".dashboard-pet-icon-shell");
     if (!pet || !toggle || !navToggle || !bubble || !quote) return;
 
@@ -3830,6 +3835,35 @@ function initDashboardPet() {
 
     _dashboardPetSpeak = speak;
     window.dashboardPetSpeak = speak;
+
+    function applyForcedLocalMode(local, announce) {
+        _forcedLocalMode = local;
+        try { localStorage.setItem(PET_MODE_KEY, local ? "1" : "0"); } catch (_) {}
+        if (modeToggle) {
+            modeToggle.setAttribute("aria-pressed", String(local));
+            modeToggle.title = local
+                ? "Switch back to Folio Sense × Claude"
+                : "Switch to Local Intelligence — skip Claude for this session";
+        }
+        const kicker = local ? _verdictKickerLabel() : FOLIO_SENSE_VERDICT_COPY.kicker;
+        const header = local ? "Local Intelligence Verdict" : "AI Verdict";
+        document.querySelectorAll(".verdict-kicker-label").forEach(el => { el.textContent = kicker; });
+        document.querySelectorAll(".verdict-header-label").forEach(el => { el.textContent = header; });
+        if (announce) {
+            const msg = local
+                ? "Without my second half, I'm basic — but still running the numbers with quiet, deterministic dignity."
+                : "Second half reconnected. The thesis is sharper, the quips have opinions, and the portfolio finally has someone to impress.";
+            speak(msg, { reveal: true, persist: false });
+        }
+    }
+
+    try { _forcedLocalMode = localStorage.getItem(PET_MODE_KEY) === "1"; } catch (_) {}
+    if (_forcedLocalMode) applyForcedLocalMode(true, false);
+
+    modeToggle?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        applyForcedLocalMode(!_forcedLocalMode, true);
+    });
 }
 
 async function loadAiCostStats() {
@@ -4620,7 +4654,7 @@ async function loadHoldingIntelligence(options = {}) {
         const [intelRes, moveRes, verdictRes] = await Promise.all([
             fetch("/api/ai/intelligence/all/batch"),
             fetch("/api/ai/move-explanations/all"),
-            fetch("/api/ai/investment-signals/all"),
+            fetch(`/api/ai/investment-signals/all${_forcedLocalMode ? "?force_local=true" : ""}`),
         ]);
 
         if (intelRes.ok) {
@@ -4886,7 +4920,7 @@ async function updateHolding(holdingId) {
 async function refreshAiVerdicts() {
     if (!Object.keys(cachedVerdicts).length && !intelligenceLoaded && !intelligenceLoading) return;
     try {
-        const res = await fetch("/api/ai/investment-signals/all");
+        const res = await fetch(`/api/ai/investment-signals/all${_forcedLocalMode ? "?force_local=true" : ""}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         Object.entries(data.signals || {}).forEach(([ticker, sig]) => {
