@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import AISummary, Holding
-from app.services.ai_service import MODEL, generate_stock_summary
+from app.services.ai_service import MODEL, generate_etf_profile_seed, generate_stock_summary
 from app.services.move_explainer import (
     HoldingMoveSummary,
     _day_change_pct_cached,
@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
 CACHE_TTL = timedelta(hours=24)
-PRICE_DRIFT_THRESHOLD = 0.05  # expire cache when price moves >5% from when it was generated
+PRICE_DRIFT_THRESHOLD = 0.08  # stock summaries only; verdicts key off action + market mood
 HAIKU_45_INPUT_USD_PER_MILLION = 1.00
 HAIKU_45_OUTPUT_USD_PER_MILLION = 5.00
 ESTIMATED_PROMPT_TOKENS_PER_SUMMARY = 210
@@ -494,7 +494,7 @@ async def get_all_move_explanations(db: Session = Depends(get_db)):
 # ── Holding Intelligence endpoints ────────────────────────────────────────────
 
 @router.get("/intelligence/{ticker}")
-async def get_holding_intelligence_single(ticker: str):
+async def get_holding_intelligence_single(ticker: str, ai_holdings_fallback: bool = False):
     """
     Return structured intelligence for a single holding:
     what it covers (sectors, countries, top holdings, strategy, benchmarks).
@@ -505,6 +505,27 @@ async def get_holding_intelligence_single(ticker: str):
         raise HTTPException(status_code=404, detail=QUOTE_FETCH_ERROR)
     intel = get_holding_intelligence(ticker, stock_data)
     intel_dict = _enrich_intelligence_dict(intelligence_to_dict(intel), stock_data)
+    if (
+        ai_holdings_fallback
+        and intel_dict.get("coverage_type") != "equity"
+        and (not intel_dict.get("top_holdings") or not intel_dict.get("aum"))
+    ):
+        ai_profile = generate_etf_profile_seed(ticker, stock_data.get("name"))
+        ai_holdings = ai_profile.get("holdings") or []
+        ai_aum = ai_profile.get("aum")
+        if ai_holdings:
+            intel_dict["top_holdings"] = ai_holdings
+            intel_dict["data_quality"] = "partial"
+            intel_dict["holdings_estimated"] = True
+        if ai_aum and not intel_dict.get("aum"):
+            intel_dict["aum"] = ai_aum
+            intel_dict["aum_estimated"] = True
+        if ai_holdings or ai_aum:
+            sources = list(intel_dict.get("data_sources") or [])
+            if "claude_estimate" not in sources:
+                sources.append("claude_estimate")
+            intel_dict["data_sources"] = sources
+
     top_holdings = intel_dict.get("top_holdings") or []
     if top_holdings and intel_dict.get("coverage_type") != "equity":
         try:
@@ -595,15 +616,28 @@ async def get_all_intelligence(db: Session = Depends(get_db)):
 
 # ── Analyst Recommendation endpoints ─────────────────────────────────────────
 
+VERDICT_BRAND_KICKER = "Folio Sense \u00d7 Claude"
+VERDICT_FEELS_PREFIX = "Folio Sense feels"
 _VERDICT_DISCLAIMER = (
-    "\U0001f3b2 Claude rolled the dice — a hunch, not financial advice. "
-    "Verify before you trade."
+    "\U0001f3b2 Folio Sense rolled the dice with Claude \u2014 a hunch, not "
+    "financial advice. Verify before you trade."
 )
+_PORTFOLIO_CACHE_TICKER = "BOOK"
+_ACTION_CACHE_CODE = {"add": "a", "hold": "h", "trim": "t", "needs-data": "n"}
+_MOOD_CACHE_CODE = {
+    "hot": "hot", "warm": "warm", "neutral": "neut", "cooling": "cool", "cold": "cold"
+}
+
+VERDICT_BRAND_COPY = {
+    "kicker": VERDICT_BRAND_KICKER,
+    "feels_prefix": VERDICT_FEELS_PREFIX,
+}
 
 _NEEDS_DATA_SIGNAL = {
     "action": "needs-data",
     "label": "Needs Data",
     "confidence": 0,
+    "market_mood": "neutral",
     "reasons": [],
     "risks": ["Insufficient data to form a view"],
     "data_quality": "low",
@@ -647,6 +681,78 @@ def _compute_allocation_pcts(holding_meta: dict, quotes: dict) -> dict[str, floa
     return result
 
 
+def _verdict_summary_type(action: str, market_mood: str) -> str:
+    """Compact cache namespace for ticker verdict quips."""
+    action_code = _ACTION_CACHE_CODE.get(action, "n")
+    mood_code = _MOOD_CACHE_CODE.get(market_mood, "neut")
+    return f"v:{action_code}:{mood_code}"
+
+
+def _portfolio_state_signature(signals: dict[str, dict], alloc_map: dict[str, float]) -> dict:
+    """Coarse portfolio-state cache key: dominant action mix + concentration band."""
+    counts = {"add": 0, "hold": 0, "trim": 0, "needs-data": 0}
+    for sig in signals.values():
+        action = sig.get("action", "needs-data")
+        counts[action if action in counts else "needs-data"] += 1
+
+    dominant_action = max(
+        counts,
+        key=lambda action: (
+            counts[action],
+            {"hold": 3, "add": 2, "trim": 1, "needs-data": 0}[action],
+        ),
+    )
+    max_alloc = max(alloc_map.values(), default=0)
+    if max_alloc >= 25:
+        concentration_band = "high"
+    elif max_alloc >= 12:
+        concentration_band = "medium"
+    else:
+        concentration_band = "low"
+
+    return {
+        "dominant_action": dominant_action,
+        "concentration_band": concentration_band,
+        "summary_type": (
+            f"vp:{_ACTION_CACHE_CODE.get(dominant_action, 'n')}:{concentration_band}"
+        ),
+        "reason": (
+            f"Action mix add={counts['add']}, hold={counts['hold']}, "
+            f"trim={counts['trim']}; concentration {concentration_band}"
+        ),
+    }
+
+
+def _portfolio_fallback_quip(dominant_action: str, concentration_band: str) -> str:
+    if concentration_band == "high":
+        return (
+            "Claude sees the book leaning concentrated; "
+            "Folio Sense is politely raising one eyebrow."
+        )
+    if dominant_action == "add":
+        return (
+            "Folio Sense sees more green lights than red flags, "
+            "with Claude keeping the caveats close."
+        )
+    if dominant_action == "trim":
+        return (
+            "Claude thinks the portfolio has had a run; "
+            "Folio Sense is checking the exits calmly."
+        )
+    if dominant_action == "needs-data":
+        return (
+            "Folio Sense wants more receipts before turning this portfolio read into a headline."
+        )
+    return (
+        "Claude calls the portfolio balanced enough to be interesting, "
+        "not boring enough to ignore."
+    )
+
+
+def _brand_payload() -> dict:
+    return {**VERDICT_BRAND_COPY, "disclaimer": _VERDICT_DISCLAIMER}
+
+
 @router.get("/investment-signal/{ticker}")
 async def get_investment_signal_single(ticker: str, db: Session = Depends(get_db)):
     """
@@ -667,17 +773,23 @@ async def get_investment_signal_single(ticker: str, db: Session = Depends(get_db
         allocation_pct = alloc_map.get(ticker)
 
     rec = get_analyst_recommendation(ticker)
-    sig = build_investment_signal(rec, allocation_pct=allocation_pct, is_watchlist=is_watchlist)
+    sig = build_investment_signal(
+        rec,
+        allocation_pct=allocation_pct,
+        is_watchlist=is_watchlist,
+        stock_data=quote_data if not quote_data.get("error") else None,
+    )
     sig_dict = signal_to_dict(sig)
 
     quip = fallback_quip(sig.action)
     sig_dict["quip"] = quip
     sig_dict["disclaimer"] = _VERDICT_DISCLAIMER
+    sig_dict["brand"] = _brand_payload()
     return sig_dict
 
 
 @router.get("/investment-signals/all")
-async def get_all_investment_signals(db: Session = Depends(get_db)):
+async def get_all_investment_signals(db: Session = Depends(get_db)):  # pylint: disable=too-many-statements
     """
     Return investment signals for all active portfolio holdings.
     Deterministic signals are computed fresh; quips are cached 24h in AISummary
@@ -697,22 +809,30 @@ async def get_all_investment_signals(db: Session = Depends(get_db)):
             is_watchlist = meta.get("is_watchlist", False)
             allocation_pct = alloc_map.get(ticker)
 
+            quote_data = quotes.get(ticker) or {}
             rec = get_analyst_recommendation(ticker)
             sig = build_investment_signal(
-                rec, allocation_pct=allocation_pct, is_watchlist=is_watchlist
+                rec,
+                allocation_pct=allocation_pct,
+                is_watchlist=is_watchlist,
+                stock_data=quote_data if not quote_data.get("error") else None,
             )
             sig_dict = signal_to_dict(sig)
             sig_dict["disclaimer"] = _VERDICT_DISCLAIMER
+            sig_dict["brand"] = _brand_payload()
 
             # Check cache for quip
-            current_price = (quotes.get(ticker) or {}).get("current_price")
+            summary_type = _verdict_summary_type(
+                sig_dict.get("action", "needs-data"),
+                sig_dict.get("market_mood", "neutral"),
+            )
             cached = (
                 db.query(AISummary)
-                .filter(AISummary.ticker == ticker, AISummary.summary_type == "verdict")
+                .filter(AISummary.ticker == ticker, AISummary.summary_type == summary_type)
                 .order_by(AISummary.generated_at.desc())
                 .first()
             )
-            if cached and _cache_is_fresh(cached, current_price=current_price):
+            if cached and _cache_is_fresh(cached):
                 sig_dict["quip"] = getattr(cached, "summary_text", "")
             else:
                 sig_dict["quip"] = None  # will be filled by batch call
@@ -730,20 +850,49 @@ async def get_all_investment_signals(db: Session = Depends(get_db)):
                 "ticker": ticker,
                 "quip": fallback_quip("needs-data"),
                 "disclaimer": _VERDICT_DISCLAIMER,
+                "brand": _brand_payload(),
                 "generated_at": "",
             }
 
+    portfolio_state = _portfolio_state_signature(signals, alloc_map)
+    portfolio_cached = (
+        db.query(AISummary)
+        .filter(
+            AISummary.ticker == _PORTFOLIO_CACHE_TICKER,
+            AISummary.summary_type == portfolio_state["summary_type"],
+        )
+        .order_by(AISummary.generated_at.desc())
+        .first()
+    )
+    portfolio_quip: str | None = None
+    include_portfolio_quip = False
+    if portfolio_cached and _cache_is_fresh(portfolio_cached):
+        portfolio_quip = getattr(portfolio_cached, "summary_text", "")
+    else:
+        include_portfolio_quip = True
+
     # Batch-generate quips for stale/missing tickers
-    if missing_quip_tickers:
+    if missing_quip_tickers or include_portfolio_quip:
         quip_inputs = [
             {
                 "ticker": t,
                 "action": signals[t].get("action", "needs-data"),
                 "confidence": signals[t].get("confidence", 0),
+                "market_mood": signals[t].get("market_mood", "neutral"),
                 "reason": (signals[t].get("reasons") or [""])[0],
             }
             for t in missing_quip_tickers
         ]
+        if include_portfolio_quip:
+            quip_inputs.append(
+                {
+                    "ticker": _PORTFOLIO_CACHE_TICKER,
+                    "action": portfolio_state["dominant_action"],
+                    "confidence": 60,
+                    "market_mood": "neutral",
+                    "reason": portfolio_state["reason"],
+                }
+            )
         new_quips = generate_verdict_quips(quip_inputs)
 
         for ticker in missing_quip_tickers:
@@ -753,10 +902,14 @@ async def get_all_investment_signals(db: Session = Depends(get_db)):
 
             # Persist to cache
             current_price = (quotes.get(ticker) or {}).get("current_price")
+            summary_type = _verdict_summary_type(
+                signals[ticker].get("action", "needs-data"),
+                signals[ticker].get("market_mood", "neutral"),
+            )
             try:
                 db.add(AISummary(
                     ticker=ticker,
-                    summary_type="verdict",
+                    summary_type=summary_type,
                     summary_text=quip,
                     price_when_generated=current_price,
                     model_used=MODEL if new_quips.get(ticker) else "fallback",
@@ -766,9 +919,39 @@ async def get_all_investment_signals(db: Session = Depends(get_db)):
                     "Failed to cache quip for %s; exception_type=%s",
                     ticker, type(exc).__name__,
                 )
+        if include_portfolio_quip:
+            portfolio_quip = new_quips.get(_PORTFOLIO_CACHE_TICKER) or _portfolio_fallback_quip(
+                portfolio_state["dominant_action"],
+                portfolio_state["concentration_band"],
+            )
+            try:
+                db.add(AISummary(
+                    ticker=_PORTFOLIO_CACHE_TICKER,
+                    summary_type=portfolio_state["summary_type"],
+                    summary_text=portfolio_quip,
+                    price_when_generated=None,
+                    model_used=MODEL if new_quips.get(_PORTFOLIO_CACHE_TICKER) else "fallback",
+                ))
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.debug(
+                    "Failed to cache portfolio quip; exception_type=%s",
+                    type(exc).__name__,
+                )
         db.commit()
 
-    return {"signals": signals, "count": len(signals)}
+    portfolio_health = {
+        "quip": portfolio_quip or _portfolio_fallback_quip(
+            portfolio_state["dominant_action"],
+            portfolio_state["concentration_band"],
+        ),
+        "dominant_action": portfolio_state["dominant_action"],
+        "concentration_band": portfolio_state["concentration_band"],
+        "signature": portfolio_state["summary_type"],
+        "brand": _brand_payload(),
+        "disclaimer": _VERDICT_DISCLAIMER,
+    }
+
+    return {"signals": signals, "count": len(signals), "portfolio_health": portfolio_health}
 
 
 @router.get("/analyst-recommendation/{ticker}")

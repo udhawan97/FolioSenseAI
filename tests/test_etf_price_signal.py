@@ -81,7 +81,7 @@ def test_zero_percentile_at_one_year_low():
     assert result["priceZoneLabel"] == "Bargain"
     assert result["percentile"] == 0.0
     assert result["basis"] == "1Y percentile"
-    assert result["dataWarnings"] == []
+    assert not result["dataWarnings"]
 
 
 def test_price_below_history_range_suppresses_signal():

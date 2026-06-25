@@ -1,3 +1,4 @@
+import re
 from typing import Optional
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -16,6 +17,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # ── Holding Schemas ────────────────────────────────────────────────────
 
+_TICKER_PATTERN = re.compile(r"^[A-Z0-9.^-]{1,10}$")
+
 class HoldingCreate(BaseModel):
     """Data required to add a new holding."""
     ticker: str = Field(..., min_length=1, max_length=10,
@@ -29,7 +32,12 @@ class HoldingCreate(BaseModel):
     @classmethod
     def uppercase_ticker(cls, v):
         # Normalize the ticker so "voo", "VOO", and " Voo " all become "VOO"
-        return v.upper().strip()
+        ticker = v.upper().strip()
+        if not _TICKER_PATTERN.fullmatch(ticker):
+            raise ValueError(
+                "Ticker may contain only letters, numbers, '.', '-', or '^'"
+            )
+        return ticker
 
 
 class HoldingUpdate(BaseModel):

@@ -94,14 +94,16 @@ def _build_data_warnings(
         if current < hist_min * 0.5:
             warnings.append("price_below_history_range")
             logger.warning(
-                "ETF price signal: current=%.4f is below half the 1Y min=%.4f — possible split-adjustment mismatch",
+                "ETF price signal: current=%.4f is below half the 1Y min=%.4f "
+                "— possible split-adjustment mismatch",
                 current,
                 hist_min,
             )
         elif current > hist_max * 2.0:
             warnings.append("price_above_history_range")
             logger.warning(
-                "ETF price signal: current=%.4f is above double the 1Y max=%.4f — possible split-adjustment mismatch",
+                "ETF price signal: current=%.4f is above double the 1Y max=%.4f "
+                "— possible split-adjustment mismatch",
                 current,
                 hist_max,
             )

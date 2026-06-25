@@ -3,13 +3,20 @@ Tests for app/services/investment_signal.py and related verdict infrastructure.
 No real network calls — AnalystRec objects are constructed directly.
 """
 import json
+import asyncio
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
+from app.models import AISummary, Base, Holding, Portfolio
+from app.routers import ai as ai_router
 from app.services.analyst_recommendation import AnalystRec
 from app.services.investment_signal import (
-    InvestmentSignal,
+    _derive_etf_market_mood,
+    _derive_stock_market_mood,
     _needs_data,
     build_investment_signal,
     signal_to_dict,
@@ -53,12 +60,25 @@ def _unavailable_rec(fcf=None, ticker="XYZ"):
     )
 
 
-def _etf_rec(zone="Fair", quality_score=75, category_risk="Low", quality_label="Strong"):
+def _etf_rec(
+    zone="Fair",
+    quality_score=75,
+    category_risk="Low",
+    quality_label="Strong",
+    price_overrides=None,
+):
     price_signal = {
         "priceZoneLabel": zone,
-        "percentile": {"Bargain": 5.0, "Fair": 50.0, "Elevated": 65.0, "Rich": 95.0}.get(zone, 50.0),
+        "percentile": {
+            "Bargain": 5.0,
+            "Fair": 50.0,
+            "Elevated": 65.0,
+            "Rich": 95.0,
+        }.get(zone, 50.0),
         "dataWarnings": [],
     }
+    if price_overrides:
+        price_signal.update(price_overrides)
     etf_quality = {
         "score": quality_score,
         "qualityLabel": quality_label,
@@ -83,6 +103,40 @@ def _etf_rec(zone="Fair", quality_score=75, category_risk="Low", quality_label="
         etf_quality=etf_quality,
         price_signal=price_signal,
     )
+
+
+def _stock_quote(price=100.0, low=50.0, high=120.0, day_change_pct=0.2, ticker="NOW"):
+    return {
+        "ticker": ticker,
+        "current_price": price,
+        "day_change_pct": day_change_pct,
+        "fifty_two_week_low": low,
+        "fifty_two_week_high": high,
+        "error": None,
+    }
+
+
+def _make_ai_db(tickers=("NOW",), shares=10):
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    db = sessionmaker(bind=engine)()
+    db.add(Portfolio(id=1, name="Test Portfolio"))
+    for ticker in tickers:
+        db.add(
+            Holding(
+                portfolio_id=1,
+                ticker=ticker,
+                shares=shares,
+                avg_cost=100,
+                is_active=True,
+            )
+        )
+    db.commit()
+    return db
 
 
 # ── Stock buy/hold/sell → add/hold/trim mapping ────────────────────────────────
@@ -157,6 +211,66 @@ class TestEtfActionMapping:
         assert sig.confidence == 0
 
 
+# ── market mood + momentum refinements ────────────────────────────────────────
+
+class TestMarketMood:
+    def test_etf_market_mood_hot_from_price_signal(self):
+        mood = _derive_etf_market_mood({
+            "percentile": 88,
+            "vs50dPct": 3.2,
+            "vs200dPct": 8.5,
+            "vs30dChangePct": 2.4,
+            "vs200dChangePct": 9.0,
+        })
+        assert mood == "hot"
+
+    def test_stock_market_mood_cold_from_quote_fields(self):
+        mood = _derive_stock_market_mood(
+            _stock_quote(price=54, low=50, high=120, day_change_pct=-1.2)
+        )
+        assert mood == "cold"
+
+    def test_neutral_momentum_keeps_hold_default(self):
+        sig = build_investment_signal(
+            _stock_rec("hold", mean=3.0, upside=1.0),
+            stock_data=_stock_quote(price=83, low=50, high=120, day_change_pct=0.0),
+        )
+        assert sig.action == "hold"
+        assert sig.market_mood == "neutral"
+
+    def test_rich_etf_strong_uptrend_holds_instead_of_trim(self):
+        sig = build_investment_signal(_etf_rec("Rich", price_overrides={
+            "percentile": 92,
+            "vs50dPct": 4.0,
+            "vs200dPct": 11.0,
+            "vs30dChangePct": 3.0,
+            "vs200dChangePct": 12.0,
+        }))
+        assert sig.market_mood == "hot"
+        assert sig.action == "hold"
+        assert any("trend" in reason.lower() for reason in sig.reasons)
+
+    def test_bargain_etf_falling_is_hold_with_lower_conviction(self):
+        improving = build_investment_signal(_etf_rec("Bargain", price_overrides={
+            "percentile": 10,
+            "vs50dPct": 3.0,
+            "vs200dPct": 7.0,
+            "vs30dChangePct": 2.5,
+            "vs200dChangePct": 6.0,
+        }))
+        falling = build_investment_signal(_etf_rec("Bargain", price_overrides={
+            "percentile": 8,
+            "vs50dPct": -4.0,
+            "vs200dPct": -9.0,
+            "vs30dChangePct": -3.0,
+            "vs200dChangePct": -8.0,
+        }))
+        assert improving.action == "add"
+        assert falling.action == "hold"
+        assert falling.confidence < improving.confidence
+        assert any("watched" in reason.lower() for reason in falling.reasons)
+
+
 # ── Speculative gate ───────────────────────────────────────────────────────────
 
 class TestSpeculativeGate:
@@ -184,12 +298,15 @@ class TestAllocationRisk:
 
     def test_high_allocation_add_softens_confidence(self):
         sig_no_alloc = build_investment_signal(_stock_rec("buy"))
-        sig_high_alloc = build_investment_signal(_stock_rec("buy"), allocation_pct=15.0)
+        sig_high_alloc = build_investment_signal(
+            _stock_rec("buy"), allocation_pct=15.0
+        )
         assert sig_high_alloc.confidence <= sig_no_alloc.confidence
 
     def test_watchlist_skips_concentration_penalty(self):
-        sig_watchlist = build_investment_signal(_stock_rec("buy"), allocation_pct=15.0, is_watchlist=True)
-        sig_no_watch  = build_investment_signal(_stock_rec("buy"), allocation_pct=15.0)
+        sig_watchlist = build_investment_signal(
+            _stock_rec("buy"), allocation_pct=15.0, is_watchlist=True
+        )
         # watchlist should not have concentration risk bullet
         risk_text = " ".join(sig_watchlist.risks)
         assert "concentration" not in risk_text.lower()
@@ -205,7 +322,7 @@ class TestAllocationRisk:
 class TestNeedsData:
     def test_needs_data_has_no_reasons(self):
         sig = _needs_data("ABC")
-        assert sig.reasons == []
+        assert not sig.reasons
 
     def test_needs_data_has_generic_risk(self):
         sig = _needs_data("ABC")
@@ -259,7 +376,7 @@ class TestSignalToDict:
         sig = build_investment_signal(_stock_rec("buy"))
         d = signal_to_dict(sig)
         for key in ("ticker", "action", "label", "confidence", "reasons",
-                    "risks", "data_quality", "source_fields", "generated_at"):
+                    "market_mood", "risks", "data_quality", "source_fields", "generated_at"):
             assert key in d, f"signal_to_dict missing key: {key}"
 
 
@@ -291,11 +408,11 @@ class TestGenerateVerdictQuips:
             result = generate_verdict_quips([
                 {"ticker": "NOW", "action": "add", "confidence": 72, "reason": "Analysts bullish"}
             ])
-        assert result == {}
+        assert not result
 
     def test_returns_empty_dict_on_empty_signals(self):
         result = generate_verdict_quips([])
-        assert result == {}
+        assert not result
 
     def test_parses_valid_json_response(self):
         mock_msg = MagicMock()
@@ -324,3 +441,80 @@ class TestGenerateVerdictQuips:
                 {"ticker": "VOO", "action": "hold", "confidence": 55, "reason": "Fair value zone"}
             ])
         assert "VOO" in result
+
+
+# ── route cache keys + brand serialization ────────────────────────────────────
+
+def test_verdict_quip_cache_uses_action_and_market_mood(monkeypatch):
+    db = _make_ai_db(("NOW",))
+    quote_state = {"quote": _stock_quote(price=100, low=50, high=120, day_change_pct=0.1)}
+    calls = []
+
+    monkeypatch.setattr(ai_router, "get_all_quotes", lambda _tickers: [quote_state["quote"]])
+    monkeypatch.setattr(ai_router, "get_analyst_recommendation", lambda _ticker: _stock_rec("buy"))
+
+    def fake_generate(inputs):
+        calls.append(inputs)
+        return {item["ticker"]: f"quip {item['ticker']} {len(calls)}" for item in inputs}
+
+    monkeypatch.setattr(ai_router, "generate_verdict_quips", fake_generate)
+
+    first = asyncio.run(ai_router.get_all_investment_signals(db))
+    assert first["signals"]["NOW"]["market_mood"] == "warm"
+    assert len(calls) == 1
+
+    quote_state["quote"] = _stock_quote(price=101, low=50, high=120, day_change_pct=0.1)
+    second = asyncio.run(ai_router.get_all_investment_signals(db))
+    assert second["signals"]["NOW"]["market_mood"] == "warm"
+    assert len(calls) == 1, "same action + mood should reuse cached Claude quip"
+
+    quote_state["quote"] = _stock_quote(price=54, low=50, high=120, day_change_pct=-1.1)
+    third = asyncio.run(ai_router.get_all_investment_signals(db))
+    assert third["signals"]["NOW"]["market_mood"] == "cold"
+    assert len(calls) == 2, "mood flip should request a fresh quip"
+
+
+def test_portfolio_quip_cache_and_fallback(monkeypatch):
+    db = _make_ai_db(("AAA", "BBB"))
+    recs = {
+        "AAA": _stock_rec("hold", mean=3.0, upside=1.0),
+        "BBB": _stock_rec("hold", mean=3.0, upside=1.0),
+    }
+    calls = []
+
+    monkeypatch.setattr(
+        ai_router,
+        "get_all_quotes",
+        lambda _tickers: [
+            _stock_quote(price=80, low=50, high=120, day_change_pct=0.0, ticker="AAA"),
+            _stock_quote(price=80, low=50, high=120, day_change_pct=0.0, ticker="BBB"),
+        ],
+    )
+    monkeypatch.setattr(ai_router, "get_analyst_recommendation", lambda ticker: recs[ticker])
+
+    def fail_generate(inputs):
+        calls.append(inputs)
+        return {}
+
+    monkeypatch.setattr(ai_router, "generate_verdict_quips", fail_generate)
+
+    first = asyncio.run(ai_router.get_all_investment_signals(db))
+    assert "portfolio_health" in first
+    assert first["portfolio_health"]["quip"]
+    assert first["portfolio_health"]["brand"]["kicker"] == ai_router.VERDICT_BRAND_KICKER
+    assert "Folio Sense" in first["signals"]["AAA"]["disclaimer"]
+    assert len(calls) == 1
+
+    asyncio.run(ai_router.get_all_investment_signals(db))
+    assert len(calls) == 1, (
+        "portfolio quip should reuse cache when coarse state is unchanged"
+    )
+
+    recs["AAA"] = _stock_rec("sell", mean=4.5, upside=-15.0)
+    recs["BBB"] = _stock_rec("sell", mean=4.5, upside=-15.0)
+    changed = asyncio.run(ai_router.get_all_investment_signals(db))
+    assert changed["portfolio_health"]["dominant_action"] == "trim"
+    assert len(calls) == 2, "portfolio quip should refresh when state signature changes"
+
+    cached_rows = db.query(AISummary).filter(AISummary.ticker == "BOOK").all()
+    assert cached_rows

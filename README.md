@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite"/>
   <img src="https://img.shields.io/badge/Bootstrap-5-7952B3?style=flat-square&logo=bootstrap&logoColor=white" alt="Bootstrap 5"/>
   <img src="https://img.shields.io/badge/Chart.js-FF6384?style=flat-square&logo=chartdotjs&logoColor=white" alt="Chart.js"/>
-  <img src="https://img.shields.io/badge/release-v1.3-brightgreen?style=flat-square" alt="Release v1.3"/>
+  <img src="https://img.shields.io/badge/release-v2.0-brightgreen?style=flat-square" alt="Release v2.0"/>
 </p>
 
 <p align="center">
@@ -27,9 +27,9 @@
 
 ---
 
-> **Because "I don't know why my portfolio is down" is only acceptable once.**
+> **v2 is here: FolioSenseAI now reads your portfolio like an analyst with a personality.**
 >
-> FolioSenseAI tracks your holdings, pulls live prices from Yahoo Finance, and asks Claude AI to explain what on earth is happening — market context, sector moves, macro events, analyst takes. All the excuses reasons you need, in one dashboard.
+> FolioSenseAI tracks your holdings, pulls live prices from Yahoo Finance, and asks Claude AI to explain what on earth is happening — market context, sector moves, macro events, analyst takes, and now a clearer Add / Hold / Trim read. All the excuses reasons you need, in one dashboard.
 
 ---
 
@@ -57,6 +57,10 @@
 - **Movement explanations** — macro, sector, benchmark, volume, earnings, and company context for each holding
 - **Portfolio-level AI analysis** — diversification themes, concentration risks, notable movers
 - **Holding coverage** — ETF sectors, regions, themes, and benchmark context
+- **Folio Sense × Claude verdicts** — Add, Hold, Trim, or Needs Data calls with confidence, reasons, risks, and one-line color commentary
+- **Market-mood awareness** — live price momentum now tempers marginal calls before the app gets too enthusiastic
+- **Portfolio health quip** — a coarse read on the whole book, including concentration and dominant action mix
+- **ETF holdings fallback** — optional Claude-seeded holdings when market data providers leave an ETF's top holdings blank
 - **Analyst recommendations** and ETF quality labels *(take with an appropriate grain of salt)*
 - **Claude texting animation** — Holding Intel now cues a subtle bottom-right chat animation while analysis runs
 
@@ -98,23 +102,23 @@ You do not need to be a developer to run FolioSenseAI locally. Think of this lik
 
 The Anthropic API key is optional. Without it, FolioSenseAI still runs with live market data and portfolio tracking; AI explanations stay disabled until you add a key from [console.anthropic.com](https://console.anthropic.com/).
 
-These commands install the GitHub release [v1.3](https://github.com/udhawan97/FolioSenseAI/releases/tag/release-v1.3).
+These commands install the GitHub release [v2.0](https://github.com/udhawan97/FolioSenseAI/releases/tag/release-v2.0).
 
 **Mac / Linux**
 
 ```bash
-curl -L -o FolioSenseAI-v1.3.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v1.3.zip
-unzip FolioSenseAI-v1.3.zip
-cd FolioSenseAI-release-v1.3
+curl -L -o FolioSenseAI-v2.0.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v2.0.zip
+unzip FolioSenseAI-v2.0.zip
+cd FolioSenseAI-release-v2.0
 ./scripts/setup.sh
 ```
 
 **Windows PowerShell**
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v1.3.zip" -OutFile "FolioSenseAI-v1.3.zip"
-Expand-Archive -Path "FolioSenseAI-v1.3.zip" -DestinationPath .
-cd FolioSenseAI-release-v1.3
+Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v2.0.zip" -OutFile "FolioSenseAI-v2.0.zip"
+Expand-Archive -Path "FolioSenseAI-v2.0.zip" -DestinationPath .
+cd FolioSenseAI-release-v2.0
 .\scripts\setup.ps1
 ```
 
@@ -247,14 +251,26 @@ pip install --upgrade certifi
 
 ---
 
-## 🪄 What's New In v1.3
+## 🪄 What's New In v2.0
 
-- Added **Portfolio Butler**, a bottom-right dashboard companion with a polished top-bar toggle and market-aware reactions.
-- Holding rows now trigger tiered reactions for low, medium, and large daily gains or losses, keeping the dashboard more alive without sending extra AI requests.
-- Holding Intel now shows a bottom-right Claude texting animation while analysis runs, paired with the existing table scan/loading treatment.
-- Refined AI loading states, cache-busted static assets, dashboard copy, and interaction details across the main UI.
-- Tightened clean-fork defaults, local setup guidance, and CI coverage for tests, pylint, CodeQL, dependency audit, and repository hygiene.
-- Updated API metadata for the v1.3 release.
+**FolioSenseAI v2 turns the dashboard from "what moved?" into "what should I pay attention to next?"**
+
+- Added **Folio Sense × Claude verdicts** for each holding: Add, Hold, Trim, or Needs Data, with confidence, reasons, risks, and a cached AI quip.
+- Added **market mood** to investment signals, so live momentum can soften or strengthen marginal calls instead of blindly following analyst ratings.
+- Added a **portfolio health read** that summarizes the book's dominant action mix and concentration band in one business-friendly line.
+- Added **ETF holdings fallback** for cases where Yahoo Finance has no top-holdings data; Claude can seed estimated ETF constituents on retry and marks them as estimated.
+- Added richer **AI verdict UI**: reveal animation, branded "Folio Sense × Claude" copy, confidence meter, action chips, loading lines, and clearer risks/reasons.
+- Added **performance date ranges** for 1W, 1M, 1Y, 3Y, and Max views.
+- Improved ETF price-signal data quality checks, including sparse-history warnings and split-adjustment mismatch protection.
+- Expanded tests across investment signals, verdict caching, ETF price-signal warnings, AI quip parsing, and ETF holdings fallback.
+
+### Release Notes
+
+**For users and business folks:** v2 makes FolioSenseAI more decision-oriented. Instead of only explaining portfolio movement, the app now highlights whether each position looks like an add, hold, trim, or needs-more-data candidate, and explains the why in plain language.
+
+**For developers:** v2 adds a deterministic investment-signal service, new AI verdict endpoints, batched/cached Claude quips, action-and-market-mood cache keys, portfolio-level verdict state, ETF constituent fallback generation, richer dashboard rendering, and broader regression coverage.
+
+**Compared with v1.3:** the app moves beyond companion reactions and movement explanations into a fuller recommendation-style workflow, while keeping the same local-first setup and no-brokerage-connection posture.
 
 ---
 

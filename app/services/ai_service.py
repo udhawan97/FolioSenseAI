@@ -66,7 +66,7 @@ def generate_verdict_quips(signals: list[dict]) -> dict[str, str]:
 
     lines = "\n".join(
         f'{s["ticker"]}: action={s["action"]}, confidence={s["confidence"]}%, '
-        f'reason="{s.get("reason", "")}"'
+        f'market_mood={s.get("market_mood", "neutral")}, reason="{s.get("reason", "")}"'
         for s in signals
     )
 
@@ -113,6 +113,87 @@ def generate_verdict_quips(signals: list[dict]) -> dict[str, str]:
             type(exc).__name__,
         )
         return {}
+
+
+def generate_etf_profile_seed(ticker: str, name: str | None = None, limit: int = 10) -> dict:
+    """
+    Ask Claude for a tiny ETF profile seed when Yahoo has no fund profile.
+    Returns {"aum": number|None, "holdings": [...]}, or empty values on failure.
+    """
+    ticker = (ticker or "").upper().strip()
+    if not ticker:
+        return {"aum": None, "holdings": []}
+
+    fund_name = (name or ticker).strip()
+    limit = max(3, min(int(limit or 10), 15))
+    prompt = (
+        f"{ticker}|{fund_name}|{limit}\n"
+        "Return JSON only: "
+        "{\"aum\":12300000000,\"holdings\":[{\"ticker\":\"AAPL\",\"name\":\"Apple\",\"weight\":7.2}]}. "
+        "Use known ETF AUM in USD and top holdings; approximate weights %. Unknown fields: null/[]."
+    )
+
+    try:
+        message = client.messages.create(
+            model=MODEL,
+            max_tokens=360,
+            temperature=0,
+            system=(
+                "You provide compact ETF constituent seeds for dashboards. "
+                "No prose. No markdown. Only valid JSON."
+            ),
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text_block = next((b for b in message.content if b.type == "text"), None)
+        raw = text_block.text.strip() if text_block else ""
+        raw = re.sub(r"^```[a-z]*\s*|\s*```$", "", raw, flags=re.DOTALL).strip()
+        parsed = json.loads(raw)
+        if isinstance(parsed, list):
+            parsed = {"aum": None, "holdings": parsed}
+        if not isinstance(parsed, dict):
+            return {"aum": None, "holdings": []}
+
+        aum = None
+        try:
+            raw_aum = parsed.get("aum")
+            if raw_aum is not None and float(raw_aum) > 0:
+                aum = round(float(raw_aum))
+        except (TypeError, ValueError):
+            aum = None
+
+        holdings: list[dict] = []
+        for item in (parsed.get("holdings") or [])[:limit]:
+            if not isinstance(item, dict):
+                continue
+            symbol = str(item.get("ticker") or item.get("symbol") or "").upper().strip()
+            holding_name = str(item.get("name") or symbol).strip()
+            try:
+                weight = round(float(item.get("weight")), 2)
+            except (TypeError, ValueError):
+                continue
+            if symbol and 0 < weight <= 100:
+                holdings.append({
+                    "ticker": symbol,
+                    "name": holding_name or symbol,
+                    "weight": weight,
+                })
+
+        if len(holdings) < 3:
+            holdings = []
+        return {"aum": aum, "holdings": holdings}
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.warning(
+            "generate_etf_profile_seed failed; exception_type=%s",
+            type(exc).__name__,
+        )
+        return {"aum": None, "holdings": []}
+
+
+def generate_etf_holdings_seed(ticker: str, name: str | None = None, limit: int = 10) -> list[dict]:
+    """
+    Backward-compatible helper for callers/tests that only need holdings.
+    """
+    return generate_etf_profile_seed(ticker, name, limit).get("holdings") or []
 
 
 def normalize_bullets(text: str) -> str:

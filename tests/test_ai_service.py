@@ -206,3 +206,43 @@ class TestGenerateStockSummary:
             call_kwargs = mock_client.messages.create.call_args
             assert call_kwargs.kwargs["model"] == MODEL or call_kwargs.args[0] == MODEL or \
                    call_kwargs.kwargs.get("model") == MODEL
+
+
+class TestGenerateEtfHoldingsSeed:
+    def test_parses_compact_profile_json(self):
+        raw = (
+            '{"aum":12300000000,"holdings":['
+            '{"ticker":"AAPL","name":"Apple","weight":7.2},'
+            '{"ticker":"MSFT","name":"Microsoft","weight":6.8},'
+            '{"ticker":"NVDA","name":"NVIDIA","weight":6.1}]}'
+        )
+        with patch("app.services.ai_service.client") as mock_client:
+            mock_client.messages.create.return_value = _mock_response(raw)
+            from app.services.ai_service import generate_etf_profile_seed
+            result = generate_etf_profile_seed("VOO", "Vanguard S&P 500 ETF")
+
+        assert result["aum"] == 12_300_000_000
+        assert result["holdings"][0] == {"ticker": "AAPL", "name": "Apple", "weight": 7.2}
+
+    def test_parses_compact_json_holdings(self):
+        raw = (
+            '[{"ticker":"AAPL","name":"Apple","weight":7.2},'
+            '{"ticker":"MSFT","name":"Microsoft","weight":6.8},'
+            '{"ticker":"NVDA","name":"NVIDIA","weight":6.1}]'
+        )
+        with patch("app.services.ai_service.client") as mock_client:
+            mock_client.messages.create.return_value = _mock_response(raw)
+            from app.services.ai_service import generate_etf_holdings_seed
+            result = generate_etf_holdings_seed("VOO", "Vanguard S&P 500 ETF")
+
+        assert result == [
+            {"ticker": "AAPL", "name": "Apple", "weight": 7.2},
+            {"ticker": "MSFT", "name": "Microsoft", "weight": 6.8},
+            {"ticker": "NVDA", "name": "NVIDIA", "weight": 6.1},
+        ]
+
+    def test_returns_empty_when_model_is_unsure(self):
+        with patch("app.services.ai_service.client") as mock_client:
+            mock_client.messages.create.return_value = _mock_response("[]")
+            from app.services.ai_service import generate_etf_holdings_seed
+            assert not generate_etf_holdings_seed("MYSTERY")

@@ -5781,6 +5781,12 @@ body > .dashboard-pet {
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.055);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    transform: translate3d(0, 0, 0);
+}
+
+.dashboard-pet-icon-shell.is-reacting {
+    will-change: transform;
+    animation: petIconReact 0.58s cubic-bezier(0.2, 0.9, 0.2, 1) both;
 }
 
 .dashboard-pet-icon-shell img {
@@ -5830,6 +5836,13 @@ body > .dashboard-pet {
     35%      { transform: rotate(-4deg) translateY(-1px); }
     48%      { transform: rotate(4deg) translateY(0); }
     62%      { transform: rotate(0deg) translateY(-1px); }
+}
+
+@keyframes petIconReact {
+    0%   { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+    28%  { transform: translate3d(0, -4px, 0) rotate(-7deg) scale(1.06); }
+    56%  { transform: translate3d(2px, 1px, 0) rotate(5deg) scale(0.99); }
+    100% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
 }
 
 @keyframes petStatusPulse {
@@ -7279,6 +7292,8 @@ body > .dashboard-pet {
     .dashboard-pet-bubble,
     .dashboard-pet-bubble.is-talking::before,
     .dashboard-pet-orb,
+    .dashboard-pet-icon-shell,
+    .dashboard-pet-icon-shell.is-reacting,
     .dashboard-pet-icon-shell img,
     .dashboard-pet-status,
     .ai-agent-status.is-ready,
@@ -8165,13 +8180,68 @@ tr.research-holding-row:hover {
 /* Full-width third row in .intel-grid */
 .intel-verdict-section {
     grid-column: 1 / -1;
-    padding: 0.75rem 1rem 0.75rem 2.55rem;
+    padding: 0.65rem 0.9rem 0.8rem 2.55rem;
     border-top: 1px solid var(--hairline-soft);
 }
 
 .intel-verdict {
     display: grid;
     gap: 0.6rem;
+    position: relative;
+    overflow: hidden;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 5%, var(--surface-1, transparent));
+    border: 1px solid color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 20%, transparent);
+    padding: 0.7rem 0.85rem;
+    box-shadow:
+        inset 0 1px 0 color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 28%, transparent),
+        0 2px 12px -4px color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 18%, transparent);
+}
+
+.intel-verdict.is-revealing::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(
+        100deg,
+        transparent 0%,
+        rgba(255,255,255,.12) 48%,
+        transparent 62%
+    );
+    opacity: 0;
+    transform: translateX(-110%);
+    will-change: transform, opacity;
+    animation: verdictRevealSweep 0.62s var(--ease) 0.08s 1 both;
+}
+
+@keyframes verdictRevealSweep {
+    0%   { transform: translateX(-110%); opacity: 0; }
+    25%  { opacity: 1; }
+    100% { transform: translateX(110%); opacity: 0; }
+}
+
+.verdict-feels-line {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.34rem;
+    font-size: 0.82rem;
+    font-weight: 720;
+    line-height: 1.35;
+    color: var(--text-primary);
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.intel-verdict.is-revealing .verdict-feels-line {
+    opacity: 0;
+    transform: translateY(5px);
+    animation: verdictFeelsReveal 0.34s var(--ease) 0.32s 1 forwards;
+}
+
+@keyframes verdictFeelsReveal {
+    to { opacity: 1; transform: translateY(0); }
 }
 
 /* Die slot + chip + meter row */
@@ -8213,7 +8283,7 @@ tr.research-holding-row:hover {
 
 .verdict-die.is-tumbling img {
     will-change: transform;
-    animation: verdictDieTumble 1.1s var(--spring) infinite;
+    animation: verdictDieTumble 0.7s var(--spring) infinite;
 }
 
 /* Settle: glyph snaps in */
@@ -8235,6 +8305,26 @@ tr.research-holding-row:hover {
     transition: opacity 0.2s var(--ease);
 }
 
+.verdict-die.is-settled {
+    box-shadow:
+        0 0 0 2px color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 28%, transparent),
+        0 0 14px color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 28%, transparent);
+    animation: verdictDieGlow 2.2s ease-in-out infinite alternate;
+}
+
+@keyframes verdictDieGlow {
+    from {
+        box-shadow:
+            0 0 0 1.5px color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 22%, transparent),
+            0 0 8px  color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 18%, transparent);
+    }
+    to {
+        box-shadow:
+            0 0 0 3px   color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 38%, transparent),
+            0 0 18px    color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 38%, transparent);
+    }
+}
+
 /* Action chip */
 .verdict-chip {
     display: inline-flex;
@@ -8244,15 +8334,26 @@ tr.research-holding-row:hover {
     font-weight: 720;
     padding: 0.2rem 0.65rem;
     border-radius: 999px;
-    border: 1px solid color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 30%, transparent);
-    background: color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 38%, transparent);
+    background: color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 14%, transparent);
     color: var(--verdict-color, var(--accent-cyan));
     white-space: nowrap;
     letter-spacing: 0.01em;
+    box-shadow: 0 0 10px -2px color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 22%, transparent);
 }
 
 .verdict-chip i {
     font-size: 0.8rem;
+}
+
+.verdict-chip--inline {
+    padding: 0.14rem 0.48rem;
+    font-size: 0.7rem;
+}
+
+.verdict-feels-conf {
+    color: var(--verdict-color, var(--accent-cyan));
+    font-variant-numeric: tabular-nums;
 }
 
 /* Segmented confidence meter */
@@ -8276,8 +8377,13 @@ tr.research-holding-row:hover {
 .verdict-meter-fill {
     height: 100%;
     border-radius: 999px;
-    background: var(--verdict-color, var(--accent-cyan));
+    background: linear-gradient(
+        90deg,
+        var(--verdict-color, var(--accent-cyan)) 0%,
+        color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 65%, white) 100%
+    );
     transition: width 0.6s var(--ease);
+    box-shadow: 0 0 8px 0 color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 45%, transparent);
     mask-image: repeating-linear-gradient(
         90deg,
         #000 0px, #000 calc(10% - 1.5px),
@@ -8291,25 +8397,45 @@ tr.research-holding-row:hover {
 }
 
 .verdict-conf-pct {
-    font-size: 0.65rem;
-    font-weight: 700;
+    font-size: 0.78rem;
+    font-weight: 800;
     color: var(--verdict-color, var(--accent-cyan));
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
     min-width: 30px;
     text-align: right;
+    text-shadow: 0 0 10px color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 50%, transparent);
 }
 
 /* Witty quote callout */
 .verdict-quote {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
     font-size: 0.76rem;
     font-style: italic;
     color: var(--text-secondary);
     line-height: 1.5;
-    padding: 0.38rem 0.65rem;
-    border-left: 2px solid color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 55%, transparent);
-    border-radius: 0 6px 6px 0;
-    background: color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 5%, transparent);
+    padding: 0.45rem 0.75rem;
+    border-left: 3px solid color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 65%, transparent);
+    border-radius: 0 8px 8px 0;
+    background: color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 7%, transparent);
+    position: relative;
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--verdict-color, var(--accent-cyan)) 12%, transparent);
+}
+
+.verdict-quote-icon {
+    flex: 0 0 auto;
+    margin-top: 0.1rem;
+    font-size: 0.86rem;
+    font-style: normal;
+    color: var(--verdict-color, var(--accent-cyan));
+}
+
+.verdict-tea-label {
+    color: var(--verdict-color, var(--accent-cyan));
+    font-style: normal;
+    font-weight: 750;
 }
 
 /* Verdict reasons/risks rows */
@@ -8324,6 +8450,12 @@ tr.research-holding-row:hover {
     gap: 0.52rem;
 }
 
+.verdict-loading-line {
+    font-size: 0.74rem;
+    color: var(--text-secondary);
+    line-height: 1.35;
+}
+
 /* Verdict color per action — set on .intel-verdict */
 .intel-verdict[data-action="add"]        { --verdict-color: var(--accent-green); }
 .intel-verdict[data-action="hold"]       { --verdict-color: var(--accent-yellow); }
@@ -8333,7 +8465,14 @@ tr.research-holding-row:hover {
 /* Reduced-motion: die stays static, meter at final width, count-up skipped */
 @media (prefers-reduced-motion: reduce) {
     .verdict-die.is-tumbling img { animation: none; }
+    .verdict-die.is-settled     { animation: none; }
     .verdict-meter-fill { transition: none; }
+    .intel-verdict.is-revealing::after,
+    .intel-verdict.is-revealing .verdict-feels-line {
+        animation: none;
+        opacity: 1;
+        transform: none;
+    }
 }
 
 /* Light theme adjustments */

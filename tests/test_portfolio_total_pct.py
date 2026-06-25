@@ -6,6 +6,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.models import Base, Holding, Portfolio, RealizedTrade
 from app.routers import portfolio as portfolio_router
+from app.schemas import HoldingCreate
 
 
 def make_db():
@@ -150,3 +151,17 @@ def test_default_portfolio_is_created_on_first_use(monkeypatch):
     assert portfolio.name == "My Portfolio"
     assert [h.ticker for h in holdings] == ["QQQ", "VOO"]
     assert all(h.shares == 0 for h in holdings)
+
+
+def test_holding_create_rejects_unsafe_ticker_characters():
+    try:
+        HoldingCreate(ticker="');x//", shares=1)
+    except ValueError as exc:
+        assert "Ticker may contain only" in str(exc)
+    else:
+        raise AssertionError("Unsafe ticker was accepted")
+
+
+def test_holding_create_allows_common_yfinance_ticker_characters():
+    assert HoldingCreate(ticker="brk.b", shares=1).ticker == "BRK.B"
+    assert HoldingCreate(ticker="btc-usd", shares=1).ticker == "BTC-USD"

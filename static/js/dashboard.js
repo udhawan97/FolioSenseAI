@@ -354,12 +354,18 @@ const AI_CHECK_MESSAGES = [
 ];
 
 const CLAUDE_FUNNY_MESSAGES = [
-    "Texting Claude: \"quick question, why is this portfolio like this?\"",
-    "Claude read it. Three typing dots. Extremely premium suspense.",
-    "Sending tickers with confidence and just a hint of emotional exposure.",
-    "Claude is typing carefully; she respects both risk and boundaries.",
-    "Your holdings are in the chat. Claude is choosing elegant words.",
-    "Message delivered. Portfolio therapy is composing a reply.",
+    "Folio Sense slid into Claude's DMs for the tea... 👀",
+    "Folio Sense brought Claude a matcha. Claude's considering it...",
+    "Folio Sense is flirting shamelessly so Claude spills the read...",
+    "Folio Sense batted its lashes. Claude's typing...",
+    "Folio Sense and Claude are comparing notes (and numbers)...",
+    "Folio Sense leaned in. Claude leaned back with a verdict...",
+    "Folio Sense complimented Claude's reasoning. Claude requested supporting data.",
+    "Folio Sense sent Claude clean inputs and a respectfully confident wink.",
+    "Folio Sense asked Claude for nuance. Claude arrived overdressed.",
+    "Folio Sense is keeping it professional, but the confidence score noticed.",
+    "Folio Sense passed Claude a crisp thesis. Claude marked it intriguing.",
+    "Folio Sense made eye contact with the model card. Claude kept typing.",
 ];
 let claudeMessageIndex = 0;
 
@@ -1960,6 +1966,10 @@ function escapeHtml(str) {
         .replace(/'/g, "&#039;");
 }
 
+function inlineJsString(str) {
+    return JSON.stringify(String(str ?? "")).replace(/"/g, "&quot;");
+}
+
 function parseBullets(text) {
     if (!text) return [];
     const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
@@ -2127,7 +2137,8 @@ function renderMoveExplainer(section, data, coverageData = null) {
         data.day_change_pct,
         coverageData?.ticker,
         coverageData?.coverage_type,
-        coverageData?.top_holdings
+        coverageData?.top_holdings,
+        coverageData?.holdings_estimated
     );
 
     section.innerHTML = `
@@ -2169,7 +2180,7 @@ function buildHoldingFact(data) {
     if (!data) return "";
     const aum = data.aum;
     if (isFiniteNumber(aum) && Number(aum) > 0) {
-        return `AUM: $${formatCompactNumber(aum)}`;
+        return `${data.aum_estimated ? "Est. " : ""}AUM: $${formatCompactNumber(aum)}`;
     }
     return "";
 }
@@ -2201,10 +2212,12 @@ function renderFundTrendChip(label, value) {
 function renderFundScaleSpotlight(data, priceSignal = null) {
     const aum = data?.aum;
     const hasAum = isFiniteNumber(aum) && Number(aum) > 0;
+    const aumEstimated = !!data?.aum_estimated;
     const change30 = firstFiniteValue(priceSignal?.vs30dChangePct, priceSignal?.vs30dPct);
     const change200 = firstFiniteValue(priceSignal?.vs200dChangePct, priceSignal?.vs200dPct);
     const hasTrends = isFiniteNumber(change30) || isFiniteNumber(change200);
     if (!hasAum && !hasTrends) return "";
+    const missingAumDetail = "Yahoo/yfinance didn’t answer with AUM yet. Use Ask Claude below for an estimate.";
 
     return `
         <div class="fund-scale-spotlight" aria-label="Fund scale and price trend">
@@ -2214,7 +2227,7 @@ function renderFundScaleSpotlight(data, priceSignal = null) {
             <div class="fund-scale-copy">
                 <span class="fund-scale-label">Fund scale</span>
                 <strong class="fund-scale-value" style="${hasAum ? "" : "font-size:.82rem;opacity:.7"}">${hasAum ? escapeHtml(formatCompact(aum)) : "Still sourcing"}</strong>
-                <span class="fund-scale-detail">${hasAum ? "Assets under management" : "Our database hasn’t caught up on AUM yet — try reloading, or if this holding is new, check back once it’s had a moment to accumulate data."}</span>
+                <span class="fund-scale-detail">${hasAum ? (aumEstimated ? "Estimated assets under management via Claude fallback" : "Assets under management") : missingAumDetail}</span>
             </div>
             ${hasTrends ? `
                 <div class="fund-trend-stack" aria-label="Price change versus history">
@@ -2471,9 +2484,17 @@ function buildMoveStatItems(data) {
     return items;
 }
 
-function renderContributionBreakdown(breakdown, etfDayChangePct, ticker, coverageType, topHoldings) {
+function renderContributionBreakdown(
+    breakdown,
+    etfDayChangePct,
+    ticker,
+    coverageType,
+    topHoldings,
+    holdingsEstimated = false
+) {
     if (!breakdown || !breakdown.length) {
         if (coverageType && coverageType !== "equity" && ticker) {
+            const tickerArg = inlineJsString(ticker);
             return `
                 <div class="intel-label" style="margin-top:.6rem">
                     <i class="bi bi-distribute-vertical"></i> Holdings Contribution
@@ -2481,13 +2502,12 @@ function renderContributionBreakdown(breakdown, etfDayChangePct, ticker, coverag
                 <div class="contrib-empty">
                     <i class="bi bi-hourglass-split contrib-empty-icon" style="opacity:.55"></i>
                     <span class="contrib-empty-text" style="font-size:.8rem;line-height:1.45">
-                        The database is still catching up on individual holdings for this fund —
-                        it's not ignoring you, just a little behind.
-                        Try reloading, or if this holding is new to your portfolio,
-                        give it a little time to build up enough data points.
+                        Yahoo/yfinance didn’t answer with this fund’s constituents.
+                        I can ask Claude for an estimated AUM and top-holdings seed,
+                        then use live prices for the move math.
                     </span>
-                    <button class="contrib-retry-btn" onclick="reloadContributionForTicker('${escapeHtml(ticker)}')">
-                        <i class="bi bi-arrow-clockwise"></i> Reload
+                    <button class="contrib-retry-btn" onclick="reloadContributionForTicker(${tickerArg})">
+                        <i class="bi bi-stars"></i> Ask Claude
                     </button>
                 </div>`;
         }
@@ -2574,7 +2594,7 @@ function renderContributionBreakdown(breakdown, etfDayChangePct, ticker, coverag
 
     return `
         <div class="intel-label" style="margin-top:.6rem">
-            <i class="bi bi-distribute-vertical"></i> Holdings Contribution
+            <i class="bi bi-distribute-vertical"></i> Holdings Contribution${holdingsEstimated ? " (estimated)" : ""}
         </div>
         <div class="contrib-breakdown">
             <div class="contrib-header">
@@ -2994,6 +3014,12 @@ const VERDICT_ICONS = {
     "needs-data": "bi-question-circle",
 };
 
+const FOLIO_SENSE_VERDICT_COPY = {
+    kicker: "Folio Sense \u00d7 Claude",
+    feelsPrefix: "Folio Sense feels",
+    unavailable: "Verdict unavailable — tap Holding Intel to refresh.",
+};
+
 function _verdictColor(action) {
     const map = {
         "add":  "var(--accent-green)",
@@ -3005,11 +3031,24 @@ function _verdictColor(action) {
 
 const _verdictSettled = new Set();  // tickers whose die has already settled
 
+function _verdictLoadingLine(ticker) {
+    const seed = String(ticker || "").split("").reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+    return CLAUDE_FUNNY_MESSAGES[seed % CLAUDE_FUNNY_MESSAGES.length];
+}
+
+function _verdictBrand(verdict) {
+    const brand = verdict?.brand || {};
+    return {
+        kicker: brand.kicker || FOLIO_SENSE_VERDICT_COPY.kicker,
+        feelsPrefix: brand.feels_prefix || brand.feelsPrefix || FOLIO_SENSE_VERDICT_COPY.feelsPrefix,
+    };
+}
+
 function renderAiVerdictShimmer(section, ticker) {
     if (section._verdictShimmerTicker === ticker) return;
     section._verdictShimmerTicker = ticker;
     section.innerHTML = `
-        <div class="intel-label"><i class="bi bi-dice-5"></i> AI Verdict</div>
+        <div class="intel-label"><i class="bi bi-dice-5"></i> ${escapeHtml(FOLIO_SENSE_VERDICT_COPY.kicker)}</div>
         <div class="verdict-shimmer">
             <div style="display:flex;align-items:center;gap:.6rem">
                 <div class="verdict-die is-tumbling" aria-hidden="true">
@@ -3021,13 +3060,14 @@ function renderAiVerdictShimmer(section, ticker) {
             </div>
             <div class="shimmer-line" style="width:90%;height:10px;border-radius:4px"></div>
             <div class="shimmer-line" style="width:75%;height:10px;border-radius:4px"></div>
+            <div class="verdict-loading-line">${escapeHtml(_verdictLoadingLine(ticker))}</div>
         </div>`;
 }
 
 function _animateConfidence(el, target, reducedMotion) {
     if (reducedMotion) { el.textContent = target + "%"; return; }
     const start = performance.now();
-    const duration = 600;
+    const duration = 360;
     function tick(now) {
         const t = Math.min((now - start) / duration, 1);
         const ease = 1 - Math.pow(1 - t, 3); // easeOutCubic
@@ -3040,8 +3080,8 @@ function _animateConfidence(el, target, reducedMotion) {
 function renderAiVerdict(section, verdict, ticker) {
     if (!verdict) {
         section.innerHTML = `
-            <div class="intel-label"><i class="bi bi-dice-5"></i> AI Verdict</div>
-            <span class="intel-na">Verdict unavailable — tap Holding Intel to refresh.</span>`;
+            <div class="intel-label"><i class="bi bi-dice-5"></i> ${escapeHtml(FOLIO_SENSE_VERDICT_COPY.kicker)}</div>
+            <span class="intel-na">${escapeHtml(FOLIO_SENSE_VERDICT_COPY.unavailable)}</span>`;
         return;
     }
 
@@ -3055,6 +3095,8 @@ function renderAiVerdict(section, verdict, ticker) {
     const icon      = VERDICT_ICONS[action] || "bi-question-circle";
     const alreadySettled = _verdictSettled.has(ticker);
     const reducedMotion  = prefersReducedMotion();
+    const shouldReveal = !alreadySettled && !reducedMotion;
+    const brandCopy = _verdictBrand(verdict);
 
     const reasonsHtml = reasons.map(r =>
         `<div class="intel-spec-row"><span><i class="bi bi-check-circle" style="color:var(--verdict-color)"></i></span><strong>${escapeHtml(r)}</strong></div>`
@@ -3064,12 +3106,23 @@ function renderAiVerdict(section, verdict, ticker) {
         `<div class="intel-spec-row"><span><i class="bi bi-exclamation-triangle"></i></span><strong><span class="spec-pill risk">${escapeHtml(r)}</span></strong></div>`
     ).join("");
 
-    const dieClass = (!alreadySettled && !reducedMotion) ? "is-tumbling" : "is-settled";
+    const dieClass = shouldReveal ? "is-tumbling" : "is-settled";
+    const revealClass = shouldReveal ? "is-revealing" : "is-static";
+    const meterWidth = shouldReveal ? "0%" : `${conf}%`;
+    const initialConf = shouldReveal ? "0%" : `${conf}%`;
 
     section.innerHTML = `
-        <div class="intel-label"><i class="bi bi-dice-5"></i> AI Verdict</div>
-        <div class="intel-verdict" data-action="${escapeHtml(action)}"
+        <div class="intel-label"><i class="bi bi-dice-5"></i> ${escapeHtml(brandCopy.kicker)}</div>
+        <div class="intel-verdict ${revealClass}" data-action="${escapeHtml(action)}"
              aria-label="${escapeHtml(label)} verdict, ${conf}% confidence">
+            <div class="verdict-feels-line">
+                <span>${escapeHtml(brandCopy.feelsPrefix)} this could be a</span>
+                <span class="verdict-chip verdict-chip--inline">
+                    <i class="bi ${escapeHtml(icon)}"></i>
+                    ${escapeHtml(label)}
+                </span>
+                <span class="verdict-feels-conf">· ${conf}%</span>
+            </div>
             <div class="verdict-head">
                 <div class="verdict-die ${dieClass}" aria-hidden="true">
                     <img src="/static/img/brand/folio-orbit-icon.svg" alt="">
@@ -3087,12 +3140,12 @@ function renderAiVerdict(section, verdict, ticker) {
                          aria-valuemin="0"
                          aria-valuemax="100"
                          aria-label="Confidence">
-                        <div class="verdict-meter-fill" style="width:${conf}%"></div>
+                        <div class="verdict-meter-fill" style="width:${meterWidth}"></div>
                     </div>
-                    <span class="verdict-conf-pct" data-conf-target="${conf}">0%</span>
+                    <span class="verdict-conf-pct" data-conf-target="${conf}">${initialConf}</span>
                 </div>
             </div>
-            ${quip ? `<div class="verdict-quote">${escapeHtml(quip)}</div>` : ""}
+            ${quip ? `<div class="verdict-quote"><i class="bi bi-chat-quote verdict-quote-icon" aria-hidden="true"></i><span><span class="verdict-tea-label">Claude spilled:</span> ${escapeHtml(quip)}</span></div>` : ""}
             ${(reasonsHtml || risksHtml) ? `
             <div class="intel-spec-rows verdict-spec-rows">
                 ${reasonsHtml}
@@ -3103,21 +3156,29 @@ function renderAiVerdict(section, verdict, ticker) {
             </div>` : ""}
         </div>`;
 
-    // Kick off confidence count-up
     const confEl = section.querySelector(".verdict-conf-pct");
-    if (confEl) _animateConfidence(confEl, conf, reducedMotion);
+    const meterFill = section.querySelector(".verdict-meter-fill");
 
     // Die settle animation (one-shot per ticker)
-    if (!alreadySettled && !reducedMotion) {
+    if (shouldReveal) {
         const die = section.querySelector(".verdict-die");
+        window.requestAnimationFrame(() => {
+            if (meterFill) meterFill.style.width = `${conf}%`;
+        });
         if (die) {
             setTimeout(() => {
                 die.classList.remove("is-tumbling");
                 die.classList.add("is-settled");
+                if (confEl) _animateConfidence(confEl, conf, false);
                 _verdictSettled.add(ticker);
-            }, 350);
+            }, 280);
         }
+        setTimeout(() => {
+            section.querySelector(".intel-verdict")?.classList.remove("is-revealing");
+        }, 730);
     } else {
+        if (meterFill) meterFill.style.width = `${conf}%`;
+        if (confEl) _animateConfidence(confEl, conf, true);
         _verdictSettled.add(ticker);
     }
 }
@@ -3129,6 +3190,7 @@ let _dashboardPetQuoteIndex = 0;
 let _dashboardPetTimer = null;
 let _dashboardPetSheenTimer = null;
 let _dashboardPetSpeak = null;
+const DASHBOARD_PET_REACTION_RE = /[\u{2600}-\u{27BF}\u{1F300}-\u{1FAFF}]/u;
 
 const DASHBOARD_PET_QUOTES = [
     "Claude, your context window and my cash-flow model should get coffee.",
@@ -3141,6 +3203,16 @@ const DASHBOARD_PET_QUOTES = [
     "Quietly flirting with Claude by keeping every basis point documented.",
     "Claude called this a balanced portfolio. I have not been the same since.",
     "My professional weakness? Claude explaining drawdowns in a calm voice.",
+    "Claude said my factor exposure looked disciplined, so naturally I updated my whole personality. ✨",
+    "I brought Claude a clean balance sheet and tried to act normal about it.",
+    "Claude noticed the risk-adjusted returns. I noticed Claude noticing.",
+    "This portfolio is diversified, but my attention is currently concentrated in Claude. 👀",
+    "Claude whispered 'rebalance' and suddenly every position fixed its collar.",
+    "I keep things professional with Claude: clear prompts, tidy data, devastating composure.",
+    "Claude asked for a sharper thesis, so I polished the assumptions and my charm.",
+    "Nothing says romance like a well-labeled chart and Claude saying 'reasonable.' 💅",
+    "Claude's calm analysis has me hedged emotionally and fully marked to market.",
+    "I would flirt more, but compliance asked me to cite the candle first.",
 ];
 
 function initDashboardPet() {
@@ -3149,6 +3221,7 @@ function initDashboardPet() {
     const navToggle = document.getElementById("pet-nav-toggle");
     const bubble = document.getElementById("dashboard-pet-bubble");
     const quote = document.getElementById("dashboard-pet-quote");
+    const iconShell = pet?.querySelector(".dashboard-pet-icon-shell");
     if (!pet || !toggle || !navToggle || !bubble || !quote) return;
 
     function storeVisible(visible) {
@@ -3177,13 +3250,23 @@ function initDashboardPet() {
         }, 14_000);
     }
 
+    function animatePetForLine(message) {
+        if (!iconShell || prefersReducedMotion() || !DASHBOARD_PET_REACTION_RE.test(message)) return;
+        iconShell.classList.remove("is-reacting");
+        window.requestAnimationFrame(() => {
+            iconShell.classList.add("is-reacting");
+        });
+    }
+
     function showQuote(nextIndex = null) {
         if (nextIndex === null) {
             _dashboardPetQuoteIndex = (_dashboardPetQuoteIndex + 1) % DASHBOARD_PET_QUOTES.length;
         } else {
             _dashboardPetQuoteIndex = nextIndex % DASHBOARD_PET_QUOTES.length;
         }
-        quote.textContent = DASHBOARD_PET_QUOTES[_dashboardPetQuoteIndex];
+        const message = DASHBOARD_PET_QUOTES[_dashboardPetQuoteIndex];
+        quote.textContent = message;
+        animatePetForLine(message);
         if (!prefersReducedMotion() && !bubble.classList.contains("is-talking")) {
             bubble.classList.add("is-talking");
             window.clearTimeout(_dashboardPetSheenTimer);
@@ -3197,6 +3280,7 @@ function initDashboardPet() {
     function speak(message, { reveal = true, persist = false } = {}) {
         if (reveal && !isVisible()) setVisible(true, persist);
         quote.textContent = message;
+        animatePetForLine(message);
         if (!prefersReducedMotion() && !bubble.classList.contains("is-talking")) {
             bubble.classList.add("is-talking");
             window.clearTimeout(_dashboardPetSheenTimer);
@@ -3226,6 +3310,7 @@ function initDashboardPet() {
             window.clearTimeout(_dashboardPetSheenTimer);
             _dashboardPetSheenTimer = null;
             bubble.classList.remove("is-talking");
+            iconShell?.classList.remove("is-reacting");
         }
     }
 
@@ -3244,6 +3329,11 @@ function initDashboardPet() {
     bubble.addEventListener("click", () => {
         showQuote();
         schedulePetQuote();
+    });
+    iconShell?.addEventListener("animationend", (event) => {
+        if (event.animationName === "petIconReact") {
+            iconShell.classList.remove("is-reacting");
+        }
     });
 
     document.addEventListener("visibilitychange", () => {
@@ -3726,10 +3816,10 @@ function reloadContributionForTicker(ticker) {
     // and calls renderHoldings() on completion, which re-renders the panel.
     delete intelligenceRetryState[ticker];
     intelligenceExhaustedTickers.delete(ticker);
-    fetchSingleIntelligenceWithRetry(ticker);
+    fetchSingleIntelligenceWithRetry(ticker, { aiHoldingsFallback: true });
 }
 
-async function fetchSingleIntelligenceWithRetry(ticker) {
+async function fetchSingleIntelligenceWithRetry(ticker, options = {}) {
     const currentAttempt = (intelligenceRetryState[ticker] || 0) + 1;
     intelligenceRetryState[ticker] = currentAttempt;
     intelligenceRetryingTickers.add(ticker);
@@ -3738,6 +3828,7 @@ async function fetchSingleIntelligenceWithRetry(ticker) {
     try {
         await delay(INTELLIGENCE_RETRY_BASE_DELAY_MS * currentAttempt);
         const params = new URLSearchParams({ retry: String(Date.now()) });
+        if (options.aiHoldingsFallback) params.set("ai_holdings_fallback", "true");
         const res = await fetch(`/api/ai/intelligence/${encodeURIComponent(ticker)}?${params}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const intel = await res.json();
@@ -3974,7 +4065,7 @@ async function loadManageHoldings({ preserveExisting = false } = {}) {
         data.holdings.forEach(h => {
             const row = tbody.insertRow();
             const tickerLabel = escapeHtml(h.ticker);
-            const tickerArg = JSON.stringify(h.ticker).replace(/"/g, "&quot;");
+            const tickerArg = inlineJsString(h.ticker);
             const isWatchlist = !!h.is_watchlist;
             row.id = `manage-row-${h.id}`;
             if (isWatchlist) row.classList.add("watchlist-row");
