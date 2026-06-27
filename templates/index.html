@@ -22,7 +22,7 @@
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="/static/css/style.css?v=93" rel="stylesheet">
+    <link href="/static/css/style.css?v=96" rel="stylesheet">
 </head>
 <body>
 
@@ -346,6 +346,58 @@
             </div>
         </div>
 
+        <!-- ── Portfolio Snapshot ───────────────────────────────────────── -->
+        <div class="row mb-3" id="portfolio-snapshot-row">
+            <div class="col-12">
+                <div class="card bg-dark border-secondary portfolio-snapshot-card" id="portfolio-snapshot-card">
+                    <div class="portfolio-snapshot-grid">
+                        <section class="snapshot-panel snapshot-panel--sectors" aria-labelledby="snapshot-sector-title">
+                            <div class="snapshot-panel-head">
+                                <span class="snapshot-icon snapshot-icon--sector">
+                                    <i class="bi bi-grid-3x3-gap-fill" aria-hidden="true"></i>
+                                </span>
+                                <div>
+                                    <h2 class="snapshot-title" id="snapshot-sector-title">Sector map</h2>
+                                    <p class="snapshot-subtitle">Look-through composition</p>
+                                </div>
+                            </div>
+                            <div class="snapshot-sector-strip is-loading" id="snapshot-sector-strip"
+                                 role="img" aria-label="Portfolio sector exposure loading"></div>
+                            <div class="snapshot-sector-list" id="snapshot-sector-list" aria-live="polite">
+                                <span class="snapshot-loading-pill">
+                                    <i class="bi bi-hourglass-split" aria-hidden="true"></i>
+                                    Loading sector mix
+                                </span>
+                            </div>
+                        </section>
+
+                        <section class="snapshot-panel snapshot-panel--moves" aria-labelledby="snapshot-move-title">
+                            <div class="snapshot-panel-head snapshot-panel-head--split">
+                                <div class="snapshot-panel-title-row">
+                                    <span class="snapshot-icon snapshot-icon--move">
+                                        <i class="bi bi-activity" aria-hidden="true"></i>
+                                    </span>
+                                    <div>
+                                        <h2 class="snapshot-title" id="snapshot-move-title">Today&rsquo;s impact</h2>
+                                        <p class="snapshot-subtitle">Gains vs losses by dollar contribution</p>
+                                    </div>
+                                </div>
+                                <span class="snapshot-mode-pill" id="snapshot-mode-pill">
+                                    <i class="bi bi-cpu-fill" aria-hidden="true"></i>
+                                    Local
+                                </span>
+                            </div>
+                            <div class="snapshot-move-summary" id="snapshot-move-summary"></div>
+                            <div class="snapshot-move-stack" id="snapshot-move-stack"
+                                 role="img" aria-label="Portfolio gains versus losses"></div>
+                            <div class="snapshot-mover-list" id="snapshot-mover-list" aria-live="polite"></div>
+                            <div class="snapshot-intel-lines" id="snapshot-intel-lines"></div>
+                        </section>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- ── Portfolio Briefing ───────────────────────────────────────── -->
         <div class="row mb-3" id="briefing-row">
             <div class="col-12">
@@ -399,22 +451,30 @@
 
         <!-- ── Allocation (mini preview — donut only in Overview) ──────── -->
         <div class="row g-3 g-md-4 mb-3">
-            <div class="col-12 col-md-7 col-lg-6 mx-auto">
-                <div class="card bg-dark border-secondary h-100">
+            <div class="col-12 col-xl-10 mx-auto">
+                <div class="card bg-dark border-secondary h-100 allocation-overview-card">
                     <div class="card-header d-flex align-items-center gap-2">
                         <i class="bi bi-pie-chart" style="font-size:.9rem"></i>
                         <span>Portfolio allocation</span>
                         <button class="tip-trigger ms-auto"
                             data-tip-title="Portfolio Allocation"
-                            data-tip-body="Each segment represents one holding's share of total portfolio value. Hover segments for details."
+                            data-tip-body="Each segment represents one holding's share of total portfolio value. Hover segments for a quick dossier; click one to pin it."
                             data-tip-hint="Full breakdown lives in Analytics"
                             data-tip-icon="bi-pie-chart">
                             <i class="bi bi-info-circle"></i>
                         </button>
                     </div>
-                    <div class="card-body d-flex justify-content-center align-items-center">
-                        <div class="allocation-chart-shell">
-                            <canvas id="allocation-chart"></canvas>
+                    <div class="card-body allocation-overview-body">
+                        <div class="allocation-overview-layout">
+                            <div class="allocation-chart-shell">
+                                <canvas id="allocation-chart"></canvas>
+                            </div>
+                            <div id="allocation-focus-panel" class="allocation-focus-panel" aria-live="polite">
+                                <div class="allocation-focus-empty">
+                                    <i class="bi bi-pie-chart-fill"></i>
+                                    <span>Loading allocation read...</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -974,14 +1034,12 @@
                             <div id="concentration-loading" class="analytics-skeleton" aria-hidden="true">
                                 <div class="shimmer-line"></div>
                             </div>
-                            <div class="analytics-gauge-wrap">
-                                <canvas id="concentration-gauge" aria-label="Portfolio concentration gauge"></canvas>
-                            </div>
+                            <div class="analytics-risk-lens" id="concentration-lens"
+                                 role="img" aria-label="Portfolio concentration compared with investor average"></div>
                             <p class="analytics-chart-caption analytics-chart-caption--center">
-                                How spread out your money is — like checking whether too many eggs sit in one basket.
-                                Green means well diversified; red means a few sectors or names carry most of the weight.
+                                A lower HHI means the portfolio is spread across more independent bets; a higher HHI
+                                means a few sectors or names carry more of the book.
                             </p>
-                            <p class="analytics-gauge-caption text-secondary small mb-0" id="concentration-caption"></p>
                             <p class="analytics-widget-insight" data-widget-insight="concentration"></p>
                         </div>
                     </div>
@@ -1055,31 +1113,13 @@
                             <div id="beta-loading" class="analytics-skeleton" aria-hidden="true">
                                 <div class="shimmer-line"></div>
                             </div>
-                            <div class="analytics-gauge-wrap">
-                                <canvas id="beta-gauge" aria-label="Market sensitivity gauge versus S&P 500"></canvas>
-                            </div>
-                            <div class="analytics-gauge-zones" id="beta-zone-legend" aria-hidden="true">
-                                <span class="gauge-zone gauge-zone--defensive">
-                                    <i class="gauge-zone-swatch"></i>
-                                    <span class="gauge-zone-label">Defensive</span>
-                                    <span class="gauge-zone-range">below 0.75</span>
-                                </span>
-                                <span class="gauge-zone gauge-zone--market gauge-zone--active-marker">
-                                    <i class="gauge-zone-swatch"></i>
-                                    <span class="gauge-zone-label">Market pace</span>
-                                    <span class="gauge-zone-range">~1.0</span>
-                                </span>
-                                <span class="gauge-zone gauge-zone--aggressive">
-                                    <i class="gauge-zone-swatch"></i>
-                                    <span class="gauge-zone-label">Aggressive</span>
-                                    <span class="gauge-zone-range">above 1.1</span>
-                                </span>
-                            </div>
+                            <div class="analytics-risk-lens" id="beta-lens"
+                                 role="img" aria-label="Portfolio market sensitivity compared with investor average"></div>
                             <p class="analytics-layman-note" id="beta-layman-note"></p>
                             <p class="analytics-widget-insight" data-widget-insight="beta-dial"></p>
                             <p class="analytics-chart-caption analytics-chart-caption--center">
-                                The tick mark on the arc is the S&amp;P 500 (1.0). Your needle shows whether
-                                you typically swing less or more than the broad market.
+                                Beta translates market moves into expected portfolio swing. 1.0 moves with the S&amp;P 500;
+                                below that is calmer, above that is more responsive.
                             </p>
                         </div>
                     </div>
@@ -1218,13 +1258,9 @@
                                 <span>Benchmark tilt</span>
                                 <span class="analytics-card-sub">sector overweight vs S&amp;P 500</span>
                             </div>
-                            <div class="sector-tilt-legend ms-auto d-flex gap-3 me-2">
-                                <span class="sector-tilt-legend-item sector-tilt-legend-item--port">Portfolio</span>
-                                <span class="sector-tilt-legend-item sector-tilt-legend-item--bench">S&amp;P 500</span>
-                            </div>
                             <button class="tip-trigger"
                                 data-tip-title="Benchmark Tilt"
-                                data-tip-body="Compares your look-through sector weights to the S&amp;P 500. Green bars are overweight; red bars are underweight."
+                                data-tip-body="Compares your look-through sector weights to the S&amp;P 500. Right-side bars are overweight; left-side bars are underweight."
                                 data-tip-hint="Look-through ETF unpacking"
                                 data-tip-icon="bi-sliders">
                                 <i class="bi bi-info-circle"></i>
@@ -1785,8 +1821,8 @@
     <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@2.0.1/dist/chartjs-chart-matrix.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@3.0.0/dist/chartjs-chart-treemap.min.js"></script>
-    <script defer src="/static/js/analytics-charts.js?v=9"></script>
-    <script defer src="/static/js/dashboard.js?v=88"></script>
+    <script defer src="/static/js/analytics-charts.js?v=12"></script>
+    <script defer src="/static/js/dashboard.js?v=89"></script>
 
     <!-- Tip Popover (singleton) -->
     <div id="tip-popover" role="tooltip" aria-hidden="true"></div>

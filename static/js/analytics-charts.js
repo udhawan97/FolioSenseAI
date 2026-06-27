@@ -21,10 +21,13 @@ const AnalyticsCharts = (() => {
     let drawdownChart = null;
     let treemapChart = null;
     let _lastHhi = 0;
+    let _lastConcentrationSectors = [];
     let _lastBeta = 1;
     let _gaugeReady = false;
     let _betaGaugeReady = false;
     let _benchmarkData = null;
+    const INVESTOR_AVERAGE_HHI = 0.18;
+    const INVESTOR_AVERAGE_BETA = 1.0;
 
     let _tapeRaf = null;
     let _tapePaused = false;
@@ -70,6 +73,17 @@ const AnalyticsCharts = (() => {
     function token(name, fallback) {
         const v = typeof cssVar === "function" ? cssVar(name) : "";
         return v || fallback;
+    }
+
+    function escapeText(value) {
+        const s = String(value ?? "");
+        if (typeof escapeHtml === "function") return escapeHtml(s);
+        return s
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll("\"", "&quot;")
+            .replaceAll("'", "&#039;");
     }
 
     function showLoading(id, on) {
@@ -121,17 +135,18 @@ const AnalyticsCharts = (() => {
 
     /** Apple-style sector palette + Bootstrap icon per GICS-style sector. */
     const SECTOR_THEMES = [
-        { match: /tech/i, color: "#007AFF", icon: "bi-cpu-fill" },
-        { match: /health/i, color: "#FF2D55", icon: "bi-heart-pulse-fill" },
-        { match: /financ/i, color: "#5856D6", icon: "bi-bank" },
-        { match: /energy/i, color: "#FF9500", icon: "bi-lightning-charge-fill" },
-        { match: /industri/i, color: "#64D2FF", icon: "bi-gear-wide-connected" },
-        { match: /consumer disc|consumer discretionary/i, color: "#BF5AF2", icon: "bi-bag-fill" },
-        { match: /consumer stap|staples/i, color: "#34C759", icon: "bi-cart-fill" },
-        { match: /real estate|reit/i, color: "#AC8E68", icon: "bi-building" },
-        { match: /utilit/i, color: "#FFD60A", icon: "bi-plug-fill" },
-        { match: /material/i, color: "#FF6482", icon: "bi-box-seam" },
-        { match: /communi/i, color: "#5AC8FA", icon: "bi-broadcast" },
+        { match: /tech/i,                        color: "#007AFF", icon: "bi-cpu-fill" },
+        { match: /health/i,                      color: "#FF2D55", icon: "bi-heart-pulse-fill" },
+        { match: /financ/i,                      color: "#5856D6", icon: "bi-bank" },
+        { match: /energy/i,                      color: "#FF9500", icon: "bi-lightning-charge-fill" },
+        { match: /industri/i,                    color: "#00C7BE", icon: "bi-gear-wide-connected" },
+        { match: /consumer disc|discretionary/i, color: "#FF6B35", icon: "bi-bag-fill" },
+        { match: /consumer stap|staples/i,       color: "#34C759", icon: "bi-cart-fill" },
+        { match: /real estate|reit/i,            color: "#AC8E68", icon: "bi-building" },
+        { match: /utilit/i,                      color: "#FFD60A", icon: "bi-plug-fill" },
+        { match: /material/i,                    color: "#BF5AF2", icon: "bi-box-seam" },
+        { match: /communi/i,                     color: "#5AC8FA", icon: "bi-broadcast" },
+        { match: /aero|defense|defence/i,        color: "#06D6A0", icon: "bi-airplane-fill" },
     ];
     const SECTOR_THEME_DEFAULT = { color: "#8E8E93", icon: "bi-diagram-3" };
 
@@ -1066,6 +1081,93 @@ const AnalyticsCharts = (() => {
         }
     }
 
+    function clampPct(value) {
+        return Math.max(0, Math.min(100, Number(value) || 0));
+    }
+
+    function scalePct(value, min, max) {
+        const span = max - min || 1;
+        return clampPct(((Number(value) - min) / span) * 100);
+    }
+
+    function renderRiskLens(id, config) {
+        const el = $(id);
+        if (!el) return;
+
+        const you = clampPct(config.youPct);
+        const avg = clampPct(config.avgPct);
+        el.dataset.tone = config.tone || "neutral";
+        el.innerHTML = `
+            <div class="risk-lens-head">
+                <div class="risk-lens-metric">
+                    <span class="risk-lens-eyebrow">${escapeText(config.eyebrow || "Your position")}</span>
+                    <strong>${escapeText(config.metric)}</strong>
+                    <span>${escapeText(config.state)}</span>
+                </div>
+                <div class="risk-lens-badge">${escapeText(config.badge)}</div>
+            </div>
+            <div class="risk-lens-rail" style="--you-pos:${you.toFixed(1)}%;--avg-pos:${avg.toFixed(1)}%">
+                <div class="risk-lens-track" aria-hidden="true">
+                    <i class="risk-lens-marker risk-lens-marker--you"></i>
+                    <i class="risk-lens-marker risk-lens-marker--avg"></i>
+                </div>
+                <div class="risk-lens-axis">
+                    <span>${escapeText(config.axisStart)}</span>
+                    <span>${escapeText(config.axisMid)}</span>
+                    <span>${escapeText(config.axisEnd)}</span>
+                </div>
+            </div>
+            <div class="risk-lens-compare">
+                <span class="risk-lens-chip risk-lens-chip--you">
+                    <i></i><span>You</span><strong>${escapeText(config.metric)}</strong>
+                </span>
+                <span class="risk-lens-chip risk-lens-chip--avg">
+                    <i></i><span>Investor avg</span><strong>${escapeText(config.avgMetric)}</strong>
+                </span>
+            </div>
+            <div class="risk-lens-context">
+                ${(config.context || []).map(item => `
+                    <span class="risk-lens-context-item">
+                        <small>${escapeText(item.label)}</small>
+                        <strong>${escapeText(item.value)}</strong>
+                    </span>
+                `).join("")}
+            </div>
+            <div class="risk-lens-takeaway">
+                <i class="bi ${escapeText(config.icon || "bi-lightning-charge-fill")}" aria-hidden="true"></i>
+                <span>${escapeText(config.takeaway)}</span>
+            </div>
+        `;
+    }
+
+    function clearRiskLens(id) {
+        $(id)?.replaceChildren();
+    }
+
+    function hhiLabel(hhi) {
+        return `HHI ${(Math.max(0, Number(hhi) || 0) * 100).toFixed(0)}`;
+    }
+
+    function concentrationLevel(hhi) {
+        const val = Number(hhi) || 0;
+        if (val < 0.25) return "Well spread";
+        if (val < 0.5) return "Moderate";
+        if (val < 0.75) return "Concentrated";
+        return "Very concentrated";
+    }
+
+    function concentrationComparison(hhi) {
+        const diff = ((Number(hhi) || 0) - INVESTOR_AVERAGE_HHI) * 100;
+        if (Math.abs(diff) < 2) {
+            return { value: "Near average", sub: "Your spread is close to the investor baseline." };
+        }
+        const lower = diff < 0;
+        return {
+            value: `${Math.abs(diff).toFixed(0)} pts ${lower ? "lower" : "higher"}`,
+            sub: lower ? "More diversified than the investor baseline." : "More concentrated than the investor baseline.",
+        };
+    }
+
     async function loadConcentrationGauge() {
         showLoading("concentration-loading", true);
         showEmpty("concentration-empty", false);
@@ -1076,111 +1178,53 @@ const AnalyticsCharts = (() => {
 
             if (!sectors.length) {
                 showEmpty("concentration-empty", true);
+                clearRiskLens("concentration-lens");
                 return;
             }
 
-            const top = sectors.slice(0, 2).map(s => `${s.name} (${s.weight_pct}%)`).join(", ");
-            const caption = $("concentration-caption");
-            if (caption) caption.textContent = top ? `Top drivers: ${top}` : "";
-
-            drawConcentrationGauge(hhi);
+            _lastConcentrationSectors = sectors;
+            drawConcentrationGauge(hhi, sectors);
             _lastHhi = hhi;
             _gaugeReady = true;
         } catch (err) {
             console.warn("Concentration gauge failed:", err);
             showEmpty("concentration-empty", true);
+            clearRiskLens("concentration-lens");
         } finally {
             showLoading("concentration-loading", false);
         }
     }
 
-    function drawGaugeNeedle(ctx, cx, cy, r, angle) {
-        const tipR = r + 1;
-        const baseR = r - 18;
-        const tipX = cx + tipR * Math.cos(angle);
-        const tipY = cy + tipR * Math.sin(angle);
-        const baseX = cx + baseR * Math.cos(angle);
-        const baseY = cy + baseR * Math.sin(angle);
-        const perp = angle + Math.PI / 2;
-        const halfW = 5.5;
-        const leftX = baseX + halfW * Math.cos(perp);
-        const leftY = baseY + halfW * Math.sin(perp);
-        const rightX = baseX - halfW * Math.cos(perp);
-        const rightY = baseY - halfW * Math.sin(perp);
-        const needleColor = token("--text-primary", "#f5f5f7");
+    function drawConcentrationGauge(hhi, sectors = _lastConcentrationSectors) {
+        const val = Math.max(0, Math.min(1, Number(hhi) || 0));
+        const list = sectors || [];
+        const biggest = list[0] ? `${list[0].name} ${list[0].weight_pct}%` : "Balanced";
+        // Effective number of independent bets implied by the HHI (1 / HHI),
+        // capped by the number of sectors actually held. This is the plain-English
+        // read of the index: "your money behaves like ~N equal sectors".
+        const effBets = val > 0
+            ? Math.max(1, Math.min(list.length || 1, Math.round(1 / val)))
+            : (list.length || 1);
+        const comparison = concentrationComparison(val);
 
-        ctx.save();
-        ctx.shadowColor = "rgba(0,0,0,0.45)";
-        ctx.shadowBlur = 6;
-        ctx.fillStyle = needleColor;
-        ctx.beginPath();
-        ctx.moveTo(tipX, tipY);
-        ctx.lineTo(leftX, leftY);
-        ctx.lineTo(rightX, rightY);
-        ctx.closePath();
-        ctx.fill();
-
-        ctx.shadowBlur = 0;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 4.5, 0, Math.PI * 2);
-        ctx.fillStyle = needleColor;
-        ctx.fill();
-        ctx.strokeStyle = token("--hairline", "rgba(255,255,255,0.18)");
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        ctx.restore();
-    }
-
-    function drawConcentrationGauge(hhi) {
-        const canvas = $("concentration-gauge");
-        if (!canvas) return;
-        const wrap = canvas.parentElement;
-        const ctx = canvas.getContext("2d");
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const W = Math.min(320, Math.max(240, wrap?.clientWidth || 320));
-        const H = Math.round(W * 0.56);
-        canvas.width = Math.floor(W * dpr);
-        canvas.height = Math.floor(H * dpr);
-        canvas.style.width = `${W}px`;
-        canvas.style.height = `${H}px`;
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-        const cx = W / 2;
-        const cy = H - 14;
-        const r = Math.min(110, W * 0.34);
-        const start = Math.PI;
-        const end = 0;
-        const val = Math.max(0, Math.min(1, hhi));
-        const needleAngle = start + (end - start) * val;
-
-        ctx.clearRect(0, 0, W, H);
-
-        const grad = ctx.createLinearGradient(cx - r, cy, cx + r, cy);
-        grad.addColorStop(0, token("--accent-green", "#30d158"));
-        grad.addColorStop(0.5, token("--accent-yellow", "#ffd60a"));
-        grad.addColorStop(1, token("--accent-red", "#ff453a"));
-
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, start, end);
-        ctx.strokeStyle = grad;
-        ctx.lineWidth = 14;
-        ctx.lineCap = "round";
-        ctx.stroke();
-
-        drawGaugeNeedle(ctx, cx, cy, r, needleAngle);
-
-        const label = val < 0.25 ? "Well spread"
-            : val < 0.5 ? "Moderate"
-            : val < 0.75 ? "Concentrated" : "Very concentrated";
-
-        ctx.fillStyle = token("--text-primary", "#f5f5f7");
-        ctx.font = `600 15px -apple-system, sans-serif`;
-        ctx.textAlign = "center";
-        ctx.fillText(label, cx, cy - 42);
-
-        ctx.fillStyle = token("--text-tertiary", "rgba(235,235,245,0.42)");
-        ctx.font = `500 11px -apple-system, sans-serif`;
-        ctx.fillText(`HHI ${(val * 100).toFixed(0)}`, cx, cy - 22);
+        renderRiskLens("concentration-lens", {
+            tone: val < 0.25 ? "calm" : val < 0.5 ? "watch" : "hot",
+            metric: hhiLabel(val),
+            state: concentrationLevel(val),
+            badge: comparison.value,
+            avgMetric: hhiLabel(INVESTOR_AVERAGE_HHI),
+            youPct: scalePct(val, 0, 0.6),
+            avgPct: scalePct(INVESTOR_AVERAGE_HHI, 0, 0.6),
+            axisStart: "Spread out",
+            axisMid: "Average",
+            axisEnd: "Crowded",
+            context: [
+                { label: "Biggest sector", value: biggest },
+                { label: "Spreads like", value: `~${effBets} even sectors` },
+            ],
+            icon: val <= INVESTOR_AVERAGE_HHI ? "bi-check2-circle" : "bi-exclamation-triangle",
+            takeaway: `Behaves like about ${effBets} equal-sized sectors. ${comparison.sub}`,
+        });
     }
 
     async function loadDrawdownChart() {
@@ -1423,11 +1467,30 @@ const AnalyticsCharts = (() => {
         return `If the S&P 500 moves 1% in a day, your portfolio has tended to move about ${marketMove}% — roughly ${extra}% more swing than the market.`;
     }
 
-    function betaZoneKey(beta) {
-        const b = Number(beta) || 1;
-        if (b < 0.75) return "defensive";
-        if (b < 1.1) return "market";
-        return "aggressive";
+    function betaLabel(beta) {
+        const b = Number(beta);
+        return `${(Number.isFinite(b) ? b : 0).toFixed(2)}x`;
+    }
+
+    function betaLevel(beta) {
+        const n = Number(beta);
+        const b = Number.isFinite(n) ? n : 1;
+        if (b < 0.75) return "Defensive";
+        if (b < 1.1) return "Market pace";
+        return "Aggressive";
+    }
+
+    function betaComparison(beta) {
+        const n = Number(beta);
+        const diff = (Number.isFinite(n) ? n : 1) - INVESTOR_AVERAGE_BETA;
+        if (Math.abs(diff) < 0.05) {
+            return { value: "Near average", sub: "Your market swing is close to the investor baseline." };
+        }
+        const lower = diff < 0;
+        return {
+            value: `${Math.round(Math.abs(diff) * 100)}% ${lower ? "less" : "more"} swing`,
+            sub: lower ? "Quieter than the investor baseline." : "More sensitive than the investor baseline.",
+        };
     }
 
     function volLevel(pct) {
@@ -1441,95 +1504,27 @@ const AnalyticsCharts = (() => {
         return `Right now your ride feels <strong>${level.label.toLowerCase()}</strong> — about <strong>${current.toFixed(1)}%</strong> yearly ups and downs (${level.hint}).`;
     }
 
-    function drawGaugeTick(ctx, cx, cy, r, norm, label) {
-        const start = Math.PI;
-        const end = 0;
-        const angle = start + (end - start) * norm;
-        const inner = r - 8;
-        const outer = r + 8;
-        const x1 = cx + inner * Math.cos(angle);
-        const y1 = cy + inner * Math.sin(angle);
-        const x2 = cx + outer * Math.cos(angle);
-        const y2 = cy + outer * Math.sin(angle);
-
-        ctx.save();
-        ctx.strokeStyle = token("--text-secondary", "rgba(235,235,245,0.72)");
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
-
-        const lx = cx + (r + 20) * Math.cos(angle);
-        const ly = cy + (r + 20) * Math.sin(angle);
-        ctx.fillStyle = token("--text-tertiary", "rgba(235,235,245,0.55)");
-        ctx.font = `600 9px -apple-system, sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(label, lx, ly);
-        ctx.restore();
-    }
-
     function drawBetaGauge(beta) {
-        const canvas = $("beta-gauge");
-        if (!canvas) return;
-        const wrap = canvas.parentElement;
-        const ctx = canvas.getContext("2d");
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const W = Math.min(320, Math.max(200, wrap?.clientWidth || 280));
-        const H = Math.round(W * 0.62);
-        canvas.width = Math.floor(W * dpr);
-        canvas.height = Math.floor(H * dpr);
-        canvas.style.width = `${W}px`;
-        canvas.style.height = `${H}px`;
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-        const cx = W / 2;
-        const cy = H - 18;
-        const r = Math.min(108, W * 0.33);
-        const start = Math.PI;
-        const end = 0;
         const val = Math.max(0, Math.min(2, beta));
-        const norm = val / 2;
-        const needleAngle = start + (end - start) * norm;
+        const comparison = betaComparison(val);
 
-        ctx.clearRect(0, 0, W, H);
-
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, start, end);
-        ctx.strokeStyle = token("--hairline", "rgba(255,255,255,0.1)");
-        ctx.lineWidth = 14;
-        ctx.lineCap = "round";
-        ctx.stroke();
-
-        const grad = ctx.createLinearGradient(cx - r, cy, cx + r, cy);
-        grad.addColorStop(0, token("--accent-blue", "#0a84ff"));
-        grad.addColorStop(0.5, token("--accent-cyan", "#64d2ff"));
-        grad.addColorStop(1, token("--accent-red", "#ff453a"));
-
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, start, needleAngle);
-        ctx.strokeStyle = grad;
-        ctx.lineWidth = 14;
-        ctx.lineCap = "round";
-        ctx.stroke();
-
-        drawGaugeTick(ctx, cx, cy, r, 0.5, "Market 1.0");
-
-        drawGaugeNeedle(ctx, cx, cy, r, needleAngle);
-
-        const label = beta < 0.75 ? "Defensive" : beta < 1.1 ? "Market pace" : "Aggressive";
-        ctx.fillStyle = token("--text-primary", "#f5f5f7");
-        ctx.font = `600 15px -apple-system, sans-serif`;
-        ctx.textAlign = "center";
-        ctx.fillText(label, cx, cy - 46);
-        ctx.fillStyle = token("--text-tertiary", "rgba(235,235,245,0.42)");
-        ctx.font = `500 11px -apple-system, sans-serif`;
-        ctx.fillText(`Sensitivity ${val.toFixed(2)}×`, cx, cy - 26);
-
-        const legend = $("beta-zone-legend");
-        legend?.querySelectorAll(".gauge-zone").forEach(el => {
-            el.classList.toggle("is-active", el.classList.contains(`gauge-zone--${betaZoneKey(beta)}`));
+        renderRiskLens("beta-lens", {
+            tone: val < 0.85 ? "cool" : val < 1.15 ? "calm" : "hot",
+            metric: betaLabel(val),
+            state: betaLevel(val),
+            badge: comparison.value,
+            avgMetric: betaLabel(INVESTOR_AVERAGE_BETA),
+            youPct: scalePct(val, 0, 2),
+            avgPct: scalePct(INVESTOR_AVERAGE_BETA, 0, 2),
+            axisStart: "Defensive",
+            axisMid: "Market",
+            axisEnd: "Aggressive",
+            context: [
+                { label: "Typical 1% day", value: `~${val.toFixed(1)}% move` },
+                { label: "Market falls 10%", value: `~${(val * 10).toFixed(0)}% drop` },
+            ],
+            icon: val <= 1.1 ? "bi-check2-circle" : "bi-activity",
+            takeaway: comparison.sub,
         });
     }
 
@@ -1541,6 +1536,7 @@ const AnalyticsCharts = (() => {
             const data = await res.json();
             if (!data.has_data) {
                 showEmpty("beta-empty", true);
+                clearRiskLens("beta-lens");
                 return;
             }
             const beta = Number(data.beta) || 1;
@@ -1552,6 +1548,7 @@ const AnalyticsCharts = (() => {
         } catch (err) {
             console.warn("Beta gauge failed:", err);
             showEmpty("beta-empty", true);
+            clearRiskLens("beta-lens");
         } finally {
             showLoading("beta-loading", false);
         }
@@ -1697,23 +1694,95 @@ const AnalyticsCharts = (() => {
     function renderSectorTilt(sectors) {
         const root = $("sector-tilt-chart");
         if (!root) return;
-        const maxTilt = Math.max(...sectors.map(s => Math.abs(s.tilt_pct || 0)), 5);
-        root.innerHTML = sectors.map(s => {
+        const rows = (sectors || [])
+            .map(s => ({
+                ...s,
+                tilt: Number(s.tilt_pct) || 0,
+                port: Number(s.portfolio_pct) || 0,
+                bench: Number(s.benchmark_pct) || 0,
+            }))
+            .sort((a, b) => Math.abs(b.tilt) - Math.abs(a.tilt));
+        if (!rows.length) {
+            root.innerHTML = "";
+            return;
+        }
+
+        const maxTilt = Math.max(...rows.map(s => Math.abs(s.tilt)), 5);
+        const largest = rows[0];
+        const largestTheme = sectorTheme(largest.name);
+        const overCount = rows.filter(s => s.tilt > 0.25).length;
+        const underCount = rows.filter(s => s.tilt < -0.25).length;
+        const activeTilt = rows.reduce((sum, s) => sum + Math.abs(s.tilt), 0) / 2;
+        const esc = typeof escapeHtml === "function" ? escapeHtml : escapeText;
+        const summaryTone = largest.tilt >= 0 ? "over" : "under";
+
+        const summary = `<div class="sector-tilt-summary sector-tilt-summary--${summaryTone}"
+            style="--sector-accent:${largestTheme.color}">
+            <div class="sector-tilt-orb" aria-hidden="true">
+                <i class="bi ${largestTheme.icon}"></i>
+            </div>
+            <div class="sector-tilt-summary-main">
+                <span class="sector-tilt-eyebrow">Largest benchmark tilt</span>
+                <strong>${esc(largest.name)}</strong>
+                <span>Portfolio ${largest.port.toFixed(1)}% vs S&amp;P ${largest.bench.toFixed(1)}%</span>
+            </div>
+            <div class="sector-tilt-summary-delta">
+                ${largest.tilt >= 0 ? "+" : ""}${largest.tilt.toFixed(1)}pp
+                <small>${largest.tilt >= 0 ? "Overweight" : "Underweight"}</small>
+            </div>
+        </div>`;
+
+        const stats = `<div class="sector-tilt-artifacts" aria-label="Benchmark tilt summary">
+            <span class="sector-tilt-artifact">
+                <i class="bi bi-crosshair2" aria-hidden="true"></i>
+                <small>Active tilt</small>
+                <strong>${activeTilt.toFixed(1)}pp</strong>
+            </span>
+            <span class="sector-tilt-artifact sector-tilt-artifact--over">
+                <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
+                <small>Overweights</small>
+                <strong>${overCount}</strong>
+            </span>
+            <span class="sector-tilt-artifact sector-tilt-artifact--under">
+                <i class="bi bi-arrow-down-left" aria-hidden="true"></i>
+                <small>Underweights</small>
+                <strong>${underCount}</strong>
+            </span>
+        </div>`;
+
+        const legend = `<div class="sector-tilt-axis" aria-hidden="true">
+            <span>Underweight</span>
+            <span>S&amp;P 500 baseline</span>
+            <span>Overweight</span>
+        </div>`;
+
+        const list = rows.map((s, index) => {
             const tilt = Number(s.tilt_pct) || 0;
             const port = Number(s.portfolio_pct) || 0;
             const bench = Number(s.benchmark_pct) || 0;
-            const w = Math.round(Math.abs(tilt) / maxTilt * 48);
+            const theme = sectorTheme(s.name);
+            const w = Math.max(4, Math.round(Math.abs(tilt) / maxTilt * 50));
             const side = tilt >= 0 ? "over" : "under";
-            return `<div class="sector-tilt-row">
-                <span class="sector-tilt-name">${escapeHtml(s.name)}</span>
-                <span class="sector-tilt-port">${port.toFixed(1)}%</span>
-                <div class="sector-tilt-track" aria-hidden="true">
-                    <div class="sector-tilt-bar sector-tilt-bar--${side}" style="width:${w}%"></div>
+            const absTilt = Math.abs(tilt);
+            return `<div class="sector-tilt-row sector-tilt-row--${side}"
+                style="--tilt-width:${w}%;--sector-accent:${theme.color};--row-index:${index}">
+                <div class="sector-tilt-sector">
+                    <span class="sector-tilt-icon" aria-hidden="true"><i class="bi ${theme.icon}"></i></span>
+                    <span class="sector-tilt-name">${esc(s.name)}</span>
                 </div>
-                <span class="sector-tilt-bench">${bench.toFixed(1)}%</span>
-                <span class="sector-tilt-val ${tilt >= 0 ? "text-success" : "text-danger"}">${tilt >= 0 ? "+" : ""}${tilt.toFixed(1)}pp</span>
+                <div class="sector-tilt-track" aria-label="${esc(s.name)} ${side === "over" ? "overweight" : "underweight"} by ${absTilt.toFixed(1)} percentage points">
+                    <span class="sector-tilt-baseline"></span>
+                    <span class="sector-tilt-bar"></span>
+                </div>
+                <div class="sector-tilt-values">
+                    <span><small>Port</small>${port.toFixed(1)}%</span>
+                    <span><small>S&amp;P</small>${bench.toFixed(1)}%</span>
+                    <strong>${tilt >= 0 ? "+" : ""}${tilt.toFixed(1)}pp</strong>
+                </div>
             </div>`;
         }).join("");
+
+        root.innerHTML = `${summary}${stats}${legend}<div class="sector-tilt-list">${list}</div>`;
     }
 
     async function loadSectorTilt() {
@@ -1724,12 +1793,16 @@ const AnalyticsCharts = (() => {
             const data = await res.json();
             if (!data.has_data) {
                 showEmpty("sector-tilt-empty", true);
+                const root = $("sector-tilt-chart");
+                if (root) root.innerHTML = "";
                 return;
             }
             renderSectorTilt(data.sectors || []);
         } catch (err) {
             console.warn("Sector tilt failed:", err);
             showEmpty("sector-tilt-empty", true);
+            const root = $("sector-tilt-chart");
+            if (root) root.innerHTML = "";
         } finally {
             showLoading("sector-tilt-loading", false);
         }

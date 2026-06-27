@@ -510,6 +510,8 @@ let hoveredCenterLabel = null;
 let hoveredCenterValue = null;
 let hoveredCenterPct = null;
 let selectedAllocationTicker = null;  // persists after click
+let allocationFocusPanelTicker = null;
+let allocationFocusRefreshFrame = null;
 
 // Holding Intelligence state (covers "What It Covers" + "Why it moved")
 let cachedIntelligence = {};   // ticker → intelligence object (coverage data)
@@ -611,6 +613,7 @@ let cachedRecommendations = {};  // ticker → rec object from /api/ai/analyst-r
 let cachedVerdicts = {};         // ticker → verdict object from /api/ai/investment-signals/all
 let cachedPortfolioExposure = null;
 let cachedMarketRegime = null;
+let portfolioSnapshotExposurePromise = null;
 const cachedDeepIntel = {};      // ticker → deep read payload
 const deepIntelLoadingTickers = new Set();
 let aiCheckInterval = null;
@@ -1042,6 +1045,7 @@ async function loadPortfolioValue() {
 
         try {
             renderAllocation();
+            renderPortfolioSnapshot();
 
             if (data.best_performer) {
                 const el = document.getElementById("best-performer");
@@ -1067,10 +1071,12 @@ async function loadPortfolioValue() {
                 .then((trendData) => {
                     latestTrendData = trendData || {};
                     renderHoldings();
+                    scheduleAllocationFocusPanelRefresh();
                     repaintOpenVerdictSparklines();
                 })
                 .catch(() => {
                     latestTrendData = {};
+                    scheduleAllocationFocusPanelRefresh();
                 });
 
             const nextTickers = data.holdings.map(h => h.ticker).sort().join(",");
@@ -1142,6 +1148,8 @@ function selectAllocationTicker(ticker) {
         }
         allocationChart.update("none");
     }
+
+    renderAllocationFocusPanel(ticker);
 }
 
 function allocationImpactForHolding(holding) {
@@ -1192,20 +1200,21 @@ function validateAllocationPortfolioMath(portfolioImpactToday, grossPortfolioMov
 }
 
 function allocationTooltipMetrics(ticker, value) {
-    const holding = latestHoldings.find(h => h.ticker === ticker);
-    const holdingsCount = latestHoldings.length;
+    const portfolioHoldings = latestHoldings.filter(h => !h.is_watchlist);
+    const holding = portfolioHoldings.find(h => h.ticker === ticker);
+    const holdingsCount = portfolioHoldings.length;
     if (!holding || !holdingsCount) return null;
 
-    const rank = sortedByAllocation(latestHoldings.filter(h => !h.is_watchlist))
+    const rank = sortedByAllocation(portfolioHoldings)
         .findIndex(h => h.ticker === ticker) + 1;
     const equalWeightValue = allocationTotal / holdingsCount;
     const equalWeightDrift = toNumber(value) - equalWeightValue;
     const impactToday = allocationImpactForHolding(holding);
-    const portfolioImpactToday = latestHoldings.reduce(
+    const portfolioImpactToday = portfolioHoldings.reduce(
         (sum, h) => sum + allocationImpactForHolding(h),
         0
     );
-    const grossPortfolioMove = latestHoldings.reduce(
+    const grossPortfolioMove = portfolioHoldings.reduce(
         (sum, h) => sum + Math.abs(allocationImpactForHolding(h)),
         0
     );
@@ -1348,6 +1357,256 @@ function setAllocationFocus(chart, activeIndex = -1) {
     );
 }
 
+function allocationFocusDefaultTicker(sorted = null) {
+    const holdings = sorted || sortedByAllocation(latestHoldings.filter(h => !h.is_watchlist));
+    return holdings[0]?.ticker || null;
+}
+
+function allocationFocusTicker(ticker = null, sorted = null) {
+    return ticker || selectedAllocationTicker || allocationFocusDefaultTicker(sorted);
+}
+
+function allocationFocusShortText(text, max = 132) {
+    const clean = String(text || "").replace(/\s+/g, " ").trim();
+    if (clean.length <= max) return clean;
+    const clipped = clean.slice(0, max - 1);
+    const boundary = Math.max(clipped.lastIndexOf("."), clipped.lastIndexOf(";"), clipped.lastIndexOf(","));
+    return `${(boundary > 60 ? clipped.slice(0, boundary) : clipped).trim()}...`;
+}
+
+function allocationFocusWhatItIs(holding, intel) {
+    const label = intel?.coverage_label || intel?.theme || holding?.name || holding?.ticker || "Holding";
+    const strategy = intel?.strategy || intel?.coverage_description || "";
+    if (strategy) return allocationFocusShortText(strategy, 150);
+    if (holding?.name && holding.name !== holding.ticker) {
+        const name = String(holding.name).replace(/\.+$/, "");
+        return `${holding.ticker} represents ${name}. This card shows how much of your book depends on it right now.`;
+    }
+    return `${label} is one slice of your portfolio. Hover another segment to swap this read instantly.`;
+}
+
+function allocationFocusMoveCopy(holding, metrics, explanation) {
+    if (explanation?.explanation_text) {
+        return allocationFocusShortText(explanation.explanation_text, 158);
+    }
+    const drivers = (explanation?.drivers || [])
+        .map(d => d.description)
+        .filter(Boolean);
+    if (drivers.length) return allocationFocusShortText(drivers.slice(0, 2).join(" "), 158);
+
+    if (!isFiniteNumber(holding?.day_change_pct)) {
+        return "Today’s move is not available yet. Once prices refresh, this will explain the main driver and portfolio impact.";
+    }
+
+    const change = Number(holding.day_change_pct);
+    const pct = `${Math.abs(change).toFixed(2)}%`;
+    const direction = change >= 0 ? "up" : "down";
+    const impact = formatSignedCurrency(metrics?.impactToday || 0);
+    const share = metrics?.shareOfMove !== null && metrics?.shareOfMove !== undefined
+        ? `, about ${metrics.shareOfMove.toFixed(0)}% of gross portfolio movement`
+        : "";
+    return `${holding.ticker} is ${direction} ${pct} today, contributing ${impact}${share}.`;
+}
+
+function allocationFocusVerdictCopy(verdict, ticker) {
+    if (!verdict) {
+        return {
+            empty: true,
+            html: `<div class="alloc-focus-verdict is-empty">
+                <p class="alloc-focus-verdict-copy mb-0">
+                    Run <strong>Holding Intel</strong> to add FolioSense verdicts here.
+                </p>
+            </div>`,
+        };
+    }
+
+    const safeVerdict = _sanitizeVerdict(verdict) || verdict;
+    const action = safeVerdict.action || "needs-data";
+    const label = safeVerdict.label || "Needs Data";
+    const icon = VERDICT_ICONS[action] || "bi-question-circle";
+    const confidence = Math.round(Number(safeVerdict.confidence) || 0);
+    const ai = safeVerdict.ai_enhancement || {};
+    const summary = _isAiVerdictActive(safeVerdict)
+        ? _synthPlainSummary(safeVerdict, ai, ticker)
+        : _localSynthPlainSummary(safeVerdict, ticker);
+    const fallback = (safeVerdict.reasons || [])[0] || safeVerdict.quip || FOLIO_SENSE_VERDICT_COPY.unavailable;
+    const copy = allocationFocusShortText(summary || fallback, 138);
+    const color = _verdictColor(action);
+
+    return {
+        empty: false,
+        html: `<div class="alloc-focus-verdict" data-action="${escapeHtml(action)}" style="--alloc-verdict-color:${color}">
+            <span class="alloc-focus-verdict-icon"><i class="bi ${escapeHtml(icon)}" aria-hidden="true"></i></span>
+            <div class="alloc-focus-verdict-body">
+                <div class="alloc-focus-verdict-line">
+                    <span class="alloc-focus-verdict-label">${escapeHtml(label)}</span>
+                    <span class="alloc-focus-confidence">${confidence}% confidence</span>
+                </div>
+                <p class="alloc-focus-verdict-copy">${escapeHtml(copy)}</p>
+            </div>
+        </div>`,
+    };
+}
+
+function allocationFocusTrendMeta(ticker, holding, verdict) {
+    const apiPoints = verdict?.timing?.sparkline_30d;
+    if (Array.isArray(apiPoints) && apiPoints.length >= 2) {
+        const first = Number(apiPoints[0]);
+        const last = Number(apiPoints[apiPoints.length - 1]);
+        const delta = last - first;
+        return {
+            label: "Signal path",
+            value: formatSignalPct(delta),
+            note: "30D signal",
+            tone: signalTone(delta),
+        };
+    }
+
+    const history = latestTrendData[ticker] || [];
+    const closes = history.map(point => Number(point.close)).filter(Number.isFinite);
+    if (closes.length >= 2 && closes[0] !== 0) {
+        const delta = ((closes[closes.length - 1] - closes[0]) / closes[0]) * 100;
+        return {
+            label: "Price path",
+            value: formatSignalPct(delta),
+            note: "1M trend",
+            tone: signalTone(delta),
+        };
+    }
+
+    return {
+        label: "Price path",
+        value: isFiniteNumber(holding?.current_price) ? formatCurrency(holding.current_price) : "—",
+        note: "Trend loading",
+        tone: "neutral",
+    };
+}
+
+function paintAllocationFocusSparkline(ticker) {
+    const canvas = document.querySelector(`canvas.allocation-focus-sparkline[data-ticker="${CSS.escape(ticker)}"]`);
+    if (!canvas) return;
+    const verdict = cachedVerdicts[ticker];
+    const apiPoints = verdict?.timing?.sparkline_30d;
+    if (Array.isArray(apiPoints) && apiPoints.length >= 2) {
+        _drawPctSparkline(canvas, apiPoints);
+        return;
+    }
+    drawTrend(canvas, latestTrendData[ticker] || []);
+}
+
+function scheduleAllocationFocusPanelRefresh() {
+    if (allocationFocusRefreshFrame) return;
+    allocationFocusRefreshFrame = requestAnimationFrame(() => {
+        allocationFocusRefreshFrame = null;
+        renderAllocationFocusPanel(null, null, { force: true });
+    });
+}
+
+function renderAllocationFocusPanel(ticker = null, sorted = null, options = {}) {
+    const panel = document.getElementById("allocation-focus-panel");
+    if (!panel) return;
+
+    const activeTicker = allocationFocusTicker(ticker, sorted);
+    if (activeTicker && !options.force && allocationFocusPanelTicker === activeTicker) return;
+    allocationFocusPanelTicker = activeTicker;
+    const holding = latestHoldings.find(h => h.ticker === activeTicker && !h.is_watchlist);
+    if (!activeTicker || !holding) {
+        panel.innerHTML = `<div class="allocation-focus-empty">
+            <i class="bi bi-pie-chart-fill"></i>
+            <span>Add holdings to unlock allocation insight.</span>
+        </div>`;
+        return;
+    }
+
+    const sortedHoldings = sorted || sortedByAllocation(latestHoldings.filter(h => !h.is_watchlist));
+    const colorIndex = Math.max(0, sortedHoldings.findIndex(h => h.ticker === activeTicker));
+    const color = allocColor(colorIndex);
+    const metrics = allocationTooltipMetrics(activeTicker, holding.current_value);
+    const intel = cachedIntelligence[activeTicker];
+    const explanation = cachedExplanations[activeTicker];
+    const verdict = cachedVerdicts[activeTicker];
+    const safeVerdict = verdict ? (_sanitizeVerdict(verdict) || verdict) : null;
+    const verdictHtml = allocationFocusVerdictCopy(safeVerdict, activeTicker).html;
+    const trend = allocationFocusTrendMeta(activeTicker, holding, safeVerdict);
+    const dayTone = isFiniteNumber(holding.day_change_pct)
+        ? colorClass(Number(holding.day_change_pct))
+        : "text-secondary";
+    const dayText = isFiniteNumber(holding.day_change_pct)
+        ? formatPct(holding.day_change_pct)
+        : "—";
+    const returnPct = isFiniteNumber(holding.unrealized_gain_pct)
+        ? Number(holding.unrealized_gain_pct)
+        : (isFiniteNumber(holding.total_return_pct) ? Number(holding.total_return_pct) : null);
+    const returnTone = returnPct === null ? "text-secondary" : colorClass(returnPct);
+    const returnText = returnPct === null ? "—" : formatPct(returnPct);
+    const stress = metrics ? formatSignedCurrency(metrics.stressValue) : "—";
+    const rank = metrics?.rank ? `#${metrics.rank} of ${metrics.holdingsCount}` : "—";
+    const concentrationNote = metrics
+        ? (metrics.equalWeightDrift >= 0
+            ? `${formatCompact(Math.abs(metrics.equalWeightDrift))} over equal-weight`
+            : `${formatCompact(Math.abs(metrics.equalWeightDrift))} under equal-weight`)
+        : "Allocation read";
+
+    panel.innerHTML = `<div class="alloc-focus-inner" data-ticker="${escapeHtml(activeTicker)}">
+        <div class="alloc-focus-head">
+            <div>
+                <span class="alloc-focus-kicker"><i class="bi bi-crosshair" aria-hidden="true"></i> Focus holding</span>
+                <div class="alloc-focus-title-row">
+                    <span class="alloc-focus-dot" style="background:${color};color:${color}"></span>
+                    <span class="alloc-focus-ticker">${escapeHtml(activeTicker)}</span>
+                    <span class="alloc-focus-name">${escapeHtml(holding.name || intel?.coverage_label || "")}</span>
+                </div>
+                <p class="alloc-focus-sub">${escapeHtml(formatCurrency(holding.current_value))} · ${escapeHtml(formatAllocationPct(holding.allocation_pct))} of portfolio · ${escapeHtml(concentrationNote)}</p>
+            </div>
+            <div class="alloc-focus-day">
+                <span>Today</span>
+                <strong class="${dayTone}">${escapeHtml(dayText)}</strong>
+            </div>
+        </div>
+
+        <div class="alloc-focus-metrics">
+            <div class="alloc-focus-metric">
+                <span>Size rank</span>
+                <strong>${escapeHtml(rank)}</strong>
+            </div>
+            <div class="alloc-focus-metric">
+                <span>Your return</span>
+                <strong class="${returnTone}">${escapeHtml(returnText)}</strong>
+            </div>
+            <div class="alloc-focus-metric">
+                <span>If down 10%</span>
+                <strong class="text-danger">${escapeHtml(stress)}</strong>
+            </div>
+        </div>
+
+        <div class="alloc-focus-spark-card">
+            <div>
+                <span class="alloc-focus-spark-label">${escapeHtml(trend.label)}</span>
+                <canvas class="allocation-focus-sparkline" data-ticker="${escapeHtml(activeTicker)}" width="360" height="58"
+                    aria-label="${escapeHtml(activeTicker)} ${escapeHtml(trend.note)}"></canvas>
+            </div>
+            <div class="alloc-focus-spark-meta">
+                <strong class="${trend.tone === "positive" ? "text-success" : trend.tone === "negative" ? "text-danger" : "text-secondary"}">${escapeHtml(trend.value)}</strong>
+                <span>${escapeHtml(trend.note)}</span>
+            </div>
+        </div>
+
+        <div class="alloc-focus-section">
+            <div class="alloc-focus-section-label"><i class="bi bi-info-circle-fill" aria-hidden="true"></i> What it is</div>
+            <p class="alloc-focus-copy">${escapeHtml(allocationFocusWhatItIs(holding, intel))}</p>
+        </div>
+
+        <div class="alloc-focus-section">
+            <div class="alloc-focus-section-label"><i class="bi bi-lightning-charge-fill" aria-hidden="true"></i> Why it moved</div>
+            <p class="alloc-focus-copy">${escapeHtml(allocationFocusMoveCopy(holding, metrics, explanation))}</p>
+        </div>
+
+        ${verdictHtml}
+    </div>`;
+
+    requestAnimationFrame(() => paintAllocationFocusSparkline(activeTicker));
+}
+
 function renderAllocation() {
     const sorted = sortedByAllocation(latestHoldings.filter(h => !h.is_watchlist));
 
@@ -1367,6 +1626,8 @@ function renderAllocation() {
             <td class="text-end">${formatAllocationPct(h.allocation_pct)}</td>
         `;
         row.addEventListener("click", () => selectAllocationTicker(h.ticker));
+        row.addEventListener("mouseenter", () => renderAllocationFocusPanel(h.ticker, sorted));
+        row.addEventListener("mouseleave", () => renderAllocationFocusPanel(null, sorted));
     });
 
     updateSortCarets();
@@ -1388,6 +1649,7 @@ function renderAllocation() {
         const activeIndex = selectedAllocationTicker ? labels.indexOf(selectedAllocationTicker) : -1;
         setAllocationFocus(allocationChart, activeIndex);
         allocationChart.update();
+        renderAllocationFocusPanel(null, sorted, { force: true });
     } else {
         const ctx = document.getElementById("allocation-chart").getContext("2d");
         allocationChart = new Chart(ctx, {
@@ -1419,7 +1681,11 @@ function renderAllocation() {
 	                onHover: (event, elements) => {
 	                    if (elements.length > 0) {
 	                        const idx = elements[0].index;
-	                        hoveredCenterLabel = allocationChart.data.labels[idx];
+	                        const nextLabel = allocationChart.data.labels[idx];
+	                        if (hoveredCenterLabel !== nextLabel) {
+	                            renderAllocationFocusPanel(nextLabel);
+	                        }
+	                        hoveredCenterLabel = nextLabel;
 	                        const val = toNumber(allocationChart.data.datasets[0].data[idx]);
 	                        const pct = allocationTotal > 0 ? (val / allocationTotal * 100).toFixed(1) : "0.0";
 	                        hoveredCenterValue = formatCurrency(val);
@@ -1429,6 +1695,7 @@ function renderAllocation() {
 	                        hoveredCenterLabel = null;
 	                        hoveredCenterValue = null;
 	                        hoveredCenterPct = null;
+	                        renderAllocationFocusPanel(null);
 	                        const selectedIndex = selectedAllocationTicker
 	                            ? allocationChart.data.labels.indexOf(selectedAllocationTicker)
 	                            : -1;
@@ -1461,7 +1728,327 @@ function renderAllocation() {
         });
         // If we booted into a non-Overview zone, keep the halo paused until shown.
         if (dashboardZone !== "overview") allocationChart.$haloPause?.();
+        renderAllocationFocusPanel(null, sorted, { force: true });
     }
+}
+
+const SNAPSHOT_SECTOR_THEMES = [
+    { match: /tech/i,                        color: "#007AFF", icon: "bi-cpu-fill" },
+    { match: /health/i,                      color: "#FF2D55", icon: "bi-heart-pulse-fill" },
+    { match: /financ/i,                      color: "#5856D6", icon: "bi-bank" },
+    { match: /energy/i,                      color: "#FF9500", icon: "bi-lightning-charge-fill" },
+    { match: /industri/i,                    color: "#00C7BE", icon: "bi-gear-wide-connected" },
+    { match: /consumer disc|discretionary/i, color: "#FF6B35", icon: "bi-bag-fill" },
+    { match: /consumer stap|staples/i,       color: "#34C759", icon: "bi-cart-fill" },
+    { match: /real estate|reit/i,            color: "#AC8E68", icon: "bi-building" },
+    { match: /utilit/i,                      color: "#FFD60A", icon: "bi-plug-fill" },
+    { match: /material/i,                    color: "#BF5AF2", icon: "bi-box-seam" },
+    { match: /communi/i,                     color: "#5AC8FA", icon: "bi-broadcast" },
+    { match: /aero|defense|defence/i,        color: "#06D6A0", icon: "bi-airplane-fill" },
+];
+const SNAPSHOT_SECTOR_FALLBACK = { color: "#8E8E93", icon: "bi-diagram-3" };
+
+function snapshotSectorTheme(name) {
+    const n = String(name || "").toLowerCase();
+    return SNAPSHOT_SECTOR_THEMES.find(t => t.match.test(n)) || SNAPSHOT_SECTOR_FALLBACK;
+}
+
+function snapshotActiveHoldings() {
+    return latestHoldings
+        .filter(h => !h.is_watchlist && toNumber(h.current_value) > 0)
+        .sort((a, b) => toNumber(b.allocation_pct) - toNumber(a.allocation_pct));
+}
+
+function snapshotMoveRows(active) {
+    return active
+        .map(h => ({
+            ticker: h.ticker,
+            name: h.name || h.ticker,
+            allocation_pct: toNumber(h.allocation_pct),
+            day_change_pct: isFiniteNumber(h.day_change_pct) ? Number(h.day_change_pct) : null,
+            impact: allocationImpactForHolding(h),
+        }))
+        .filter(r => Number.isFinite(r.impact))
+        .sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
+}
+
+function portfolioSnapshotTone(value) {
+    if (!Number.isFinite(value) || Math.abs(value) < 0.005) return "neutral";
+    return value > 0 ? "positive" : "negative";
+}
+
+function renderSnapshotSectorEmpty(message, icon = "bi-hourglass-split") {
+    const strip = document.getElementById("snapshot-sector-strip");
+    const list = document.getElementById("snapshot-sector-list");
+    if (strip) {
+        strip.className = "snapshot-sector-strip is-loading";
+        strip.innerHTML = "";
+        strip.setAttribute("aria-label", message);
+    }
+    if (list) {
+        list.innerHTML = `<span class="snapshot-loading-pill">
+            <i class="bi ${icon}" aria-hidden="true"></i>
+            ${escapeHtml(message)}
+        </span>`;
+    }
+}
+
+async function ensurePortfolioSnapshotExposure() {
+    if (cachedPortfolioExposure?.sector_exposure?.length || portfolioSnapshotExposurePromise) return;
+    portfolioSnapshotExposurePromise = fetch("/api/ai/portfolio-exposure")
+        .then(res => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.json();
+        })
+        .then(data => {
+            cachedPortfolioExposure = data || cachedPortfolioExposure;
+            renderPortfolioSnapshot();
+            return data;
+        })
+        .catch(err => {
+            console.warn("Portfolio snapshot exposure failed:", err);
+            renderSnapshotSectorEmpty("Sector mix unavailable", "bi-exclamation-circle");
+        })
+        .finally(() => {
+            portfolioSnapshotExposurePromise = null;
+        });
+}
+
+function renderSnapshotSectors(active) {
+    const strip = document.getElementById("snapshot-sector-strip");
+    const list = document.getElementById("snapshot-sector-list");
+    if (!strip || !list) return;
+
+    const sectors = (cachedPortfolioExposure?.sector_exposure || [])
+        .filter(s => toNumber(s.weight_pct) > 0)
+        .sort((a, b) => toNumber(b.weight_pct) - toNumber(a.weight_pct))
+        .slice(0, 7);
+
+    if (!active.length) {
+        renderSnapshotSectorEmpty("Add holdings to see sector mix", "bi-plus-circle");
+        return;
+    }
+
+    if (!sectors.length) {
+        renderSnapshotSectorEmpty("Loading sector mix");
+        ensurePortfolioSnapshotExposure();
+        return;
+    }
+
+    const top = sectors[0];
+    const aria = sectors
+        .slice(0, 4)
+        .map(s => `${s.name} ${toNumber(s.weight_pct).toFixed(1)}%`)
+        .join(", ");
+
+    strip.className = "snapshot-sector-strip";
+    strip.setAttribute("aria-label", `Portfolio sector exposure: ${aria}`);
+    strip.innerHTML = sectors.map((s, index) => {
+        const theme = snapshotSectorTheme(s.name);
+        const pct = Math.max(2.5, toNumber(s.weight_pct));
+        const rawPct = toNumber(s.weight_pct);
+        const showIcon = rawPct >= 6;
+        return `<span class="snapshot-sector-seg"
+            style="--snapshot-color:${theme.color};--snapshot-width:${pct}%;--snapshot-delay:${index * 35}ms"
+            title="${escapeHtml(s.name)} ${rawPct.toFixed(1)}%">
+            ${showIcon ? `<i class="bi ${theme.icon} snapshot-seg-icon" aria-hidden="true"></i>` : ""}
+        </span>`;
+    }).join("");
+
+    const maxPct = sectors.length ? toNumber(sectors[0].weight_pct) : 1;
+    list.innerHTML = sectors.slice(0, 5).map((s, index) => {
+        const theme = snapshotSectorTheme(s.name);
+        const pct = toNumber(s.weight_pct).toFixed(1);
+        const normalizedPct = (toNumber(s.weight_pct) / Math.max(maxPct, 1) * 100).toFixed(1);
+        return `<div class="snapshot-sector-item" style="--snapshot-color:${theme.color};--snapshot-pct:${normalizedPct}%;--snapshot-delay:${index * 35}ms">
+            <span class="snapshot-sector-dot"><i class="bi ${theme.icon}" aria-hidden="true"></i></span>
+            <span class="snapshot-sector-name">${escapeHtml(s.name)}</span>
+            <span class="snapshot-sector-pct">${pct}%</span>
+        </div>`;
+    }).join("") + (top ? `<div class="snapshot-sector-note">
+        <i class="bi bi-crosshair2" aria-hidden="true"></i>
+        Biggest tilt&thinsp;·&thinsp;<strong>${escapeHtml(top.name)}</strong>
+    </div>` : "");
+}
+
+function snapshotAiRead(rows, net, pct) {
+    const gainCount = rows.filter(r => r.impact > 0).length;
+    const lossCount = rows.filter(r => r.impact < 0).length;
+    const top = rows[0];
+    const direction = Math.abs(net) < 1 ? "mostly sideways" : net > 0 ? "more up" : "more down";
+    const breadth = gainCount === lossCount
+        ? "breadth is balanced"
+        : `${gainCount} gainers vs ${lossCount} losers`;
+    const mover = top
+        ? `${top.ticker} is the largest ${top.impact >= 0 ? "push" : "drag"}`
+        : "moves are muted";
+    const pctCopy = Number.isFinite(pct) ? ` (${formatPct(pct)})` : "";
+    return `Likely to go ${direction} near-term: net today is ${formatSignedCurrency(net)}${pctCopy}, ${breadth}, and ${mover}.`;
+}
+
+function snapshotLocalCatalysts(rows, sectors) {
+    const catalysts = [];
+    const gain = rows.find(r => r.impact > 0);
+    const loss = rows.find(r => r.impact < 0);
+    const topSector = sectors?.[0];
+    const net = rows.reduce((sum, r) => sum + r.impact, 0);
+
+    if (gain) {
+        catalysts.push({
+            icon: "bi-arrow-up-right",
+            tone: "positive",
+            text: `${gain.ticker} led gains at ${formatOptionalPct(gain.day_change_pct)} (${formatSignedCurrency(gain.impact)})`,
+        });
+    }
+    if (loss) {
+        catalysts.push({
+            icon: "bi-arrow-down-right",
+            tone: "negative",
+            text: `${loss.ticker} was the main drag at ${formatOptionalPct(loss.day_change_pct)} (${formatSignedCurrency(loss.impact)})`,
+        });
+    }
+    if (topSector) {
+        catalysts.push({
+            icon: snapshotSectorTheme(topSector.name).icon,
+            tone: "neutral",
+            text: `${topSector.name} is the largest exposure at ${toNumber(topSector.weight_pct).toFixed(1)}%`,
+        });
+    }
+    if (Math.abs(net) < 1 && rows.length) {
+        catalysts.push({
+            icon: "bi-arrows-collapse",
+            tone: "neutral",
+            text: "Gains and losses are nearly offsetting in dollar terms",
+        });
+    }
+
+    return catalysts.slice(0, 3);
+}
+
+function renderSnapshotIntel(rows, net, pct) {
+    const wrap = document.getElementById("snapshot-intel-lines");
+    const mode = document.getElementById("snapshot-mode-pill");
+    if (!wrap) return;
+
+    const local = isLocalIntelligenceMode();
+    if (mode) {
+        mode.className = `snapshot-mode-pill ${local ? "is-local" : "is-ai"}`;
+        mode.innerHTML = local
+            ? `<i class="bi bi-cpu-fill" aria-hidden="true"></i> Local`
+            : `<i class="bi bi-stars" aria-hidden="true"></i> AI`;
+    }
+
+    const sectors = (cachedPortfolioExposure?.sector_exposure || [])
+        .filter(s => toNumber(s.weight_pct) > 0)
+        .sort((a, b) => toNumber(b.weight_pct) - toNumber(a.weight_pct));
+
+    if (!rows.length) {
+        wrap.innerHTML = "";
+        return;
+    }
+
+    if (!local) {
+        wrap.innerHTML = `<div class="snapshot-ai-line">
+            <i class="bi bi-stars" aria-hidden="true"></i>
+            <span>${escapeHtml(snapshotAiRead(rows, net, pct))}</span>
+        </div>`;
+        return;
+    }
+
+    const catalysts = snapshotLocalCatalysts(rows, sectors);
+    wrap.innerHTML = catalysts.map(item => `
+        <div class="snapshot-catalyst is-${item.tone}">
+            <i class="bi ${item.icon}" aria-hidden="true"></i>
+            <span>${escapeHtml(item.text)}</span>
+        </div>`).join("");
+}
+
+function renderSnapshotMoves(active) {
+    const summary = document.getElementById("snapshot-move-summary");
+    const stack = document.getElementById("snapshot-move-stack");
+    const list = document.getElementById("snapshot-mover-list");
+    if (!summary || !stack || !list) return;
+
+    const rows = snapshotMoveRows(active);
+    const gains = rows.filter(r => r.impact > 0);
+    const losses = rows.filter(r => r.impact < 0);
+    const grossGain = gains.reduce((sum, r) => sum + r.impact, 0);
+    const grossLoss = losses.reduce((sum, r) => sum + Math.abs(r.impact), 0);
+    const net = rows.reduce((sum, r) => sum + r.impact, 0);
+    const pct = latestPortfolioValueData && isFiniteNumber(latestPortfolioValueData.total_daily_change_pct)
+        ? Number(latestPortfolioValueData.total_daily_change_pct)
+        : null;
+    const totalAbs = grossGain + grossLoss;
+    const gainShare = totalAbs > 0 ? (grossGain / totalAbs) * 100 : 50;
+    const lossShare = totalAbs > 0 ? (grossLoss / totalAbs) * 100 : 50;
+    const tone = portfolioSnapshotTone(net);
+
+    if (!active.length) {
+        summary.innerHTML = `<div class="snapshot-empty-state">No active holdings yet.</div>`;
+        stack.innerHTML = "";
+        list.innerHTML = "";
+        renderSnapshotIntel([], 0, pct);
+        return;
+    }
+
+    summary.innerHTML = `<div class="snapshot-net is-${tone}">
+        <span class="snapshot-net-label">P&amp;L Today</span>
+        <strong>${formatSignedCurrency(net)}</strong>
+        ${pct !== null ? `<span class="snapshot-net-pct">${formatPct(pct)}</span>` : ""}
+    </div>
+    <div class="snapshot-gain-loss">
+        <span class="is-positive">
+            <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
+            ${formatSignedCurrency(grossGain)}
+            <em>${gains.length}W</em>
+        </span>
+        <span class="is-negative">
+            <i class="bi bi-arrow-down-right" aria-hidden="true"></i>
+            -${formatCurrency(grossLoss)}
+            <em>${losses.length}L</em>
+        </span>
+    </div>`;
+
+    stack.innerHTML = `<div class="snapshot-stack-track">
+        <span class="snapshot-stack-seg is-gain" style="width:${gainShare}%"></span>
+        <span class="snapshot-stack-seg is-loss" style="width:${lossShare}%"></span>
+    </div>
+    <div class="snapshot-stack-labels">
+        <span>${gains.length} gain${gains.length === 1 ? "" : "s"}</span>
+        <span class="snapshot-stack-ratio">${Math.round(gainShare)}&#x202F;/&#x202F;${Math.round(lossShare)}</span>
+        <span>${losses.length} loss${losses.length === 1 ? "" : "es"}</span>
+    </div>`;
+
+    const maxGainImpact = Math.max(...gains.map(r => r.impact), 0.01);
+    const maxLossImpact = Math.max(...losses.map(r => Math.abs(r.impact)), 0.01);
+    list.innerHTML = rows.slice(0, 5).map((r, index) => {
+        const rowTone = portfolioSnapshotTone(r.impact);
+        const isPos = rowTone === "positive";
+        const fillW = isPos
+            ? Math.max(4, r.impact / maxGainImpact * 100)
+            : Math.max(4, Math.abs(r.impact) / maxLossImpact * 100);
+        const leftFill = !isPos ? `<span class="snapshot-mover-fill" style="width:${fillW}%"></span>` : "";
+        const rightFill = isPos ? `<span class="snapshot-mover-fill" style="width:${fillW}%"></span>` : "";
+        return `<div class="snapshot-mover-row is-${rowTone}" style="--snapshot-delay:${index * 35}ms">
+            <span class="snapshot-mover-ticker">${escapeHtml(r.ticker)}</span>
+            <span class="snapshot-mover-pct">${formatOptionalPct(r.day_change_pct)}</span>
+            <span class="snapshot-mover-track" aria-hidden="true">
+                <span class="snapshot-mover-left">${leftFill}</span>
+                <span class="snapshot-mover-axis"></span>
+                <span class="snapshot-mover-right">${rightFill}</span>
+            </span>
+            <span class="snapshot-mover-impact">${formatSignedCurrency(r.impact)}</span>
+        </div>`;
+    }).join("");
+
+    renderSnapshotIntel(rows, net, pct);
+}
+
+function renderPortfolioSnapshot() {
+    if (!document.getElementById("portfolio-snapshot-card")) return;
+    const active = snapshotActiveHoldings();
+    renderSnapshotSectors(active);
+    renderSnapshotMoves(active);
 }
 
 function allocationCenterColor(chart) {
@@ -6322,6 +6909,7 @@ function applyIntelligenceModeUi() {
 
     updateHudPillSummary();
     setEngineScopedVisibility();
+    renderPortfolioSnapshot();
 
     if (local) {
         if (_aiCostStatsInterval) {
@@ -7888,12 +8476,14 @@ function _applyIntelBatchPayload(intelData) {
     (intelData?.incomplete_tickers || []).forEach(ticker => {
         if (!intelligenceRetryState[ticker]) intelligenceRetryState[ticker] = 0;
     });
+    scheduleAllocationFocusPanelRefresh();
 }
 
 function _applyMovePayload(moveData) {
     Object.entries(moveData?.explanations || {}).forEach(([ticker, exp]) => {
         cachedExplanations[ticker] = exp;
     });
+    scheduleAllocationFocusPanelRefresh();
 }
 
 function _applyVerdictPayload(verdictData) {
@@ -7903,6 +8493,8 @@ function _applyVerdictPayload(verdictData) {
     cachedPortfolioExposure = verdictData?.portfolio_exposure || cachedPortfolioExposure;
     cachedMarketRegime = verdictData?.regime || cachedMarketRegime;
     applyClaudeApiStatus(verdictData?.claude_live ?? null);
+    scheduleAllocationFocusPanelRefresh();
+    renderPortfolioSnapshot();
 }
 
 function _renderAllExpandedIntelRows(tbody) {
@@ -7981,6 +8573,7 @@ async function loadTargetedHoldingIntelligence(ticker) {
         intelligenceRetryingTickers.delete(normalized);
         updateIntelligenceLoadedState();
         renderExpandedTicker(normalized);
+        scheduleAllocationFocusPanelRefresh();
         const holding = latestHoldings.find(h => h.ticker === normalized);
         const row = document.querySelector(`tr[data-ticker="${CSS.escape(normalized)}"]`);
         if (holding && row) setCellHtml(row.querySelector('[data-field="day"]'), dayChangeHtml(holding));
@@ -8407,6 +9000,7 @@ async function refreshAiVerdicts(options = {}) {
         cachedPortfolioExposure = data.portfolio_exposure || cachedPortfolioExposure;
         cachedMarketRegime = data.regime || cachedMarketRegime;
         applyClaudeApiStatus(data.claude_live ?? null);
+        renderPortfolioSnapshot();
         document.querySelectorAll("tr[data-ticker]").forEach(mainRow => {
             const ticker = mainRow.dataset.ticker;
             const verdictSection = mainRow.nextElementSibling?.querySelector(".intel-verdict-section");
