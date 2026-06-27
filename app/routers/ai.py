@@ -81,7 +81,7 @@ CACHE_TTL = timedelta(hours=24)
 PRICE_DRIFT_THRESHOLD = 0.08  # stock summaries only; verdicts key off action + market mood
 HAIKU_45_INPUT_USD_PER_MILLION = 1.00
 HAIKU_45_OUTPUT_USD_PER_MILLION = 5.00
-ESTIMATED_PROMPT_TOKENS_PER_SUMMARY = 210
+ESTIMATED_PROMPT_TOKENS_PER_SUMMARY = 120
 
 
 def _is_number(value) -> bool:
@@ -1693,8 +1693,16 @@ async def get_analytics_insights(
         if cached and _cache_is_fresh(cached):
             try:
                 stored = json.loads(getattr(cached, "summary_text", None) or "{}")
-                stored["from_cache"] = True
-                return stored
+                # Bust caches that pre-date the structured tip-card format: if any KEY widget
+                # is a plain string instead of a {headline, insight} dict, regenerate.
+                from app.services.analytics_insights import KEY_TIP_WIDGETS
+                wids = stored.get("widget_insights") or {}
+                cache_has_tips = any(isinstance(wids.get(k), dict) for k in KEY_TIP_WIDGETS)
+                if wids and not cache_has_tips:
+                    logger.info("Analytics insights cache is pre-tip-card format — regenerating.")
+                else:
+                    stored["from_cache"] = True
+                    return stored
             except Exception:
                 pass
 

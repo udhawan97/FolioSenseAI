@@ -17,6 +17,7 @@ const AnalyticsCharts = (() => {
     let _correlationState = { cells: [], hover: null };
     let _correlationHoverKey = null;
     let _correlationEventsBound = false;
+    let _correlationScrollBound = false;
     let drawdownChart = null;
     let treemapChart = null;
     let _lastHhi = 0;
@@ -225,70 +226,33 @@ const AnalyticsCharts = (() => {
         }
     }
 
-    function insightMode() {
+    function widgetInsightMode() {
         const claudeOffline = typeof _isClaudeApiLive !== "undefined"
             && (_isClaudeApiLive === false || _forcedLocalMode);
         const local = typeof isLocalIntelligenceMode === "function" && isLocalIntelligenceMode();
         return claudeOffline || local ? "local" : "ai";
     }
 
-    function renderModuleInsight(pane) {
-        const bar = $("analytics-insight-bar");
-        const textEl = $("analytics-module-insight");
-        const labelEl = $("analytics-insight-label");
-        const iconEl = $("analytics-insight-icon");
-        if (!bar || !textEl) return;
-
-        const mode = insightMode();
-        bar.dataset.mode = mode;
-        bar.hidden = false;
-
-        const tabLabel = MODULE_LABELS[pane] || "Analytics";
-        if (labelEl) {
-            labelEl.textContent = mode === "local" ? `${tabLabel} — what this means` : `${tabLabel} insight`;
-        }
-        if (iconEl) {
-            iconEl.innerHTML = mode === "local"
-                ? '<i class="bi bi-cpu-fill"></i>'
-                : '<i class="bi bi-stars"></i>';
-        }
-
-        const cached = _moduleInsightsCache[mode];
-        if (!cached) {
-            textEl.textContent = "Loading…";
-            bar.classList.add("is-loading");
-            return;
-        }
-        bar.classList.remove("is-loading");
-
-        if (mode === "local") {
-            textEl.textContent = cached.digest?.[pane] || cached.insights?.[pane] || "";
-        } else {
-            textEl.textContent = cached.insights?.[pane] || "";
-        }
-        applyWidgetInsights();
-    }
-
     function applyWidgetInsights() {
-        const mode = insightMode();
-        const cached = _moduleInsightsCache[mode];
+        const mode = widgetInsightMode();
         const localWidgets = _moduleInsightsCache.local?.widget_insights || {};
         const aiWidgets = _moduleInsightsCache.ai?.widget_insights || {};
-        if (!cached && !localWidgets) return;
+        if (!localWidgets && !aiWidgets) return;
 
         const esc = typeof escapeHtml === "function" ? escapeHtml : s => s;
-        const iconClass = mode === "ai" ? "bi-stars" : "bi-cpu-fill";
-        const modeLabel = mode === "ai" ? "AI Tip" : "Local Intel";
+        const useAi = mode === "ai" && Object.keys(aiWidgets).length > 0;
+        const iconClass = useAi ? "bi-stars" : "bi-cpu-fill";
+        const modeLabel = useAi ? "AI Tip" : "Local Intel";
 
         document.querySelectorAll("[data-widget-insight]").forEach(el => {
             const key = el.dataset.widgetInsight;
             if (!key) return;
 
             let value;
-            if (mode === "ai") {
+            if (useAi) {
                 value = aiWidgets[key] ?? localWidgets[key] ?? "";
             } else {
-                value = (cached?.widget_insights ?? localWidgets)[key] ?? "";
+                value = localWidgets[key] ?? "";
             }
 
             if (!value && value !== 0) {
@@ -298,53 +262,55 @@ const AnalyticsCharts = (() => {
             }
 
             el.hidden = false;
-            el.dataset.insightMode = mode;
+            el.dataset.insightMode = useAi ? "ai" : "local";
 
             if (typeof value === "object" && value !== null && value.insight) {
-                // Rich tip card: eyebrow + headline + personalized insight
                 el.innerHTML =
                     `<span class="wi-eyebrow"><i class="bi ${iconClass}"></i>${modeLabel}</span>` +
                     `<strong class="wi-headline">${esc(value.headline || "")}</strong>` +
                     `<span class="wi-text">${esc(value.insight)}</span>`;
             } else {
-                // Plain one-liner for non-key widgets
                 el.textContent = String(value);
             }
         });
     }
 
-    async function loadModuleInsights(forceRefresh = false) {
-        const mode = insightMode();
-        if (_moduleInsightsCache[mode] && !forceRefresh) {
-            renderModuleInsight(activePane);
+    async function loadWidgetInsights(forceRefresh = false) {
+        if (_moduleInsightsCache.local && !forceRefresh) {
+            applyWidgetInsights();
             return;
         }
         if (_moduleInsightsLoading && !forceRefresh) return;
 
         _moduleInsightsLoading = true;
-        renderModuleInsight(activePane);
-
         try {
-            const params = new URLSearchParams({ mode });
-            if (forceRefresh) params.set("force_refresh", "true");
-            const res = await fetch(`/api/ai/analytics-insights?${params}`);
+            const res = await fetch("/api/ai/analytics-insights?mode=local");
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const data = await res.json();
-            _moduleInsightsCache[mode] = data;
-            renderModuleInsight(activePane);
+            _moduleInsightsCache.local = await res.json();
+            applyWidgetInsights();
         } catch (err) {
-            console.warn("Analytics insights fetch failed:", err);
-            const textEl = $("analytics-module-insight");
-            if (textEl) textEl.textContent = "Insights unavailable — refresh to retry.";
-            $("analytics-insight-bar")?.classList.remove("is-loading");
+            console.warn("Analytics widget insights fetch failed:", err);
         } finally {
             _moduleInsightsLoading = false;
         }
     }
 
-    function onIntelligenceModeChanged() {
-        _moduleInsightsCache = { ai: null, local: null };
-        loadModuleInsights(true);
+    async function loadAiWidgetInsights(forceRefresh = false) {
+        if (typeof isLocalIntelligenceMode === "function" && isLocalIntelligenceMode()) return;
+        if (_moduleInsightsCache.ai && !forceRefresh) {
+            applyWidgetInsights();
+            return;
+        }
+        try {
+            const params = new URLSearchParams({ mode: "ai" });
+            if (forceRefresh) params.set("force_refresh", "true");
+            const res = await fetch(`/api/ai/analytics-insights?${params}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            _moduleInsightsCache.ai = await res.json();
+            applyWidgetInsights();
+        } catch (err) {
+            console.warn("Claude analytics tips fetch failed:", err);
+        }
     }
 
     function syncSubPaneIndicator() {
@@ -376,7 +342,6 @@ const AnalyticsCharts = (() => {
         } else if (pane === "performance") {
             loadPerformancePane();
         }
-        renderModuleInsight(activePane);
         requestAnimationFrame(resizeCharts);
     }
 
@@ -661,7 +626,11 @@ const AnalyticsCharts = (() => {
         const fontSize = Math.max(10, Math.round(11 * scale));
         probe.font = `500 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
         const maxText = Math.max(...tickers.map((t) => probe.measureText(t).width), 28);
-        return Math.ceil(maxText) + 10;
+        return Math.ceil(maxText) + 14;
+    }
+
+    function correlationXLabelPad(cellSize) {
+        return cellSize >= 28 ? 0 : Math.max(4, Math.round(cellSize * 0.25));
     }
 
     function correlationXLabelHeight(tickers, scale, cellSize) {
@@ -675,37 +644,52 @@ const AnalyticsCharts = (() => {
         }
 
         // Visual height of text rotated -45° = (textWidth + lineHeight) / √2, plus a small buffer.
-        return Math.ceil((maxTextW + fontSize) / Math.SQRT2 + 6);
+        return Math.ceil((maxTextW + fontSize) / Math.SQRT2 + 10);
     }
 
     function computeCorrelationLayout(frameWrap, tickers, scale) {
         const n = tickers.length;
         const gap = Math.max(3, Math.round(4 * scale));
         const labelGap = Math.max(10, Math.round(12 * scale));
+        const frameGap = Math.max(8, Math.round(10 * scale));
         const yLabelWidth = correlationLabelWidth(tickers, scale);
-        const frameGap = 10;
-        const maxGrid = Math.round(205 * scale);
+        const maxPlotSize = Math.round(205 * scale);
+        const maxViewportHeight = Math.round(268 * scale);
 
         const containerW = frameWrap?.clientWidth || 320;
-        const scrollViewport = Math.max(140, containerW - yLabelWidth - frameGap);
-        const widthCell = (scrollViewport - gap * (n - 1)) / n;
-        const heightCell = (maxGrid - gap * (n - 1)) / n;
+        const scrollViewportW = Math.max(120, containerW - yLabelWidth - frameGap);
+
+        const widthCell = (scrollViewportW - gap * (n - 1)) / n;
+        const heightCell = (maxPlotSize - gap * (n - 1)) / n;
         const cellSize = Math.max(14, Math.min(widthCell, heightCell));
 
         const gridWidth = n * cellSize + gap * (n - 1);
         const xLabelHeight = correlationXLabelHeight(tickers, scale, cellSize);
+        const xLabelPad = correlationXLabelPad(cellSize);
+        const contentHeight = gridWidth + labelGap + xLabelHeight;
+        const innerWidth = yLabelWidth + frameGap + gridWidth + xLabelPad * 2;
+
+        const needsHorizontalScroll = innerWidth > containerW + 1;
+        const needsVerticalScroll = contentHeight > maxViewportHeight + 1;
 
         return {
             n,
             gap,
             labelGap,
+            frameGap,
             yLabelWidth,
             cellSize,
             gridWidth,
-            scrollInnerWidth: Math.max(scrollViewport, gridWidth),
+            innerWidth,
+            scrollInnerWidth: Math.max(containerW, innerWidth),
+            contentHeight,
+            viewportHeight: Math.min(maxViewportHeight, contentHeight),
             xLabelHeight,
+            xLabelPad,
             xLabelsHorizontal: cellSize >= 28,
-            needsScroll: gridWidth > scrollViewport + 1,
+            needsHorizontalScroll,
+            needsVerticalScroll,
+            needsScroll: needsHorizontalScroll || needsVerticalScroll,
         };
     }
 
@@ -717,7 +701,23 @@ const AnalyticsCharts = (() => {
         const scroll = $("correlation-scroll");
         if (!yEl || !xEl || !frame) return;
 
-        const { cellSize, gap, yLabelWidth, gridWidth, labelGap, xLabelHeight, xLabelsHorizontal } = layout;
+        const {
+            cellSize,
+            gap,
+            yLabelWidth,
+            gridWidth,
+            labelGap,
+            xLabelHeight,
+            xLabelsHorizontal,
+            frameGap,
+            scrollInnerWidth,
+            contentHeight,
+            viewportHeight,
+            xLabelPad,
+            needsScroll,
+            needsHorizontalScroll,
+            needsVerticalScroll,
+        } = layout;
 
         yEl.innerHTML = tickers.map((t) =>
             `<span class="correlation-axis-label" title="${t}">${t}</span>`
@@ -748,9 +748,13 @@ const AnalyticsCharts = (() => {
         frame.style.setProperty("--corr-label-gap", `${labelGap}px`);
         frame.style.setProperty("--corr-x-label-height", `${xLabelHeight}px`);
         frame.style.setProperty("--corr-grid-width", `${gridWidth}px`);
+        frame.style.setProperty("--corr-frame-gap", `${frameGap}px`);
+        frame.style.setProperty("--corr-x-label-pad", `${xLabelPad}px`);
 
         if (inner) {
-            inner.style.width = `${layout.scrollInnerWidth}px`;
+            inner.style.width = `${scrollInnerWidth}px`;
+            inner.style.minHeight = needsVerticalScroll ? `${contentHeight}px` : "";
+            inner.style.setProperty("--corr-inner-width", `${scrollInnerWidth}px`);
             inner.style.setProperty("--corr-grid-width", `${gridWidth}px`);
             inner.style.setProperty("--corr-label-gap", `${labelGap}px`);
             inner.style.setProperty("--corr-x-label-height", `${xLabelHeight}px`);
@@ -761,7 +765,16 @@ const AnalyticsCharts = (() => {
         yEl.style.height = `${gridWidth}px`;
 
         if (scroll) {
-            scroll.classList.toggle("correlation-scroll--overflow", layout.needsScroll);
+            scroll.classList.toggle("correlation-scroll--overflow", needsScroll);
+            scroll.classList.toggle("correlation-scroll--overflow-x", needsHorizontalScroll);
+            scroll.classList.toggle("correlation-scroll--overflow-y", needsVerticalScroll);
+            if (needsVerticalScroll) {
+                scroll.style.maxHeight = `${viewportHeight}px`;
+                frame.style.setProperty("--corr-viewport-height", `${viewportHeight}px`);
+            } else {
+                scroll.style.maxHeight = "";
+                frame.style.removeProperty("--corr-viewport-height");
+            }
         }
 
         const frameWrap = frame.closest(".correlation-chart-frame-wrap");
@@ -795,6 +808,50 @@ const AnalyticsCharts = (() => {
         _correlationEventsBound = true;
         canvas.addEventListener("mousemove", onCorrelationHover);
         canvas.addEventListener("mouseleave", onCorrelationLeave);
+        bindCorrelationScroll();
+    }
+
+    function bindCorrelationScroll() {
+        if (_correlationScrollBound) return;
+        const scroll = $("correlation-scroll");
+        if (!scroll) return;
+        _correlationScrollBound = true;
+
+        let drag = null;
+
+        scroll.addEventListener("pointerdown", (event) => {
+            if (!scroll.classList.contains("correlation-scroll--overflow")) return;
+            if (event.button !== 0) return;
+            drag = {
+                id: event.pointerId,
+                x: event.clientX,
+                y: event.clientY,
+                sl: scroll.scrollLeft,
+                st: scroll.scrollTop,
+            };
+            scroll.classList.add("correlation-scroll--dragging");
+            scroll.setPointerCapture(event.pointerId);
+        });
+
+        scroll.addEventListener("pointermove", (event) => {
+            if (!drag || drag.id !== event.pointerId) return;
+            scroll.scrollLeft = drag.sl - (event.clientX - drag.x);
+            scroll.scrollTop = drag.st - (event.clientY - drag.y);
+        });
+
+        const endDrag = (event) => {
+            if (!drag || drag.id !== event.pointerId) return;
+            drag = null;
+            scroll.classList.remove("correlation-scroll--dragging");
+            try {
+                scroll.releasePointerCapture(event.pointerId);
+            } catch (_) {
+                /* pointer already released */
+            }
+        };
+
+        scroll.addEventListener("pointerup", endDrag);
+        scroll.addEventListener("pointercancel", endDrag);
     }
 
     function positionCorrelationTip(tip, clientX, clientY) {
@@ -1812,8 +1869,8 @@ const AnalyticsCharts = (() => {
         const wrap = $("macro-alignment-legend-wrap");
         if (!legend) return;
         if (!points?.length) {
-            if (wrap) wrap.hidden = true;
             legend.innerHTML = "";
+            wrap?.setAttribute("hidden", "");
             return;
         }
         const esc = typeof escapeHtml === "function" ? escapeHtml : s => s;
@@ -1828,7 +1885,12 @@ const AnalyticsCharts = (() => {
                 <span class="macro-alignment-legend-meta">${pt.x.toFixed(0)}% corr · ${pt.y.toFixed(0)}% geo</span>
             </div>`;
         }).join("");
-        if (wrap) wrap.hidden = false;
+        wrap?.removeAttribute("hidden");
+    }
+
+    function setMacroAlignmentChartVisible(visible) {
+        const shell = document.querySelector("#macro-alignment-card .macro-alignment-shell");
+        if (shell) shell.hidden = !visible;
     }
 
     async function loadMacroAlignment() {
@@ -1839,11 +1901,14 @@ const AnalyticsCharts = (() => {
             const data = await res.json();
             if (!data.has_data || !data.points?.length) {
                 showEmpty("macro-alignment-empty", true);
+                setMacroAlignmentChartVisible(false);
                 macroAlignmentChart?.destroy();
                 macroAlignmentChart = null;
                 renderMacroAlignmentLegend([]);
                 return;
             }
+            showEmpty("macro-alignment-empty", false);
+            setMacroAlignmentChartVisible(true);
             const theme = chartTheme();
             const scale = uiScale();
             const isLight = typeof currentTheme === "function" && currentTheme() === "light";
@@ -2019,6 +2084,7 @@ const AnalyticsCharts = (() => {
         } catch (err) {
             console.warn("Macro alignment failed:", err);
             showEmpty("macro-alignment-empty", true);
+            setMacroAlignmentChartVisible(false);
             renderMacroAlignmentLegend([]);
         } finally {
             showLoading("macro-alignment-loading", false);
@@ -2669,8 +2735,14 @@ const AnalyticsCharts = (() => {
         }
     }
 
+    function onIntelligenceModeChanged() {
+        _moduleInsightsCache.ai = null;
+        applyWidgetInsights();
+        loadWidgetInsights(true);
+    }
+
     function onRefresh() {
-        loadModuleInsights(true);
+        loadWidgetInsights(true);
         if (activePane === "performance" && rendered.has("performance")) loadPerformancePane();
         if (activePane === "risk" && rendered.has("risk")) loadRiskPane();
         if (activePane === "exposure" && rendered.has("exposure")) loadExposurePane();
@@ -2679,7 +2751,7 @@ const AnalyticsCharts = (() => {
     }
 
     function onAnalyticsZoneEnter() {
-        loadModuleInsights();
+        loadWidgetInsights();
         requestAnimationFrame(resizeCharts);
         if (!rendered.has(activePane)) {
             rendered.add(activePane);
@@ -2708,7 +2780,8 @@ const AnalyticsCharts = (() => {
         onThemeChange,
         onAnalyticsZoneEnter,
         onIntelligenceModeChanged,
-        loadModuleInsights,
+        loadWidgetInsights,
+        loadAiWidgetInsights,
         refreshMarketsTape,
         renderMarketsContext,
     };

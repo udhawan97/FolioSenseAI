@@ -22,6 +22,15 @@ _HEARTBEAT_CACHE: tuple[float, dict] | None = None
 _HEARTBEAT_TTL = 30  # seconds — matches frontend poll interval
 
 
+def _compact_json(payload: dict) -> str:
+    return json.dumps(payload, separators=(",", ":"), ensure_ascii=True)
+
+
+def _cached_system(text: str) -> list[dict]:
+    """System block with ephemeral prompt cache for repeated Haiku calls."""
+    return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
+
+
 def claude_api_heartbeat(timeout: float = 2.0) -> dict:
     """Check whether the configured Claude API key can reach Anthropic."""
     if not settings.ANTHROPIC_API_KEY.strip():
@@ -116,11 +125,24 @@ def generate_verdict_quips(signals: list[dict]) -> dict[str, str]:
 
 def _compact_verdict_input(s: dict) -> str:
     mix = s.get("mix") or ""
-    reason = str(s.get("reason", "")).replace('"', "'")[:90]
+    reason = str(s.get("reason", "")).replace('"', "'")[:72]
     return (
         f'{s["ticker"]}|{s["action"]}|loc={s["confidence"]}|{mix}|'
         f'mood={s.get("market_mood", "neutral")}|"{reason}"'
     )
+
+
+_VERDICT_SYSTEM = (
+    "Refine verdict cards. JSON keyed by ticker. Each value:\n"
+    "q: witty ≤18w | n: int -12..12 overall nudge | cn: 4 ints [-6..6] Analyst,Valuation,Momentum,Quality\n"
+    "h: headline ≤8w | p: 1-2 neutral advisory sentences ≤40w (consider/may want — no buy/sell orders)\n"
+    "t: ≤2 tags | w: optional watch ≤20w | agrees: bool | tension: conflict phrase or \"\"\n"
+    "flip_if: optional {metric,direction} | likely: base|bull|bear | sc_p: [base,bull,bear] sum 100\n"
+    "sc_w: ≤22w path note | ins: 2-3 bullets ≤12w | fc: 4 factor callouts ≤8w\n"
+    "drv: key driver ≤15w | conv: high|moderate|low\n"
+    "Rules: no invented numbers; n=0 cn=[0,0,0,0] unless tension or agrees=false; "
+    "base usually 35-55%; hold near local score; BOOK=q only. JSON only."
+)
 
 
 def generate_verdict_ai_bundles(signals: list[dict]) -> dict[str, dict]:
@@ -137,43 +159,13 @@ def generate_verdict_ai_bundles(signals: list[dict]) -> dict[str, dict]:
     lines = "\n".join(_compact_verdict_input(s) for s in signals)
     ticker_set = {str(s["ticker"]).upper() for s in signals}
 
-    system = (
-        "You refine investment verdict cards. For each ticker line, return JSON keyed by ticker. "
-        "Each value is an object with:\n"
-        "  q: one witty sentence (≤18 words), professional Claude voice\n"
-        "  n: integer overall nudge -12..12 (how much local confidence should move)\n"
-        "  cn: array of 4 integers [-6..6] nudging [Analyst, Valuation, Momentum, Quality]\n"
-        "  h: headline ≤8 plain words for the card\n"
-        "  p: 1–2 plain-English sentences (≤40 words) for a non-finance reader — "
-        "neutral advisory tone only (prefer \"consider\", \"may want to\", \"worth watching\"; "
-        "never direct orders like \"sell now\" or \"buy\"); explain the read, not commands\n"
-        "  t: up to 2 short tags (e.g. steady, core, watch)\n"
-        "  w: optional watch note ≤20 words (plain English)\n"
-        "  agrees: boolean — true if you agree with local action/confidence\n"
-        "  tension: short phrase when inputs conflict (empty string if none)\n"
-        "  flip_if: optional {metric, direction} when a specific change would flip the call\n"
-        "  likely: base|bull|bear — your best guess for the most probable near-term path\n"
-        "  sc_p: array of 3 integers [base%, bull%, bear%] summing to 100 (rough split)\n"
-        "  sc_w: ≤22 words explaining why you picked that likely path (plain English)\n"
-        "  ins: array of 2–3 insight bullets ≤12 words each (plain English, expandable reasoning)\n"
-        "  fc: array of 4 short factor callouts ≤8 words [Analyst, Valuation, Momentum, Quality]\n"
-        "  drv: key driver ≤15 words — the one thing shaping the call\n"
-        "  conv: high|moderate|low — how strongly inputs agree with the verdict\n"
-        "Rules: never invent prices or percentages; only set n/cn when tension is non-empty "
-        "OR agrees is false — otherwise n=0 and cn=[0,0,0,0]; "
-        "sc_p must sum to 100 and likely should match your highest bucket (or explain in sc_w); "
-        "base usually 35–55% unless trend is strong; "
-        "hold calls usually stay near local score; BOOK ticker gets q only (no n/cn/h/t/w/sc_*). "
-        "Return ONLY JSON."
-    )
-
-    prompt = f"Refine these verdicts. Return only JSON.\n\n{lines}"
+    prompt = f"Refine:\n{lines}"
 
     try:
         message = client.messages.create(
             model=MODEL,
-            max_tokens=min(120 * len(signals) + 120, 4096),
-            system=system,
+            max_tokens=min(95 * len(signals) + 80, 4096),
+            system=_cached_system(_VERDICT_SYSTEM),
             messages=[{"role": "user", "content": prompt}],
         )
         text_block = next((b for b in message.content if b.type == "text"), None)
@@ -212,11 +204,10 @@ def generate_etf_profile_seed(ticker: str, name: str | None = None, limit: int =
     try:
         message = client.messages.create(
             model=MODEL,
-            max_tokens=360,
+            max_tokens=300,
             temperature=0,
-            system=(
-                "You provide compact ETF constituent seeds for dashboards. "
-                "No prose. No markdown. Only valid JSON."
+            system=_cached_system(
+                "Compact ETF constituent seeds for dashboards. JSON only — no prose or markdown."
             ),
             messages=[{"role": "user", "content": prompt}],
         )
@@ -301,6 +292,13 @@ def _mktcap_str(mktcap: float) -> str:
     return "N/A"
 
 
+_SUMMARY_SYSTEM = (
+    "Write exactly 3 bullets for a stock/ETF/fund fact sheet.\n"
+    "Rules: each line starts with '• ', one sentence ≤18 words; "
+    "use only provided numbers; no markdown, headers, or buy/sell advice."
+)
+
+
 def _build_prompt(stock_data: dict) -> str:
     ticker   = stock_data.get("ticker", "?")
     name     = stock_data.get("name", ticker)
@@ -321,61 +319,38 @@ def _build_prompt(stock_data: dict) -> str:
     )
 
     metrics = (
-        f"Price: ${price:.2f} ({chg_pct:+.2f}% today)\n"
-        f"52-week range: ${fwl:.2f}–${fwh:.2f}"
-        + (f" | Now at {range_pct}% of range" if range_pct is not None else "")
-        + f"\nP/E: {pe if pe else 'N/A'}"
-        + f" | Dividend yield: {f'{div_pct}%' if div_pct else 'none'}"
-        + f" | Market cap: {_mktcap_str(mktcap)}"
-    )
-
-    rules = (
-        "Rules:\n"
-        "• Each bullet starts with '• ' and is one sentence, max 18 words\n"
-        "• Use only the numbers provided — do not invent any data\n"
-        "• No markdown, no headers, no financial advice, no buy/sell/hold"
+        f"px={price:.2f}|day={chg_pct:+.2f}%|52w={fwl:.2f}-{fwh:.2f}"
+        + (f"|range={range_pct}%" if range_pct is not None else "")
+        + f"|pe={pe if pe else 'n/a'}|div={f'{div_pct}%' if div_pct else 'none'}"
+        + f"|cap={_mktcap_str(mktcap)}"
     )
 
     if qt in ("ETF", "MUTUALFUND"):
-        security_label = "ETF" if qt == "ETF" else "fund"
-        return (
-            f"Write a 3-bullet fact sheet for this {security_label}.\n\n"
-            f"{rules}\n\n"
-            f"Bullet 1: What index, sector, or asset class this {security_label} tracks.\n"
-            f"Bullet 2: Today's price change and where it sits in its 52-week range.\n"
-            f"Bullet 3: One notable characteristic — dividend yield if any, "
-            f"or the sector/geographic focus.\n\n"
-            f"{security_label.upper()}: {name} ({ticker})\n"
-            f"Category: {sector}\n"
-            f"{metrics}"
+        kind = "ETF" if qt == "ETF" else "FUND"
+        hints = (
+            "B1: index/sector/asset tracked. "
+            "B2: today move + 52w range. "
+            "B3: dividend yield or sector/geographic focus."
+        )
+    else:
+        kind = "STOCK"
+        hints = (
+            "B1: company + sector. "
+            "B2: today move + 52w range. "
+            "B3: standout P/E, dividend, or market cap."
         )
 
-    # Default: individual stock / equity
-    return (
-        "Write a 3-bullet snapshot for this stock.\n\n"
-        f"{rules}\n\n"
-        "Bullet 1: What this company does and its sector in one sentence.\n"
-        "Bullet 2: Today's price change and where it sits in its 52-week range.\n"
-        "Bullet 3: One standout metric — P/E context, dividend yield, or market cap tier.\n\n"
-        f"Stock: {name} ({ticker})\n"
-        f"Sector: {sector}\n"
-        f"{metrics}"
-    )
+    return f"{kind}|{name}|{ticker}|{sector}|{metrics}\n{hints}"
 
 
 _BRIEFING_SYSTEM = (
-    "You are FolioSense's portfolio briefer. You receive a compact JSON snapshot of the user's "
-    "portfolio. Write a crisp, confident briefing in the second person (\"your portfolio\"). "
-    "Return ONLY valid JSON (no markdown, no prose outside JSON) with exactly these keys:\n"
-    "- \"health\": one sentence on how the portfolio is doing overall, grounded in the P/L numbers.\n"
-    "- \"drivers\": array of 2–3 short strings naming the specific holdings or sectors behind the "
-    "biggest change, each citing its number from the snapshot.\n"
-    "- \"adjustments\": array of 1–2 short strings — optional rebalancing OBSERVATIONS (e.g. "
-    "concentration, a runaway winner, a persistent laggard). If nothing stands out, return "
-    "[\"No changes needed — the book looks balanced.\"].\n"
-    "- \"quote\": one funny, witty, motivational one-liner to send the user off (≤20 words).\n"
-    "Rules: use ONLY numbers present in the snapshot — never invent prices, percentages, or news. "
-    "No buy/sell financial advice; frame adjustments as observations. Keep every line tight and human."
+    "Portfolio briefer. Compact JSON snapshot → JSON only:\n"
+    '"health": one sentence on overall P/L.\n'
+    '"drivers": 2-3 strings citing biggest movers with snapshot numbers.\n'
+    '"adjustments": 1-2 rebalancing observations; if none '
+    '["No changes needed — the book looks balanced."].\n'
+    '"quote": witty motivational one-liner ≤20w.\n'
+    "Use only snapshot numbers. No buy/sell advice."
 )
 
 _BRIEFING_CANNED_QUOTES: list[str] = [
@@ -403,9 +378,9 @@ def generate_portfolio_briefing(snapshot: dict) -> dict:
     """
     message = client.messages.create(
         model=MODEL,
-        max_tokens=400,
-        system=_BRIEFING_SYSTEM,
-        messages=[{"role": "user", "content": json.dumps(snapshot)}],
+        max_tokens=320,
+        system=_cached_system(_BRIEFING_SYSTEM),
+        messages=[{"role": "user", "content": _compact_json(snapshot)}],
     )
     text_block = next((b for b in message.content if b.type == "text"), None)
     raw = (text_block.text.strip() if text_block else "")
@@ -441,34 +416,29 @@ def generate_portfolio_briefing(snapshot: dict) -> dict:
     return {"health": health, "drivers": drivers, "adjustments": adjustments, "quote": quote}
 
 
-_ANALYTICS_INSIGHTS_SYSTEM = (
-    "You are FolioSense's analytics narrator. You receive a compact JSON snapshot of the user's "
-    "portfolio across five dashboard tabs plus a widgets object with pre-computed facts.\n"
-    "Return ONLY valid JSON (no markdown) with exactly these keys:\n"
-    '1. "insights": object with keys performance, risk, exposure, signals, markets — '
-    "ONE crisp second-person sentence each (max 28 words).\n"
-    '2. "widget_insights": object with one entry per widget key.\n'
-    "For these KEY widgets, return an OBJECT with two string fields:\n"
-    '  "headline": a short educational label (5-8 words, e.g. "Beta measures your market sensitivity")\n'
-    '  "insight": ONE personalised sentence explaining WHY this specific value is what it is, '
-    "using the actual numbers from the snapshot (max 28 words, no buy/sell advice, plain English).\n"
-    "KEY widgets: beta-dial, drawdown, correlation, risk-reward, concentration, "
-    "benchmark-tracker, rolling-vol, conviction-gap, sector-treemap, contribution.\n"
-    "For ALL OTHER widgets return a plain string (max 22 words):\n"
-    "total-return, pnl-history, projection, return-calendar, geo-exposure, allocation-table, "
-    "sector-tilt, signal-board, verdict-mix, confidence-spectrum, "
-    "markets-tape, markets-grid, macro-alignment.\n"
-    "Use ONLY numbers from the snapshot. Never give financial advice."
-)
+def _analytics_insights_system() -> str:
+    from app.services.analytics_insights import KEY_TIP_WIDGETS
+
+    keys = ", ".join(sorted(KEY_TIP_WIDGETS))
+    return (
+        "Analytics narrator. Compact portfolio JSON → JSON only:\n"
+        '1. "insights": {performance,risk,exposure,signals,markets} — '
+        "one second-person sentence each ≤28w.\n"
+        f'2. "widget_insights": ONLY these keys as {{"headline":5-8w,"insight":≤28w}}: {keys}\n'
+        "Use snapshot numbers only. No financial advice."
+    )
 
 
 def generate_analytics_insights(snapshot: dict) -> dict:
-    """One Haiku call: tab + per-widget sentences."""
+    """One Haiku call: tab sentences + KEY widget tip cards."""
+    from app.services.analytics_insights import build_ai_analytics_prompt_snapshot
+
+    slim = build_ai_analytics_prompt_snapshot(snapshot)
     message = client.messages.create(
         model=MODEL,
-        max_tokens=1800,
-        system=_ANALYTICS_INSIGHTS_SYSTEM,
-        messages=[{"role": "user", "content": json.dumps(snapshot)}],
+        max_tokens=1000,
+        system=_cached_system(_analytics_insights_system()),
+        messages=[{"role": "user", "content": _compact_json(slim)}],
     )
     text_block = next((b for b in message.content if b.type == "text"), None)
     raw = (text_block.text.strip() if text_block else "")
@@ -518,7 +488,8 @@ def generate_stock_summary(stock_data: dict) -> str:
 
         message = client.messages.create(
             model=MODEL,
-            max_tokens=150,
+            max_tokens=120,
+            system=_cached_system(_SUMMARY_SYSTEM),
             messages=[{"role": "user", "content": prompt}],
         )
 

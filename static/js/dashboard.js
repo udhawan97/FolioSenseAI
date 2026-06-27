@@ -94,6 +94,7 @@ const TEXT_SIZE_LABELS = {
 const DASHBOARD_PET_KEY = "foliosense-dashboard-pet-visible";
 const PET_MODE_KEY = "foliosense-force-local-mode";
 const PERFORMANCE_RANGE_KEY = "foliosense-performance-range";
+const HERO_PNL_RANGE_KEY = "foliosense-hero-pnl-range";
 
 const PERFORMANCE_RANGES = {
     week:       { label: "1W",  days: 7,    marketPeriod: "5d" },
@@ -101,6 +102,14 @@ const PERFORMANCE_RANGES = {
     year:       { label: "1Y",  days: 365,  marketPeriod: "1y" },
     threeYears: { label: "3Y",  days: 1095, marketPeriod: "5y" },
     max:        { label: "Max", days: null, marketPeriod: "max" },
+};
+
+const HERO_PNL_RANGES = {
+    day:        { label: "Today", periodLabel: "Today's P&L", days: null },
+    month:      { label: "1M",    periodLabel: "1M P&L",       days: 30 },
+    threeMonth: { label: "3M",    periodLabel: "3M P&L",       days: 90 },
+    sixMonth:   { label: "6M",    periodLabel: "6M P&L",       days: 180 },
+    year:       { label: "1Y",    periodLabel: "1Y P&L",       days: 365 },
 };
 
 const currentTheme = () =>
@@ -273,6 +282,7 @@ function initPerformanceTabs() {
     });
 
     initPerformanceRangeControls();
+    initHeroPnlRangeControls();
 }
 
 function normalizePerformanceRange(range) {
@@ -315,6 +325,118 @@ function setPerformanceRange(range) {
     try { localStorage.setItem(PERFORMANCE_RANGE_KEY, next); } catch (_) {}
     updatePerformanceRangeControls();
     renderCurrentPerformanceChart();
+}
+
+function normalizeHeroPnlRange(range) {
+    return HERO_PNL_RANGES[range] ? range : "day";
+}
+
+function initialHeroPnlRange() {
+    try {
+        return normalizeHeroPnlRange(localStorage.getItem(HERO_PNL_RANGE_KEY));
+    } catch (_) {
+        return "day";
+    }
+}
+
+function initHeroPnlRangeControls() {
+    const group = document.getElementById("hero-pnl-range-tabs");
+    if (!group) return;
+    heroPnlRange = initialHeroPnlRange();
+    updateHeroPnlRangeControls();
+    group.querySelectorAll("[data-range]").forEach(button => {
+        button.addEventListener("click", () => setHeroPnlRange(button.dataset.range));
+    });
+}
+
+function updateHeroPnlRangeControls() {
+    const group = document.getElementById("hero-pnl-range-tabs");
+    if (!group) return;
+    group.dataset.activeRange = heroPnlRange;
+    group.querySelectorAll("[data-range]").forEach(button => {
+        const isActive = button.dataset.range === heroPnlRange;
+        button.classList.toggle("is-active", isActive);
+        button.setAttribute("aria-pressed", String(isActive));
+    });
+}
+
+function setHeroPnlRange(range) {
+    const next = normalizeHeroPnlRange(range);
+    if (next === heroPnlRange) return;
+    heroPnlRange = next;
+    try { localStorage.setItem(HERO_PNL_RANGE_KEY, next); } catch (_) {}
+    updateHeroPnlRangeControls();
+    renderHeroPnl();
+}
+
+function computeHeroPeriodPnl(history, currentValue, rangeKey = heroPnlRange) {
+    const config = HERO_PNL_RANGES[normalizeHeroPnlRange(rangeKey)];
+    if (!config?.days) return null;
+
+    const rows = (history || []).filter(row => row?.date && row.total_value != null);
+    if (!rows.length || !isFiniteNumber(currentValue)) return null;
+
+    const endValue = Number(currentValue);
+    const lastDate = new Date(`${rows[rows.length - 1].date}T12:00:00`);
+    const cutoff = new Date(lastDate);
+    cutoff.setDate(cutoff.getDate() - config.days);
+    const startRow = rows.find(row => new Date(`${row.date}T12:00:00`) >= cutoff) || rows[0];
+    const startValue = Number(startRow.total_value);
+    if (startValue <= 0) return null;
+
+    const change = endValue - startValue;
+    return {
+        change,
+        pct: (change / startValue) * 100,
+    };
+}
+
+function renderHeroPnlLabel() {
+    const labelEl = document.getElementById("hero-pnl-label");
+    if (!labelEl) return;
+    const config = HERO_PNL_RANGES[normalizeHeroPnlRange(heroPnlRange)];
+    const tipBtn = labelEl.querySelector(".tip-trigger");
+    labelEl.childNodes.forEach(node => {
+        if (node.nodeType === Node.TEXT_NODE) node.remove();
+    });
+    labelEl.insertBefore(document.createTextNode(`${config.periodLabel} `), tipBtn || null);
+}
+
+function renderHeroPnl(data = latestPortfolioValueData) {
+    const el = document.getElementById("daily-pnl");
+    if (!el) return;
+
+    renderHeroPnlLabel();
+
+    if (!data) {
+        el.textContent = "--";
+        return;
+    }
+
+    let change = null;
+    let pct = null;
+
+    if (heroPnlRange === "day") {
+        change = isFiniteNumber(data.total_daily_change) ? Number(data.total_daily_change) : null;
+        pct = isFiniteNumber(data.total_daily_change_pct) ? Number(data.total_daily_change_pct) : null;
+    } else {
+        const period = computeHeroPeriodPnl(latestPnlHistory, data.total_value, heroPnlRange);
+        if (period) {
+            change = period.change;
+            pct = period.pct;
+        }
+    }
+
+    if (change === null || pct === null) {
+        el.textContent = "--";
+        return;
+    }
+
+    el.innerHTML =
+        `<span class="${colorClass(change)}">
+         ${formatCompact(change)}
+         <span style="font-size:.85em;opacity:.8">(${formatPct(pct)})</span>
+         </span>`;
 }
 
 // Apple-inspired vivid palette: high-chroma hues with enough separation for quick scanning.
@@ -377,6 +499,8 @@ let holdingsSort = { key: "allocation_pct", dir: "desc" };
 let holdingsViewFilter = "all"; // "all" | "portfolio" | "research"
 let allocationTotal = 0;     // Portfolio total, drawn in the doughnut's center
 let latestPortfolioDailyChange = null; // Backend total, used to validate allocation impact math
+let latestPortfolioValueData = null;
+let heroPnlRange = "day";
 let _hasLoadedOnce = false;  // True after first successful data load
 
 // Doughnut center hover / selection state
@@ -743,11 +867,8 @@ async function loadPortfolioValue() {
             formatCompact(data.total_value);
         document.getElementById("holding-count").textContent =
             data.holdings.filter(h => !h.is_watchlist).length;
-        document.getElementById("daily-pnl").innerHTML =
-            `<span class="${colorClass(data.total_daily_change)}">
-             ${formatCompact(data.total_daily_change)}
-             <span style="font-size:.85em;opacity:.8">(${formatPct(data.total_daily_change_pct)})</span>
-             </span>`;
+        latestPortfolioValueData = data;
+        renderHeroPnl(data);
 
         renderTotalReturn(data);
 
@@ -1730,6 +1851,7 @@ async function loadPnl() {
         latestPnlIsStale = isStale;
         latestPnlStaleDays = Math.floor(hoursOld / 24);
         await renderCurrentPerformanceChart();
+        renderHeroPnl();
 
         renderRealizedTable(data.trades || []);
     } catch (err) {
@@ -5368,26 +5490,72 @@ const _BRIEFING_CONVICTION_LABEL = {
     low: "Low conviction",
 };
 
-function _briefingConvictionLabel(verdict, ai) {
-    const conv = ai?.conviction;
-    if (conv && _BRIEFING_CONVICTION_LABEL[conv]) return _BRIEFING_CONVICTION_LABEL[conv];
+/** Briefing layout variant: cloud Claude path vs on-device local path. */
+function _briefingVariant() {
+    return isLocalIntelligenceMode() ? "local" : "ai";
+}
+
+function _localBriefingHeadline(verdict) {
+    const detail = verdict?.confidence_detail || {};
+    return detail.summary
+        || `${verdict?.label || "Hold"} — ${detail.level || "mixed signals"}`;
+}
+
+function _localBriefingDriver(verdict) {
+    const reason = (verdict?.reasons || [])[0];
+    if (reason) return String(reason).slice(0, 80);
+    const agreement = verdict?.confidence_detail?.agreement || {};
+    const parts = [];
+    if (agreement.supporting) parts.push(`${agreement.supporting} inputs agree`);
+    if (agreement.neutral) parts.push(`${agreement.neutral} neutral`);
+    if (agreement.opposing) parts.push(`${agreement.opposing} push back`);
+    return parts.join(" · ").slice(0, 80);
+}
+
+function _localBriefingInsights(verdict) {
+    const insights = [];
+    const mix = verdict?.signal_mix || [];
+    mix.forEach(item => {
+        if (item.stance === "support" || item.stance === "against") {
+            const verb = item.stance === "support" ? "supports" : "pushes back on";
+            insights.push(`${item.label || "Signal"} ${verb} the call`);
+        }
+    });
+    const agreement = verdict?.confidence_detail?.agreement || {};
+    if (!insights.length && agreement.supporting) {
+        insights.push(`${agreement.supporting} of four inputs align with this call`);
+    }
+    (verdict?.confidence_detail?.modifiers || []).slice(0, 1).forEach(mod => {
+        if (mod?.label) {
+            const sign = mod.delta > 0 ? "+" : "";
+            insights.push(`${mod.label}${Number.isFinite(mod.delta) ? ` ${sign}${mod.delta} pts` : ""}`);
+        }
+    });
+    return insights.slice(0, 3);
+}
+
+function _briefingConvictionLabel(verdict, ai, variant) {
+    if (variant === "ai") {
+        const conv = ai?.conviction;
+        if (conv && _BRIEFING_CONVICTION_LABEL[conv]) return _BRIEFING_CONVICTION_LABEL[conv];
+    }
     return verdict?.confidence_detail?.level || "";
 }
 
-function _renderBriefingConfidenceRing(conf, verdict) {
+function _renderBriefingConfidenceRing(conf, verdict, variant = "ai") {
     const r = 26;
     const c = 2 * Math.PI * r;
     const pct = Math.min(100, Math.max(0, Math.round(conf || 0)));
     const offset = c * (1 - pct / 100);
     const ai = verdict?.ai_enhancement;
-    const conviction = _briefingConvictionLabel(verdict, ai);
+    const conviction = _briefingConvictionLabel(verdict, ai, variant);
     const detail = verdict?.confidence_detail || {};
     const low = detail.range_low;
     const high = detail.range_high;
     const rangeCopy = Number.isFinite(low) && Number.isFinite(high) && high - low >= 3
         ? `<span class="briefing-conf-range">Likely ${low}–${high}%</span>`
         : "";
-    const deltaHtml = _renderAiDeltaBadge(verdict);
+    const deltaHtml = variant === "ai" ? _renderAiDeltaBadge(verdict) : "";
 
     return `<div class="briefing-conf-ring-wrap" aria-label="${pct}% signal strength">
         <svg class="briefing-conf-ring" viewBox="0 0 64 64" aria-hidden="true">
@@ -5419,36 +5587,48 @@ function _renderBriefingHeroMeta(verdict, ticker) {
     </div>`;
 }
 
-function _renderBriefingHero(verdict, ticker) {
+function _renderBriefingHero(verdict, ticker, variant = "ai") {
     const ai = verdict.ai_enhancement || {};
-    const headline = ai.headline || "";
-    const summary = _synthPlainSummary(verdict, ai, ticker);
-    const driver = ai.key_driver || "";
-    const tags = (ai.tags || []).slice(0, 3);
-    const tagHtml = tags.map(tag => _renderSynthTag(tag, "ai")).join("");
+    const detail = verdict.confidence_detail || {};
+    const headline = variant === "local"
+        ? _localBriefingHeadline(verdict)
+        : (ai.headline || detail.summary || `${verdict.label || "Hold"} — ${detail.level || "mixed signals"}`);
+    const summary = variant === "local"
+        ? _localSynthPlainSummary(verdict, ticker)
+        : _synthPlainSummary(verdict, ai, ticker);
+    const driver = variant === "local"
+        ? _localBriefingDriver(verdict)
+        : (ai.key_driver || "");
+    const tagHtml = variant === "local"
+        ? _localSynthTags(verdict)
+        : (ai.tags || []).slice(0, 3).map(tag => _renderSynthTag(tag, "ai")).join("");
     const contextChips = _renderVerdictContextChips(verdict, ticker);
     const conf = verdict.confidence || 0;
 
     return `<section class="briefing-hero">
         ${_renderBriefingHeroMeta(verdict, ticker)}
-        ${headline ? `<h3 class="briefing-headline">${escapeHtml(headline)}</h3>` : ""}
+        ${headline ? `<h3 class="briefing-headline">${escapeHtml(String(headline).slice(0, 120))}</h3>` : ""}
         ${driver ? `<p class="briefing-driver">${escapeHtml(driver)}</p>` : ""}
         ${summary ? `<p class="briefing-summary">${escapeHtml(summary)}</p>` : ""}
         ${tagHtml ? `<div class="briefing-tags">${tagHtml}</div>` : ""}
         ${contextChips ? `<div class="briefing-context-row">${contextChips}</div>` : ""}
         <div class="briefing-hero-aside">
-            ${_renderBriefingConfidenceRing(conf, verdict)}
+            ${_renderBriefingConfidenceRing(conf, verdict, variant)}
         </div>
     </section>`;
 }
 
-function _renderBriefingSignalLens(verdict) {
-    const ai = verdict.ai_enhancement || {};
+function _renderBriefingSignalLens(verdict, variant = "ai") {
+    const ai = verdict?.ai_enhancement || {};
     const components = verdict?.confidence_detail?.components;
     if (!Array.isArray(components) || components.length < 4) return "";
 
-    const callouts = ai.factor_callouts || [];
-    const radarHtml = _renderSignalRadarMarkup(verdict, "ai", true);
+    const callouts = variant === "ai" ? (ai.factor_callouts || []) : [];
+    const radarHtml = _renderSignalRadarMarkup(verdict, variant, true);
+    const tipVariant = variant === "local" ? "local" : "ai";
+    const tipBody = variant === "local"
+        ? "Radar shows balance across four on-device inputs. Each cell summarizes one lens — green supports the call, grey is neutral, red pushes back."
+        : "Radar shows balance across four inputs. Each cell adds Claude's one-line read — green supports the call, grey is neutral, red pushes back.";
 
     const cells = _BRIEFING_COMP_KEYS.map((key, idx) => {
         const comp = components.find(c => c.key === key) || components[idx] || {};
@@ -5457,7 +5637,7 @@ function _renderBriefingSignalLens(verdict) {
         const meta = _VERDICT_COMP_META[key] || { layman: "" };
         const callout = (callouts[idx] || "").trim() || meta.layman;
         const nudge = Number(comp.ai_nudge);
-        const nudgeHtml = Number.isFinite(nudge) && nudge !== 0
+        const nudgeHtml = variant === "ai" && Number.isFinite(nudge) && nudge !== 0
             ? `<span class="briefing-lens-nudge">${nudge > 0 ? "+" : ""}${nudge}</span>`
             : "";
         return `<div class="briefing-lens-cell" data-stance="${escapeHtml(stance)}">
@@ -5475,9 +5655,9 @@ function _renderBriefingSignalLens(verdict) {
             <span class="briefing-artifact-title">Signal lens</span>
             ${_verdictTip({
                 title: "How to read this",
-                body: "Radar shows balance across four inputs. Each cell adds Claude's one-line read — green supports the call, grey is neutral, red pushes back.",
-                icon: "bi-radar",
-                variant: "ai",
+                body: tipBody,
+                icon: variant === "local" ? "bi-cpu-fill" : "bi-radar",
+                variant: tipVariant,
             })}
         </header>
         <div class="briefing-lens-body">
@@ -5487,15 +5667,19 @@ function _renderBriefingSignalLens(verdict) {
     </article>`;
 }
 
-function _renderBriefingOutlook(verdict) {
+function _renderBriefingOutlook(verdict, variant = "ai") {
     const scenarios = verdict?.confidence_detail?.scenarios;
     if (!scenarios?.base) return "";
 
     const forecast = scenarios.forecast || {};
     const probs = forecast.probabilities || {};
     const likely = forecast.likely || null;
-    const note = forecast.note || "";
-    const isClaude = forecast.source === "claude";
+    const note = forecast.note || scenarios.base || "";
+    const isClaude = variant === "ai" && forecast.source === "claude";
+    const tipVariant = variant === "local" ? "local" : (isClaude ? "ai" : "");
+    const tipBody = variant === "local"
+        ? "Deterministic odds on Base, Bull, and Bear paths from the same local signals — a read, not a forecast."
+        : "Rough odds on Base, Bull, and Bear paths from the same signals — a read, not a forecast.";
 
     const probBar = ["base", "bull", "bear"].map(key => {
         const pct = Number(probs[key]) || 0;
@@ -5521,24 +5705,29 @@ function _renderBriefingOutlook(verdict) {
         ? likely.charAt(0).toUpperCase() + likely.slice(1)
         : "";
 
+    const badgeHtml = variant === "local"
+        ? `<span class="briefing-artifact-badge is-local"><i class="bi bi-cpu-fill" aria-hidden="true"></i> On-device</span>`
+        : (isClaude ? `<span class="briefing-artifact-badge"><i class="bi bi-stars" aria-hidden="true"></i> Claude</span>` : "");
+
     return `<article class="briefing-artifact briefing-outlook">
         <header class="briefing-artifact-head">
             <span class="briefing-artifact-title">Outlook</span>
-            ${isClaude ? `<span class="briefing-artifact-badge"><i class="bi bi-stars" aria-hidden="true"></i> Claude</span>` : ""}
+            ${badgeHtml}
             ${_verdictTip({
                 title: "Three simple futures",
-                body: "Rough odds on Base, Bull, and Bear paths from the same signals — a read, not a forecast.",
+                body: tipBody,
                 icon: "bi-signpost-split",
-                variant: "ai",
+                variant: tipVariant,
             })}
         </header>
         ${probBar ? `<div class="briefing-outlook-bar" role="img" aria-label="Scenario probability split">${probBar}</div>` : ""}
         ${legend ? `<div class="briefing-outlook-legend-row">${legend}</div>` : ""}
-        ${note ? `<p class="briefing-outlook-note">${likelyLabel ? `<span class="briefing-outlook-pick">Likely ${escapeHtml(likelyLabel)}</span> — ` : ""}${escapeHtml(note)}</p>` : ""}
+        ${note ? `<p class="briefing-outlook-note">${likelyLabel ? `<span class="briefing-outlook-pick">Likely ${escapeHtml(likelyLabel)}</span> — ` : ""}${escapeHtml(String(note).slice(0, 160))}</p>` : ""}
     </article>`;
 }
 
-function _renderBriefingFlag(verdict) {
+function _renderBriefingFlag(verdict, variant = "ai") {
+    if (variant !== "ai") return "";
     const ai = verdict?.ai_enhancement;
     if (!ai?.tension) return "";
     const flip = ai.flip_if;
@@ -5552,9 +5741,11 @@ function _renderBriefingFlag(verdict) {
     </div>`;
 }
 
-function _renderBriefingReasoning(verdict, ticker) {
-    const ai = verdict.ai_enhancement || {};
-    const insights = (ai.insights || []).filter(Boolean);
+function _renderBriefingReasoning(verdict, ticker, variant = "ai") {
+    const ai = verdict?.ai_enhancement || {};
+    const insights = variant === "local"
+        ? _localBriefingInsights(verdict)
+        : (ai.insights || []).filter(Boolean);
     const reasons = verdict.reasons || [];
     const risks = verdict.risks || [];
     const action = verdict.action || "hold";
@@ -5621,7 +5812,7 @@ function _renderBriefingReasoning(verdict, ticker) {
     </details>`;
 }
 
-function renderAiBriefingVerdict(section, verdict, ticker, options = {}) {
+function renderBriefingVerdict(section, verdict, ticker, options = {}, variant = "ai") {
     const action = verdict.action || "needs-data";
     const label = verdict.label || "Needs Data";
     const conf = verdict.confidence || 0;
@@ -5629,25 +5820,31 @@ function renderAiBriefingVerdict(section, verdict, ticker, options = {}) {
     const reducedMotion = prefersReducedMotion();
     const shouldReveal = options.animate === true && !reducedMotion;
     const revealClass = shouldReveal ? " is-revealing" : "";
+    const isLocal = variant === "local";
+    const modeClass = isLocal ? " is-local-briefing is-local-enhanced" : " is-ai-enhanced";
+    const headerLabel = isLocal ? "Local Intelligence Briefing" : "Intelligence Briefing";
+    const modePill = isLocal
+        ? `<span class="verdict-mode-pill is-local"><i class="bi bi-cpu-fill" aria-hidden="true"></i> On-device</span>`
+        : `<span class="verdict-mode-pill is-ai"><i class="bi bi-stars" aria-hidden="true"></i> Claude</span>`;
 
     section.innerHTML = `
         <div class="intel-label"><i class="bi ${_verdictIntelIcon()}"></i> <span class="verdict-kicker-label">${escapeHtml(brandCopy.kicker)}</span> ${_verdictInfoTip()}</div>
-        <div class="intel-verdict intel-briefing is-ai-enhanced${revealClass}" data-action="${escapeHtml(action)}"
+        <div class="intel-verdict intel-briefing${modeClass}${revealClass}" data-action="${escapeHtml(action)}"
              aria-label="${escapeHtml(label)} verdict, ${conf}% confidence">
             <div class="verdict-header-bar briefing-header-bar">
                 <span class="verdict-status-dot" aria-hidden="true"></span>
-                <span class="verdict-header-label">Intelligence Briefing</span>
-                <span class="verdict-mode-pill is-ai"><i class="bi bi-stars" aria-hidden="true"></i> Claude</span>
+                <span class="verdict-header-label">${headerLabel}</span>
+                ${modePill}
                 <span class="verdict-header-sep" aria-hidden="true">·</span>
                 <span class="verdict-header-ticker">${escapeHtml(ticker)}</span>
             </div>
-            ${_renderBriefingHero(verdict, ticker)}
-            ${_renderBriefingFlag(verdict)}
+            ${_renderBriefingHero(verdict, ticker, variant)}
+            ${_renderBriefingFlag(verdict, variant)}
             <div class="briefing-artifacts">
-                ${_renderBriefingSignalLens(verdict)}
-                ${_renderBriefingOutlook(verdict)}
+                ${_renderBriefingSignalLens(verdict, variant)}
+                ${_renderBriefingOutlook(verdict, variant)}
             </div>
-            ${_renderBriefingReasoning(verdict, ticker)}
+            ${_renderBriefingReasoning(verdict, ticker, variant)}
         </div>`;
 
     if (shouldReveal) {
@@ -5682,155 +5879,7 @@ function renderAiVerdict(section, verdict, ticker, options = {}) {
     }
 
     verdict = _sanitizeVerdict(verdict) || verdict;
-
-    if (_isAiVerdictActive(verdict)) {
-        renderAiBriefingVerdict(section, verdict, ticker, options);
-        return;
-    }
-
-    const action    = verdict.action || "needs-data";
-    const label     = verdict.label  || "Needs Data";
-    const conf      = verdict.confidence || 0;
-    const confLevel = verdict.confidence_detail?.level || "";
-    const quip      = verdict.quip || "";
-    const reasons   = verdict.reasons || [];
-    const risks     = verdict.risks   || [];
-    const disc      = _verdictDisclaimer(verdict);
-    const icon      = VERDICT_ICONS[action] || "bi-question-circle";
-    const reducedMotion  = prefersReducedMotion();
-    const shouldReveal = options.animate === true && !reducedMotion;
-    const brandCopy = _verdictBrand(verdict);
-    const anchorPill = _renderAnchorPill(verdict, ticker);
-    const horizonPill = _renderHorizonPill(verdict, ticker);
-    const isAi = _isAiVerdictActive(verdict);
-    const isLocal = isLocalIntelligenceMode() && !isAi;
-    const modeClass = isAi ? " is-ai-enhanced" : (isLocal ? " is-local-enhanced" : "");
-    const confDetail = verdict.confidence_detail || {};
-    const displayConf = conf;
-    const rangeHtml = _renderConfidenceRange(verdict, conf);
-
-    const reasonsHtml = reasons.map(r =>
-        `<div class="intel-spec-row verdict-reason-row">
-            <span aria-hidden="true"><i class="bi bi-check-circle-fill"></i></span>
-            <span>${escapeHtml(r)}</span>
-        </div>`
-    ).join("");
-
-    const risksHtml = risks.map(r =>
-        `<div class="intel-spec-row verdict-risk-row">
-            <span aria-hidden="true"><i class="bi bi-exclamation-triangle-fill"></i></span>
-            <span><span class="spec-pill risk">${escapeHtml(r)}</span></span>
-        </div>`
-    ).join("");
-
-    const dieClass = shouldReveal ? "is-tumbling" : "is-settled";
-    const revealClass = shouldReveal ? "is-revealing" : "is-static";
-    const meterWidth = shouldReveal ? "0%" : `${conf}%`;
-    const initialConf = shouldReveal ? "0%" : `${conf}%`;
-    const metaChips = [_renderSinceLastScan(verdict), _renderFreshness(verdict)]
-        .filter(Boolean)
-        .join("");
-    const contextChipsHtml = _renderVerdictContextChips(verdict, ticker);
-
-    section.innerHTML = `
-        <div class="intel-label"><i class="bi ${_verdictIntelIcon()}"></i> <span class="verdict-kicker-label">${escapeHtml(brandCopy.kicker)}</span> ${_verdictInfoTip()}</div>
-        <div class="intel-verdict ${revealClass}${modeClass}" data-action="${escapeHtml(action)}"
-             aria-label="${escapeHtml(label)} verdict, ${conf}% confidence">
-            <div class="verdict-header-bar">
-                <span class="verdict-status-dot" aria-hidden="true"></span>
-                <span class="verdict-header-label">${isLocal ? "Local Intelligence Verdict" : (isAi ? "AI-Refined Verdict" : "AI Verdict")}</span>
-                ${isAi ? `<span class="verdict-mode-pill is-ai"><i class="bi bi-stars" aria-hidden="true"></i> Claude</span>` : ""}
-                ${isLocal ? `<span class="verdict-mode-pill is-local"><i class="bi bi-cpu-fill" aria-hidden="true"></i> On-device</span>` : ""}
-                <span class="verdict-header-sep" aria-hidden="true">·</span>
-                <span class="verdict-header-ticker">${escapeHtml(ticker)}</span>
-                ${anchorPill}
-                ${horizonPill}
-            </div>
-            ${contextChipsHtml ? `<div class="verdict-context-strip">
-                <span class="verdict-context-strip-label"><i class="bi bi-binoculars"></i> Context</span>
-                <div class="verdict-context-row">${contextChipsHtml}</div>
-            </div>` : ""}
-            <div class="verdict-hero">
-                <div class="verdict-die ${dieClass}" aria-hidden="true">
-                    <img src="/static/img/brand/folio-orbit-icon.svg" alt="">
-                    <i class="bi ${escapeHtml(icon)} verdict-action-glyph"
-                       style="color:var(--verdict-color)"></i>
-                </div>
-                <div class="verdict-hero-text">
-                    <div class="verdict-hero-chip">
-                        <i class="bi ${escapeHtml(icon)}"></i>
-                        ${escapeHtml(label)}
-                    </div>
-                    <div class="verdict-feels-line">${escapeHtml(brandCopy.feelsPrefix)} this could be a <strong class="verdict-feels-action">${escapeHtml(label.toLowerCase())}</strong></div>
-                </div>
-                <div class="verdict-hero-conf">
-                    ${isAi ? _renderAiOrbital(conf) : (isLocal ? _renderLocalOrbital() : "")}
-                    <span class="verdict-conf-pct" data-conf-target="${displayConf}">${initialConf}</span>
-                    ${rangeHtml}
-                    ${_renderAiDeltaBadge(verdict)}
-                    <span class="verdict-conf-label">${confLevel ? `<span class="verdict-conf-level">${escapeHtml(confLevel)}</span>` : ""} signal strength ${_confidenceTip(isAi)}</span>
-                </div>
-            </div>
-            <div class="verdict-meter-wrap">
-                <div class="verdict-meter${isAi ? " is-ai-meter" : (isLocal ? " is-local-meter" : "")}"
-                     role="meter"
-                     aria-valuenow="${conf}"
-                     aria-valuemin="0"
-                     aria-valuemax="100"
-                     aria-label="Signal strength">
-                    <div class="verdict-meter-fill" style="width:${meterWidth}"></div>
-                </div>
-            </div>
-            ${_renderSynthesisPanel(verdict, ticker)}
-            ${_renderClaudeTension(verdict)}
-            ${_renderConfidenceStats(verdict)}
-            ${_renderBookExposureStrip(ticker)}
-            ${_renderPeerRelativeLine(verdict)}
-            ${_renderScenarios(verdict)}
-            ${_renderVerdictSparkline(verdict, ticker)}
-            ${_renderFlipTriggers(verdict)}
-            ${_renderTimingLine(verdict)}
-            ${metaChips ? `<div class="verdict-mini-chip-row">${metaChips}</div>` : ""}
-            ${_renderSignalMix(verdict)}
-            ${_renderQuip(quip, verdict)}
-            ${reasonsHtml ? `<div class="verdict-detail-block verdict-reasons-group">
-                <div class="verdict-detail-head"><i class="bi bi-check2-circle"></i> Why ${escapeHtml(label.toLowerCase())} ${_verdictTip({ title: "Supporting reasons", body: "The top deterministic reasons behind this call — from analyst data, price zone, trend, or quality.", icon: "bi-check2-circle" })}</div>
-                <div class="intel-spec-rows verdict-spec-rows">${reasonsHtml}</div>
-            </div>` : ""}
-            ${risksHtml ? `<div class="verdict-detail-block verdict-risks-group">
-                <div class="verdict-detail-head"><i class="bi bi-shield-exclamation"></i> Watch outs ${_verdictTip({ title: "Risks & caveats", body: "Things that could change the story — concentration, earnings, fading momentum, or data gaps.", icon: "bi-shield-exclamation" })}</div>
-                <div class="intel-spec-rows verdict-spec-rows">${risksHtml}</div>
-            </div>` : ""}
-            ${disc ? `<div class="intel-meta-row verdict-disc-row">
-                <span class="fact-tag">${escapeHtml(disc)}</span>
-            </div>` : ""}
-            ${_renderCalibrationFootnote(verdict)}
-        </div>`;
-
-    const confEl = section.querySelector(".verdict-conf-pct");
-    const meterFill = section.querySelector(".verdict-meter-fill");
-
-    // Optional reveal animation (off by default — expand shows final state immediately)
-    if (shouldReveal) {
-        const die = section.querySelector(".verdict-die");
-        window.requestAnimationFrame(() => {
-            if (meterFill) meterFill.style.width = `${conf}%`;
-        });
-        if (die) {
-            setTimeout(() => {
-                die.classList.remove("is-tumbling");
-                die.classList.add("is-settled");
-                if (confEl) _animateConfidence(confEl, conf, false);
-            }, 140);
-        }
-        setTimeout(() => {
-            section.querySelector(".intel-verdict")?.classList.remove("is-revealing");
-        }, 320);
-    } else {
-        if (meterFill) meterFill.style.width = `${conf}%`;
-        if (confEl) confEl.textContent = `${conf}%`;
-    }
-    _syncVerdictCharts(section, verdict, ticker);
+    renderBriefingVerdict(section, verdict, ticker, options, _briefingVariant());
 }
 
 let _lastAiCostUsd = null;
@@ -5954,6 +6003,12 @@ function applyIntelligenceModeUi() {
 
     updateHudPillSummary();
 
+    const claudeBtn = document.getElementById("btn-claude-summaries");
+    if (claudeBtn) {
+        const showClaude = !local && _isClaudeApiLive !== false;
+        claudeBtn.hidden = !showClaude;
+    }
+
     document.querySelectorAll(".btn-holding-intel").forEach(btn => {
         if (!btn.disabled) {
             btn.innerHTML = _intelButtonHtml(false);
@@ -5973,14 +6028,16 @@ async function onIntelligenceModeChanged(local, { notify = false } = {}) {
         renderHoldings();
     }
 
-    const hasVerdicts = Object.keys(cachedVerdicts).length > 0;
-    if (hasVerdicts || intelligenceLoaded || intelligenceLoading) {
-        await refreshAiVerdicts({ force: true });
-        if (latestHoldings.length) renderHoldings();
+    if (local) {
+        const hasVerdicts = Object.keys(cachedVerdicts).length > 0;
+        if (hasVerdicts || intelligenceLoaded || intelligenceLoading) {
+            await refreshAiVerdicts({ force: true });
+            if (latestHoldings.length) renderHoldings();
+        }
     }
 
-    // Sync briefing card to new global mode
-    loadPortfolioBriefing();
+    // Sync briefing card — defaults to local unless user picks AI on the card
+    loadPortfolioBriefing("local");
     window.AnalyticsCharts?.onIntelligenceModeChanged?.();
 
     if (!notify) return;
@@ -6059,8 +6116,8 @@ function applyClaudeApiStatus(claudeLive) {
         if (modeToggleEl) {
             modeToggleEl.classList.remove("claude-offline");
             modeToggleEl.title = _forcedLocalMode
-                ? "Switch back to FolioSense × Claude"
-                : "Switch to Local Intelligence — skip Claude for this session";
+                ? "Enable Claude AI — opt in to Claude narratives and summaries"
+                : "Use local intelligence only — no Claude API tokens";
         }
 
         applyIntelligenceModeUi();
@@ -6227,17 +6284,17 @@ function initDashboardPet() {
         _forcedLocalMode = local;
         try { localStorage.setItem(PET_MODE_KEY, local ? "1" : "0"); } catch (_) {}
         if (modeToggle) {
-            modeToggle.setAttribute("aria-pressed", String(local));
+            modeToggle.setAttribute("aria-pressed", String(!local));
             modeToggle.title = local
-                ? "Switch back to FolioSense × Claude"
-                : "Switch to Local Intelligence — skip Claude for this session";
+                ? "Enable Claude AI — opt in to Claude narratives and summaries"
+                : "Use local intelligence only — no Claude API tokens";
             animateToggle(modeToggle);
         }
         void onIntelligenceModeChanged(local, { notify: announce });
         if (announce) {
             const msg = local
-                ? "Without my second half, I'm basic — but still running the numbers with quiet, deterministic dignity."
-                : "Second half reconnected. The thesis is sharper, the quips have opinions, and the portfolio finally has someone to impress.";
+                ? "Local mode — deterministic signals only. Enable Claude in the menu when you want narratives."
+                : "Claude enabled. Tap Claude Summaries on Holdings when you're ready to spend tokens.";
             speak(msg, { reveal: true, persist: false });
         } else {
             const quotes = local ? DASHBOARD_PET_LOCAL_QUOTES : DASHBOARD_PET_QUOTES;
@@ -6245,9 +6302,13 @@ function initDashboardPet() {
         }
     }
 
-    try { _forcedLocalMode = localStorage.getItem(PET_MODE_KEY) === "1"; } catch (_) {}
-    if (_forcedLocalMode) applyForcedLocalMode(true, false);
-    else applyIntelligenceModeUi();
+    try {
+        const stored = localStorage.getItem(PET_MODE_KEY);
+        _forcedLocalMode = stored !== "0";
+    } catch (_) {
+        _forcedLocalMode = true;
+    }
+    applyForcedLocalMode(_forcedLocalMode, false);
 
     modeToggle?.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -6814,7 +6875,7 @@ let _briefingActiveMode = null;  // current mode shown in card
 let _briefingLoading = false;
 
 function _briefingDefaultMode() {
-    return isLocalIntelligenceMode() ? "local" : "ai";
+    return "local";
 }
 
 function _briefingSyncSegControl(mode, claudeOffline) {
@@ -6867,13 +6928,73 @@ function _briefingBoldTickers(rawText) {
         .replace(/\b([A-Z]{2,5})\b/g, '<strong class="briefing-inline-ticker">$1</strong>');
 }
 
+function _briefingLeadSentiment(text) {
+    const t = String(text || "").toLowerCase();
+    if (/\b(all \d+ holdings fell|fell today|pull(ed)? back|declined|lost|negative)\b/.test(t)) {
+        return "negative";
+    }
+    if (/\b(up|rose|gained|ahead|positive|green day)\b/.test(t) && !/\b(down|fell|mixed)\b/.test(t)) {
+        return "positive";
+    }
+    if (/\b(down|fell|declined)\b/.test(t)) return "negative";
+    if (/\b(mixed|no clear|balanced)\b/.test(t)) return "neutral";
+    return "neutral";
+}
+
+function _briefingColorizeLead(rawText) {
+    let html = _briefingBoldTickers(rawText);
+
+    html = html.replace(/(\([+-]\d+(?:\.\d+)?%\))/g, (match, pct) => {
+        const cls = pct.includes("+") ? "is-gain" : pct.includes("-") ? "is-loss" : "";
+        return cls ? `<span class="briefing-lead-pct ${cls}">${pct}</span>` : pct;
+    });
+
+    html = html.replace(/\b(up|down)\s+(\d+(?:\.\d+)?%)/gi, (_, dir, pct) => {
+        const cls = dir.toLowerCase() === "up" ? "is-gain" : "is-loss";
+        return `<span class="briefing-lead-word ${cls}">${dir}</span> <span class="briefing-lead-pct ${cls}">${pct}</span>`;
+    });
+
+    html = html.replace(/\b([+-]\d+(?:\.\d+)?%)/g, (match) => {
+        const cls = match.startsWith("+") ? "is-gain" : match.startsWith("-") ? "is-loss" : "";
+        return cls ? `<span class="briefing-lead-pct ${cls}">${match}</span>` : match;
+    });
+
+    html = html.replace(/\b(rose|gained|ahead)\b/gi, m =>
+        `<span class="briefing-lead-word is-gain">${m}</span>`);
+    html = html.replace(/\b(fell|declined|pull(?:ed)? back)\b/gi, m =>
+        `<span class="briefing-lead-word is-loss">${m}</span>`);
+
+    return html;
+}
+
+function _briefingRenderLeadBlock(text, mode) {
+    const sentiment = _briefingLeadSentiment(text);
+    const isAi = mode === "ai";
+    const eyebrowIcon = isAi ? "bi-stars" : "bi-cpu-fill";
+    const eyebrowLabel = isAi ? "Portfolio health" : "Today's read";
+    const modeClass = isAi ? "is-ai" : "is-local";
+
+    return `<div class="briefing-lead-block ${modeClass} is-sentiment-${sentiment}">
+        <span class="briefing-lead-accent" aria-hidden="true"></span>
+        <div class="briefing-lead-inner">
+            <div class="briefing-lead-meta">
+                <span class="briefing-lead-eyebrow">
+                    <i class="bi ${eyebrowIcon}" aria-hidden="true"></i>
+                    ${escapeHtml(eyebrowLabel)}
+                </span>
+            </div>
+            <p class="briefing-lead-text">${_briefingColorizeLead(text)}</p>
+        </div>
+    </div>`;
+}
+
 function _briefingAnimateIn(wrap) {
     if (!wrap || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
     wrap.classList.add("briefing-enter");
     let delay = 0;
 
-    const lead = wrap.querySelector(".briefing-lead");
+    const lead = wrap.querySelector(".briefing-lead-block");
     if (lead) {
         lead.style.setProperty("--briefing-delay", String(delay));
         delay += 60;
@@ -6938,7 +7059,7 @@ function _briefingRenderAi(data) {
 
     content.innerHTML = `
         <div class="briefing-ai-wrap">
-            <p class="briefing-lead">${esc(data.health)}</p>
+            ${_briefingRenderLeadBlock(data.health, "ai")}
             ${moversSection}
             ${insightsSection}
             <div class="briefing-footer">
@@ -6989,7 +7110,7 @@ function _briefingRenderLocal(data) {
 
     content.innerHTML = `
         <div class="briefing-local-wrap">
-            <p class="briefing-lead">${esc(data.lead)}</p>
+            ${_briefingRenderLeadBlock(data.lead, "local")}
             ${moversSection}
         </div>`;
     _briefingAnimateIn(content.querySelector(".briefing-local-wrap"));
@@ -7444,23 +7565,15 @@ async function loadHoldingIntelligence(options = {}) {
     }
 
     try {
-        const useProgressiveVerdicts = !_forcedLocalMode;
         const intelP = fetch("/api/ai/intelligence/all/batch");
         const moveP = fetch("/api/ai/move-explanations/all");
-        const verdictFastP = useProgressiveVerdicts
-            ? fetch("/api/ai/investment-signals/all?force_local=true")
-            : null;
-        const verdictFullP = fetch(`/api/ai/investment-signals/all${_forcedLocalMode ? "?force_local=true" : ""}`);
+        const verdictP = fetch("/api/ai/investment-signals/all?force_local=true");
 
-        const phaseOne = useProgressiveVerdicts
-            ? Promise.all([intelP, moveP, verdictFastP])
-            : Promise.all([intelP, moveP, verdictFullP]);
-
-        const [intelRes, moveRes, verdictPhaseRes] = await phaseOne;
+        const [intelRes, moveRes, verdictRes] = await Promise.all([intelP, moveP, verdictP]);
 
         if (intelRes.ok) _applyIntelBatchPayload(await intelRes.json());
         if (moveRes.ok) _applyMovePayload(await moveRes.json());
-        if (verdictPhaseRes?.ok) _applyVerdictPayload(await verdictPhaseRes.json());
+        if (verdictRes?.ok) _applyVerdictPayload(await verdictRes.json());
 
         await verifyAndRefreshIncompleteIntelligence();
         intelligenceLoaded = updateIntelligenceLoadedState();
@@ -7470,18 +7583,7 @@ async function loadHoldingIntelligence(options = {}) {
         _renderAllExpandedIntelRows(tbody);
         _syncOpenSummaryHeights(tbody);
         renderHoldings();
-
-        if (useProgressiveVerdicts) {
-            verdictFullP.then(async (verdictRes) => {
-                if (!verdictRes.ok) return;
-                _applyVerdictPayload(await verdictRes.json());
-                _renderAllExpandedIntelRows(tbody);
-                _syncOpenSummaryHeights(tbody);
-                repaintOpenVerdictSparklines();
-            }).catch(err => console.warn("Unable to upgrade AI verdicts:", err));
-        } else {
-            repaintOpenVerdictSparklines();
-        }
+        repaintOpenVerdictSparklines();
 
     } catch (err) {
         intelligenceLoading = false;
@@ -7506,6 +7608,24 @@ async function loadHoldingIntelligence(options = {}) {
 // ── Portfolio Management Overlay ────────────────────────────────────────────
 
 let manageHoldingsRequestId = 0;
+let manageHoldingsCache = [];
+const manageAutoSaveTimers = new Map();
+const MANAGE_AUTOSAVE_MS = 400;
+
+const MANAGE_LUCIDE_SVG = {
+    "flask-conical": '<path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/>',
+    "trash-2": '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
+    x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    "loader-2": '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    anchor: '<path d="M12 22V8"/><path d="M5 12H2a10 10 0 0 0 20 0h-3"/><circle cx="12" cy="5" r="3"/>',
+};
+
+function manageLucide(name, className = "manage-lucide") {
+    const body = MANAGE_LUCIDE_SVG[name];
+    if (!body) return "";
+    return `<svg class="${className}" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+}
 
 function portfolioManagerTriggers() {
     return Array.from(document.querySelectorAll("[aria-controls='portfolioModal'], button[onclick*='openPortfolioManager']"));
@@ -7530,6 +7650,8 @@ function openPortfolioManager() {
     if (!wasOpen) {
         const body = popover.querySelector(".portfolio-manager-body");
         if (body) body.scrollTop = 0;
+        const search = document.getElementById("manage-holdings-search");
+        if (search) search.value = "";
     }
     setPortfolioManagerTriggerState(true);
     loadManageHoldings({ preserveExisting: true });
@@ -7547,34 +7669,188 @@ function closePortfolioManager() {
 function initPortfolioManager() {
     const popover = document.getElementById("portfolioModal");
     if (!popover) return;
-    // Close when clicking the backdrop (the popover element itself), not the inner panel
     popover.addEventListener("click", (e) => {
         if (!popover.classList.contains("is-visible")) return;
         const panel = popover.querySelector(".portfolio-manager-panel");
         if (!panel?.contains(e.target)) closePortfolioManager();
     });
+    initManageHoldingsSearch();
 }
 
-function renderManageHoldingsLoading(tbody) {
-    tbody.innerHTML = Array.from({ length: 7 }, () => `
-        <tr>
-            <td><span class="shimmer-line" style="width:70px"></span></td>
-            <td><span class="shimmer-line" style="width:92px"></span></td>
-            <td><span class="shimmer-line" style="width:92px"></span></td>
-            <td><span class="shimmer-line" style="width:54px"></span></td>
-            <td><span class="shimmer-line" style="width:74px"></span></td>
-        </tr>
+function initManageHoldingsSearch() {
+    const input = document.getElementById("manage-holdings-search");
+    if (!input || input.dataset.bound) return;
+    input.dataset.bound = "true";
+    input.addEventListener("input", () => filterManageHoldings(input.value));
+}
+
+function updateManageStatsPill(holdings) {
+    const pill = document.getElementById("manage-stats-pill");
+    if (!pill) return;
+    if (!holdings?.length) {
+        pill.textContent = "";
+        return;
+    }
+    const research = holdings.filter(h => h.is_watchlist).length;
+    const parts = [`${holdings.length} holding${holdings.length === 1 ? "" : "s"}`];
+    if (research) parts.push(`${research} research`);
+    pill.innerHTML = `<span class="manage-stats-dot" aria-hidden="true"></span>${parts.join(" · ")}`;
+}
+
+function filterManageHoldings(query = "") {
+    const q = query.trim().toUpperCase();
+    const list = document.getElementById("manage-holdings-list");
+    const noMatch = document.getElementById("manage-holdings-no-match");
+    if (!list) return;
+
+    const cards = list.querySelectorAll(".manage-holding-card:not(.manage-holding-card--skeleton)");
+    let visible = 0;
+    cards.forEach(card => {
+        const ticker = card.dataset.ticker || "";
+        const match = !q || ticker.includes(q);
+        card.classList.toggle("is-hidden-by-search", !match);
+        if (match) visible += 1;
+    });
+
+    const hasHoldings = cards.length > 0;
+    list.hidden = !hasHoldings;
+    if (noMatch) {
+        noMatch.hidden = !hasHoldings || visible > 0 || !q;
+        const text = document.getElementById("manage-no-match-text");
+        if (text && q) text.textContent = `No holdings match “${q}”.`;
+    }
+}
+
+function setManageSaveStatus(holdingId, state) {
+    const el = document.querySelector(`#manage-row-${holdingId} .manage-save-status`);
+    if (!el) return;
+    el.classList.remove("is-visible", "is-saving", "is-saved", "is-error");
+    if (state === "idle") {
+        el.innerHTML = "";
+        return;
+    }
+    el.classList.add("is-visible");
+    if (state === "saving") {
+        el.classList.add("is-saving");
+        el.innerHTML = manageLucide("loader-2", "manage-lucide manage-lucide--spin");
+    } else if (state === "saved") {
+        el.classList.add("is-saved");
+        el.innerHTML = manageLucide("check");
+        window.setTimeout(() => setManageSaveStatus(holdingId, "idle"), 1500);
+    } else if (state === "error") {
+        el.classList.add("is-error");
+        el.innerHTML = manageLucide("x");
+    }
+}
+
+function scheduleManageAutoSave(holdingId) {
+    clearTimeout(manageAutoSaveTimers.get(holdingId));
+    manageAutoSaveTimers.set(holdingId, window.setTimeout(() => {
+        manageAutoSaveTimers.delete(holdingId);
+        updateHolding(holdingId, { silent: true });
+    }, MANAGE_AUTOSAVE_MS));
+}
+
+function bindManageHoldingInputs(card, holdingId) {
+    if (!card) return;
+    const sharesInput = card.querySelector(`#shares-${holdingId}`);
+    const costInput = card.querySelector(`#cost-${holdingId}`);
+    [sharesInput, costInput].forEach(input => {
+        if (!input) return;
+        input.addEventListener("input", () => scheduleManageAutoSave(holdingId));
+        input.addEventListener("blur", () => {
+            clearTimeout(manageAutoSaveTimers.get(holdingId));
+            manageAutoSaveTimers.delete(holdingId);
+            updateHolding(holdingId, { silent: true });
+        });
+    });
+}
+
+function renderManageHoldingCard(h) {
+    const tickerLabel = escapeHtml(h.ticker);
+    const tickerArg = inlineJsString(h.ticker);
+    const isWatchlist = !!h.is_watchlist;
+    const isAnchor = h.hold_class === "anchor";
+    const researchBadge = isWatchlist
+        ? `<span class="manage-card-badge">${manageLucide("flask-conical", "manage-lucide manage-lucide--inline")}Research</span>`
+        : "";
+    const removeBtnClass = isWatchlist ? "manage-remove-btn manage-remove-btn--research" : "manage-remove-btn";
+    const removeIcon = isWatchlist ? "x" : "trash-2";
+    const removeLabel = isWatchlist ? `Discard ${tickerLabel}` : `Remove ${tickerLabel}`;
+
+    return `
+        <article class="manage-holding-card${isWatchlist ? " is-watchlist" : ""}${isAnchor ? " is-anchor" : ""}"
+                 id="manage-row-${h.id}" role="listitem" data-ticker="${tickerLabel}">
+            <div class="manage-card-top">
+                <div class="manage-card-ticker">
+                    <span class="manage-card-ticker-symbol">${tickerLabel}</span>
+                    ${researchBadge}
+                </div>
+                <div class="manage-card-top-actions">
+                    <span class="manage-save-status" aria-live="polite"></span>
+                    <button type="button" class="${removeBtnClass}"
+                            onclick="removeHolding(${h.id}, ${tickerArg}, ${isWatchlist})"
+                            aria-label="${removeLabel}">
+                        ${manageLucide(removeIcon)}
+                    </button>
+                </div>
+            </div>
+            <div class="manage-card-fields">
+                <label class="manage-card-field" for="shares-${h.id}">
+                    <span class="manage-card-field-label">Shares</span>
+                    <input type="number" value="${h.shares}" min="${isWatchlist ? "0" : "0.001"}" step="0.001"
+                           class="form-control form-control-sm" id="shares-${h.id}"
+                           data-watchlist="${isWatchlist ? "true" : "false"}">
+                </label>
+                <label class="manage-card-field" for="cost-${h.id}">
+                    <span class="manage-card-field-label">Avg cost</span>
+                    <input type="number" value="${h.avg_cost || ""}" min="0.01" step="0.01"
+                           class="form-control form-control-sm" id="cost-${h.id}" placeholder="—">
+                </label>
+            </div>
+            <div class="manage-card-footer">
+                <label class="manage-anchor-toggle" for="anchor-${h.id}">
+                    <input class="anchor-hold-check" type="checkbox" id="anchor-${h.id}" ${isAnchor ? "checked" : ""}
+                           aria-label="Anchor ${tickerLabel}"
+                           onchange="autoSaveAnchorHold(this, ${h.id}, ${tickerArg})">
+                    <span class="manage-anchor-copy">
+                        <span class="manage-anchor-label">${manageLucide("anchor", "manage-lucide manage-lucide--inline")} Anchor</span>
+                        <span class="manage-anchor-hint">Always keep this position in your portfolio mix</span>
+                    </span>
+                </label>
+            </div>
+        </article>
+    `;
+}
+
+function renderManageHoldingsLoading(list) {
+    const empty = document.getElementById("manage-holdings-empty");
+    const noMatch = document.getElementById("manage-holdings-no-match");
+    if (empty) empty.hidden = true;
+    if (noMatch) noMatch.hidden = true;
+    list.hidden = false;
+    list.innerHTML = Array.from({ length: 4 }, () => `
+        <div class="manage-holding-card manage-holding-card--skeleton" aria-hidden="true">
+            <span class="shimmer-line" style="width:58%;margin-bottom:.55rem"></span>
+            <span class="shimmer-line" style="width:88%;margin-bottom:.45rem"></span>
+            <span class="shimmer-line" style="width:72%"></span>
+        </div>
     `).join("");
 }
 
 async function loadManageHoldings({ preserveExisting = false } = {}) {
-    const tbody = document.getElementById("manage-holdings-table");
+    const list = document.getElementById("manage-holdings-list");
+    const empty = document.getElementById("manage-holdings-empty");
     const popover = document.getElementById("portfolioModal");
-    if (!tbody) return;
+    if (!list) return;
 
     const requestId = ++manageHoldingsRequestId;
+    const hasRenderedCards = list.querySelector(".manage-holding-card:not(.manage-holding-card--skeleton)");
+    const skipSkeleton = preserveExisting && hasRenderedCards;
     popover?.classList.add("is-loading");
-    if (!preserveExisting || tbody.children.length === 0) renderManageHoldingsLoading(tbody);
+    if (!skipSkeleton && (!preserveExisting || list.children.length === 0)) {
+        renderManageHoldingsLoading(list);
+    }
 
     try {
         const res = await fetch("/api/portfolio/holdings");
@@ -7582,65 +7858,29 @@ async function loadManageHoldings({ preserveExisting = false } = {}) {
         const data = await res.json();
         if (requestId !== manageHoldingsRequestId) return;
 
-        tbody.innerHTML = "";
-        if (!data.holdings.length) {
-            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-secondary py-4">No holdings yet.</td></tr>`;
+        manageHoldingsCache = data.holdings || [];
+        updateManageStatsPill(manageHoldingsCache);
+        list.innerHTML = "";
+
+        if (!manageHoldingsCache.length) {
+            list.hidden = true;
+            if (empty) empty.hidden = false;
+            filterManageHoldings(document.getElementById("manage-holdings-search")?.value || "");
             return;
         }
 
-        data.holdings.forEach(h => {
-            const row = tbody.insertRow();
-            const tickerLabel = escapeHtml(h.ticker);
-            const tickerArg = inlineJsString(h.ticker);
-            const isWatchlist = !!h.is_watchlist;
-            const isAnchor = h.hold_class === "anchor";
-            row.id = `manage-row-${h.id}`;
-            if (isWatchlist) row.classList.add("watchlist-row");
-            const watchlistBadge = isWatchlist
-                ? `<span class="badge ms-1 watchlist-badge" title="Research mode — excluded from P&L"><i class="bi bi-flask me-1"></i>Research</span>`
-                : "";
-            const removeBtn = isWatchlist
-                ? `<button class="btn btn-sm btn-outline-warning"
-                           onclick="removeHolding(${h.id}, ${tickerArg}, true)" aria-label="Discard ${tickerLabel}">
-                       <i class="bi bi-x-lg"></i>
-                   </button>`
-                : `<button class="btn btn-sm btn-outline-danger"
-                           onclick="removeHolding(${h.id}, ${tickerArg}, false)" aria-label="Remove ${tickerLabel}">
-                       <i class="bi bi-trash"></i>
-                   </button>`;
-            row.innerHTML = `
-                <td class="fw-bold">${tickerLabel}${watchlistBadge}</td>
-                <td>
-                    <input type="number" value="${h.shares}" min="${isWatchlist ? "0" : "0.001"}" step="0.001"
-                           class="form-control form-control-sm bg-dark border-secondary
-                                  text-white d-inline" style="width:90px"
-                           id="shares-${h.id}" data-watchlist="${isWatchlist ? "true" : "false"}">
-                </td>
-                <td>
-                    <input type="number" value="${h.avg_cost || ""}" min="0.01" step="0.01"
-                           class="form-control form-control-sm bg-dark border-secondary
-                                  text-white d-inline" style="width:90px"
-                           id="cost-${h.id}" placeholder="--">
-                </td>
-                <td class="text-center">
-                    <input class="form-check-input anchor-hold-check" type="checkbox"
-                           id="anchor-${h.id}" ${isAnchor ? "checked" : ""}
-                           aria-label="Anchor ${tickerLabel}"
-                           onchange="autoSaveAnchorHold(this, ${h.id}, ${tickerArg})">
-                </td>
-                <td>
-                    <button class="btn btn-sm btn-outline-primary me-1"
-                            onclick="updateHolding(${h.id})" aria-label="Save ${tickerLabel} shares and cost">
-                        <i class="bi bi-floppy me-1"></i>Save
-                    </button>
-                    ${removeBtn}
-                </td>
-            `;
+        if (empty) empty.hidden = true;
+        list.hidden = false;
+        manageHoldingsCache.forEach(h => {
+            list.insertAdjacentHTML("beforeend", renderManageHoldingCard(h));
+            bindManageHoldingInputs(document.getElementById(`manage-row-${h.id}`), h.id);
         });
+        filterManageHoldings(document.getElementById("manage-holdings-search")?.value || "");
     } catch (err) {
         console.warn("Unable to load manage holdings:", err);
         if (requestId === manageHoldingsRequestId && !preserveExisting) {
-            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-4">Unable to load holdings.</td></tr>`;
+            list.innerHTML = `<div class="manage-holdings-empty"><p class="manage-empty-title text-danger">Unable to load holdings</p></div>`;
+            list.hidden = false;
         }
     } finally {
         if (requestId === manageHoldingsRequestId) popover?.classList.remove("is-loading");
@@ -7648,7 +7888,9 @@ async function loadManageHoldings({ preserveExisting = false } = {}) {
 }
 
 
-async function updateHolding(holdingId) {
+async function updateHolding(holdingId, options = {}) {
+    const silent = options.silent === true;
+    const card = document.getElementById(`manage-row-${holdingId}`);
     const sharesInput = document.getElementById(`shares-${holdingId}`);
     const costInput = document.getElementById(`cost-${holdingId}`);
     const isWatchlist = sharesInput?.dataset.watchlist === "true";
@@ -7659,16 +7901,24 @@ async function updateHolding(holdingId) {
     const holdClass = document.getElementById(`anchor-${holdingId}`)?.checked ? "anchor" : "auto";
 
     if (!isWatchlist && (!Number.isFinite(shares) || shares <= 0)) {
-        showToast("Shares must be a positive number", "danger");
+        if (silent) setManageSaveStatus(holdingId, "error");
+        else showToast("Shares must be a positive number", "danger");
         return;
     }
     if (isWatchlist && sharesRaw && (!Number.isFinite(shares) || shares < 0)) {
-        showToast("Research shares must be zero or greater", "danger");
+        if (silent) setManageSaveStatus(holdingId, "error");
+        else showToast("Research shares must be zero or greater", "danger");
         return;
     }
     if (costRaw && (!Number.isFinite(avgCost) || avgCost <= 0)) {
-        showToast("Average cost must be a positive number", "danger");
+        if (silent) setManageSaveStatus(holdingId, "error");
+        else showToast("Average cost must be a positive number", "danger");
         return;
+    }
+
+    if (silent) {
+        setManageSaveStatus(holdingId, "saving");
+        card?.classList.add("is-saving");
     }
 
     const payload = { avg_cost: avgCost, hold_class: holdClass };
@@ -7679,12 +7929,15 @@ async function updateHolding(holdingId) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
     });
+    card?.classList.remove("is-saving");
     if (res.ok) {
-        showToast("Holding updated!", "success");
+        if (silent) setManageSaveStatus(holdingId, "saved");
+        else showToast("Holding updated!", "success");
         refreshPortfolioMutationInBackground();
         refreshAiVerdicts();
     } else {
         const err = await res.json().catch(() => ({}));
+        if (silent) setManageSaveStatus(holdingId, "error");
         showToast(apiErrorMessage(err, "Update failed"), "danger");
     }
 }
@@ -7836,6 +8089,7 @@ async function autoSaveAnchorHold(checkbox, holdingId, ticker) {
         }
 
         showToast(nextClass === "anchor" ? `${ticker} anchored` : `${ticker} unanchored`, "success");
+        document.getElementById(`manage-row-${holdingId}`)?.classList.toggle("is-anchor", nextClass === "anchor");
         refreshPortfolioMutationInBackground({ includeRecommendations: false });
     } catch (err) {
         console.warn("Unable to auto-save anchor:", err);
@@ -7856,6 +8110,16 @@ async function removeHolding(holdingId, ticker, isWatchlist = false) {
     });
     if (res.ok) {
         document.getElementById(`manage-row-${holdingId}`)?.remove();
+        manageHoldingsCache = manageHoldingsCache.filter(h => h.id !== holdingId);
+        updateManageStatsPill(manageHoldingsCache);
+        const list = document.getElementById("manage-holdings-list");
+        const empty = document.getElementById("manage-holdings-empty");
+        if (list && !manageHoldingsCache.length) {
+            list.hidden = true;
+            if (empty) empty.hidden = false;
+        } else {
+            filterManageHoldings(document.getElementById("manage-holdings-search")?.value || "");
+        }
         showToast(
             isWatchlist ? `${ticker} research position discarded` : `${ticker} removed`,
             isWatchlist ? "success" : "warning"
@@ -7943,12 +8207,12 @@ function renderAddHoldingError(err, fallback = "Error adding holding") {
 }
 
 function setAddHoldingBusy(form, busy, ticker = "") {
-    const button = form?.querySelector("button[type='submit']");
+    const button = form?.querySelector("#add-holding-submit") || form?.querySelector("button[type='submit']");
     if (!button) return;
     if (!button.dataset.idleHtml) button.dataset.idleHtml = button.innerHTML;
     button.disabled = busy;
     button.innerHTML = busy
-        ? `<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Checking ${escapeHtml(ticker || "ticker")}`
+        ? `${manageLucide("loader-2", "manage-lucide manage-lucide--btn manage-lucide--spin")} Checking ${escapeHtml(ticker || "ticker")}`
         : button.dataset.idleHtml;
 }
 

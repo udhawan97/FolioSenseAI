@@ -6,7 +6,10 @@ import json
 from unittest.mock import MagicMock, patch
 
 from app.services.analytics_insights import (
+    KEY_TIP_WIDGETS,
     MODULE_DIGEST,
+    WIDGET_TIP_HEADLINES,
+    build_ai_analytics_prompt_snapshot,
     build_analytics_snapshot,
     build_local_analytics_insights,
 )
@@ -59,9 +62,35 @@ _AI_INSIGHTS = {
 }
 
 _AI_WIDGET_INSIGHTS = {
-    "benchmark-tracker": "You are beating the S&P 500 over the past year.",
-    "beta-dial": "Beta near 1.0 means your book moves with the market.",
+    # Key widgets must return structured objects
+    "benchmark-tracker": {
+        "headline": "Benchmark shows if you're ahead of the market",
+        "insight": "You are beating the S&P 500 over the past year.",
+    },
+    "beta-dial": {
+        "headline": "Beta measures your market sensitivity",
+        "insight": "Beta near 1.0 means your book moves in step with the market.",
+    },
+    # Non-key widget stays as a plain string
+    "total-return": "All-in return is +12.5% with +0.8% today.",
 }
+
+
+def test_ai_prompt_snapshot_omits_non_key_widget_data():
+    full = {
+        **_FAKE_SNAPSHOT,
+        "widgets": {
+            "benchmark": {"has_data": True},
+            "beta": {"has_data": True, "beta": 1.05},
+            "return_calendar": {"has_data": True, "months": [{"return_pct": 1.0}]},
+            "market_sensitivity": {"has_data": True, "indices": [{"name": "S&P 500"}]},
+        },
+    }
+    slim = build_ai_analytics_prompt_snapshot(full)
+    assert "return_calendar" not in slim["widgets"]
+    assert "market_sensitivity" not in slim["widgets"]
+    assert "benchmark" in slim["widgets"]
+    assert "summary" not in slim["markets"]
 
 
 def test_local_insights_include_digest_and_one_liners():
@@ -73,7 +102,25 @@ def test_local_insights_include_digest_and_one_liners():
     assert "+12.5%" in payload["insights"]["performance"]
     assert payload["insights"]["exposure"].startswith("Largest look-through")
     assert "widget_insights" in payload
-    assert "benchmark-tracker" in payload["widget_insights"] or "total-return" in payload["widget_insights"]
+    wids = payload["widget_insights"]
+    assert "total-return" in wids or "benchmark-tracker" in wids
+
+
+def test_local_widget_insights_key_widgets_are_structured():
+    """Key widgets return {headline, insight} dicts; others stay strings."""
+    payload = build_local_analytics_insights(_FAKE_SNAPSHOT)
+    wids = payload["widget_insights"]
+    for key in KEY_TIP_WIDGETS:
+        if key in wids:
+            val = wids[key]
+            assert isinstance(val, dict), f"{key} should be a dict"
+            assert "headline" in val and "insight" in val
+            assert val["headline"] == WIDGET_TIP_HEADLINES[key]
+            assert len(val["insight"]) > 0
+    # Non-key widgets must be plain strings
+    for key, val in wids.items():
+        if key not in KEY_TIP_WIDGETS:
+            assert isinstance(val, str), f"{key} should be a plain string"
 
 
 def test_analytics_insights_local_endpoint():
@@ -104,6 +151,13 @@ def test_analytics_insights_ai_endpoint_uses_claude():
     assert result["insights"]["markets"] == _AI_INSIGHTS["markets"]
     db.add.assert_called_once()
     db.commit.assert_called_once()
+
+    # Structured key-widget values should be preserved in the merged output
+    wids = result["widget_insights"]
+    bt = wids.get("benchmark-tracker")
+    assert isinstance(bt, dict), "benchmark-tracker should be a structured dict"
+    assert bt["insight"] == _AI_WIDGET_INSIGHTS["benchmark-tracker"]["insight"]
+    assert isinstance(wids.get("total-return"), str), "total-return should stay a plain string"
 
 
 def test_analytics_insights_ai_serves_cache():

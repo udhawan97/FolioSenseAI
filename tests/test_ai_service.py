@@ -2,6 +2,7 @@
 Tests for app/services/ai_service.py
 Mocks the Anthropic client — no real API calls are made.
 """
+import json
 from unittest.mock import MagicMock, patch
 
 
@@ -109,14 +110,13 @@ class TestBuildPrompt:
     def test_equity_prompt_mentions_stock(self):
         from app.services.ai_service import _build_prompt
         prompt = _build_prompt(STOCK_DATA)
-        assert "stock" in prompt.lower()
-        assert "ETF" not in prompt
+        assert prompt.startswith("STOCK|")
+        assert "ETF|" not in prompt.split("|")[0]
 
     def test_etf_prompt_mentions_etf(self):
         from app.services.ai_service import _build_prompt
         prompt = _build_prompt(ETF_DATA)
-        assert "ETF" in prompt
-        assert "stock" not in prompt.lower() or "stock" in prompt.lower()  # ETF prompt only
+        assert prompt.startswith("ETF|")
 
     def test_prompt_contains_ticker_and_name(self):
         from app.services.ai_service import _build_prompt
@@ -129,10 +129,9 @@ class TestBuildPrompt:
         prompt = _build_prompt(STOCK_DATA)
         assert "950.00" in prompt
 
-    def test_prompt_no_hallucination_instruction(self):
-        from app.services.ai_service import _build_prompt
-        prompt = _build_prompt(ETF_DATA)
-        assert "do not invent" in prompt.lower()
+    def test_summary_system_forbids_invented_data(self):
+        from app.services.ai_service import _SUMMARY_SYSTEM
+        assert "only provided numbers" in _SUMMARY_SYSTEM.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -206,6 +205,47 @@ class TestGenerateStockSummary:
             call_kwargs = mock_client.messages.create.call_args
             assert call_kwargs.kwargs["model"] == MODEL or call_kwargs.args[0] == MODEL or \
                    call_kwargs.kwargs.get("model") == MODEL
+
+
+class TestGenerateAnalyticsInsights:
+    def test_sends_slim_snapshot_to_claude(self):
+        from app.services.ai_service import generate_analytics_insights
+
+        snapshot = {
+            "as_of": "2026-06-27",
+            "performance": {"has_holdings": True, "total_return_pct": 5.0},
+            "risk": {"has_data": True, "concentration_hhi": 0.2},
+            "exposure": {"has_data": True, "top_sectors": []},
+            "signals": {"has_data": True, "dominant_action": "hold"},
+            "markets": {
+                "has_data": True,
+                "best_match_name": "S&P 500",
+                "best_correlation": 0.8,
+                "us_exposure_pct": 60.0,
+                "summary": "strip me",
+            },
+            "widgets": {
+                "benchmark": {"has_data": True},
+                "return_calendar": {"has_data": True, "months": []},
+            },
+        }
+        raw = json.dumps({
+            "insights": {
+                "performance": "Up 5%.",
+                "risk": "Spread out.",
+                "exposure": "Mixed.",
+                "signals": "Hold tone.",
+                "markets": "US linked.",
+            },
+            "widget_insights": {},
+        })
+        with patch("app.services.ai_service.client") as mock_client:
+            mock_client.messages.create.return_value = _mock_response(raw)
+            generate_analytics_insights(snapshot)
+            user_content = mock_client.messages.create.call_args.kwargs["messages"][0]["content"]
+        assert "return_calendar" not in user_content
+        assert "summary" not in user_content
+        assert "benchmark" in user_content
 
 
 class TestGenerateEtfHoldingsSeed:

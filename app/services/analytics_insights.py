@@ -59,6 +59,12 @@ MODULE_DIGEST: dict[str, str] = {
     ),
 }
 
+# Widget data Claude needs for KEY_TIP_WIDGETS only (plain widgets use local one-liners).
+_AI_WIDGET_KEYS: frozenset[str] = frozenset({
+    "benchmark", "risk_reward", "beta", "rolling_vol",
+    "sector_tilt", "conviction_gaps", "confidence_spectrum",
+})
+
 WIDGET_KEYS: tuple[str, ...] = (
     "total-return", "pnl-history", "projection",
     "benchmark-tracker", "return-calendar",
@@ -409,6 +415,25 @@ def build_local_widget_insights(snapshot: dict[str, Any]) -> dict[str, str]:
             out[k] = "Markets context links global indices to your book once holdings exist."
 
     return {k: out.get(k, "") for k in WIDGET_KEYS if out.get(k)}
+
+
+def build_ai_analytics_prompt_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Slim snapshot for Claude — tab fields + data for KEY tip widgets only."""
+    widgets = snapshot.get("widgets") or {}
+    markets = snapshot.get("markets") or {}
+    return {
+        "as_of": snapshot.get("as_of"),
+        "performance": snapshot.get("performance"),
+        "risk": snapshot.get("risk"),
+        "exposure": snapshot.get("exposure"),
+        "signals": snapshot.get("signals"),
+        "markets": {
+            k: markets[k]
+            for k in ("has_data", "best_match_name", "best_correlation", "us_exposure_pct")
+            if k in markets
+        },
+        "widgets": {k: widgets[k] for k in _AI_WIDGET_KEYS if k in widgets},
+    }
 
 
 def build_analytics_fallback(snapshot: dict[str, Any]) -> dict[str, Any]:

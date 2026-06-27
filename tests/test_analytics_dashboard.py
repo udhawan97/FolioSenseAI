@@ -70,3 +70,39 @@ def test_analytics_new_widgets_present():
     assert "loadBenchmarkChart" in js
     assert "loadMacroAlignment" in js
     assert ".analytics-widget-insight" in css
+
+
+def test_ai_tip_card_styles_present():
+    """Apple-style tip card sub-elements must be defined in CSS and rendered by JS."""
+    js = (ROOT / "static/js/analytics-charts.js").read_text(encoding="utf-8")
+    css = (ROOT / "static/css/style.css").read_text(encoding="utf-8")
+
+    # CSS sub-elements
+    assert ".wi-eyebrow" in css
+    assert ".wi-headline" in css
+    assert ".wi-text" in css
+    assert "wi-slide-in" in css
+
+    # JS renderer branches for structured tips
+    assert "wi-eyebrow" in js
+    assert "wi-headline" in js
+    assert "wi-text" in js
+    assert "AI Tip" in js
+    assert "Local Intel" in js
+    assert "value.insight" in js
+
+
+def test_key_tip_widgets_covered():
+    """All KEY_TIP_WIDGETS have headlines defined and appear in the HTML as widget placeholders."""
+    from app.services.analytics_insights import KEY_TIP_WIDGETS, WIDGET_TIP_HEADLINES
+
+    assert KEY_TIP_WIDGETS, "KEY_TIP_WIDGETS must not be empty"
+    for key in KEY_TIP_WIDGETS:
+        assert key in WIDGET_TIP_HEADLINES, f"Missing headline for key widget: {key}"
+        assert len(WIDGET_TIP_HEADLINES[key]) > 0
+
+    html = (ROOT / "templates/index.html").read_text(encoding="utf-8")
+    for key in KEY_TIP_WIDGETS:
+        assert f'data-widget-insight="{key}"' in html, (
+            f"HTML missing widget placeholder for key: {key}"
+        )

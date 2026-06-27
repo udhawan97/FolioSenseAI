@@ -640,7 +640,7 @@ async def get_portfolio_market_context(portfolio_id: int = 1, db: Session = Depe
 
     _get_portfolio_or_404(portfolio_id, db)
     result, _total, _daily, _cost = _compute_portfolio(portfolio_id, db)
-    world_payload = await get_world_markets()
+    world_payload = get_world_markets()
     return compute_market_context(result, world_payload.get("markets", []))
 
 
@@ -722,7 +722,7 @@ async def get_macro_alignment(portfolio_id: int = 1, db: Session = Depends(get_d
 
     _get_portfolio_or_404(portfolio_id, db)
     result, _total, _daily, _cost = _compute_portfolio(portfolio_id, db)
-    world_payload = await get_world_markets()
+    world_payload = get_world_markets()
     return compute_macro_alignment(result, world_payload.get("markets", []))
 
 

@@ -22,7 +22,7 @@
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="/static/css/style.css?v=87" rel="stylesheet">
+    <link href="/static/css/style.css?v=93" rel="stylesheet">
 </head>
 <body>
 
@@ -114,10 +114,11 @@
                         </button>
                     </div>
                 </div>
-                <button class="btn btn-sm btn-outline-secondary" id="portfolio-manager-trigger"
+                <button class="btn btn-sm btn-outline-secondary manage-nav-trigger" id="portfolio-manager-trigger"
                         type="button" aria-expanded="false" aria-controls="portfolioModal"
                         onclick="openPortfolioManager()">
-                    <i class="bi bi-gear"></i> Manage
+                    <svg class="manage-lucide manage-lucide--nav" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>
+                    <span class="manage-nav-label">Manage</span>
                 </button>
 
                 <!-- ── Overflow menu — secondary controls ──────────────────── -->
@@ -162,8 +163,8 @@
                             <span class="nav-menu-icon" aria-hidden="true"><i class="bi bi-cpu"></i></span>
                             <span class="nav-menu-label">Engine</span>
                             <button class="pet-mode-toggle" id="pet-mode-toggle" type="button"
-                                    aria-pressed="false"
-                                    title="Switch to Local Intelligence — skip Claude for this session">
+                                    aria-pressed="true"
+                                    title="Enable Claude AI — opt in to Claude narratives and summaries">
                                 <span class="pet-mode-label-claude"><i class="bi bi-stars" aria-hidden="true"></i> Claude AI</span>
                                 <span class="pet-mode-label-local"><i class="bi bi-cpu-fill" aria-hidden="true"></i> Local Intel</span>
                             </button>
@@ -259,16 +260,24 @@
                             </div>
                             <div class="hero-divider" aria-hidden="true"></div>
                             <div class="hero-stat">
-                                <div class="stat-label">Today's P&amp;L
+                                <div class="stat-label" id="hero-pnl-label">Today's P&amp;L
                                     <button class="tip-trigger" onclick="event.stopPropagation()"
-                                        data-tip-title="Today's P&amp;L"
-                                        data-tip-body="Dollar and percentage change across all positions since yesterday's close."
-                                        data-tip-hint="Green = portfolio gained today"
+                                        data-tip-title="Portfolio P&amp;L"
+                                        data-tip-body="Dollar and percentage change for the selected period. Today uses live prices since yesterday's close; longer ranges use your daily snapshot history."
+                                        data-tip-hint="Switch period with the buttons below"
                                         data-tip-icon="bi-graph-up-arrow">
                                         <i class="bi bi-info-circle"></i>
                                     </button>
                                 </div>
                                 <div class="stat-value hero-value hero-value--pnl" id="daily-pnl">--</div>
+                                <div class="hero-pnl-range-tabs" id="hero-pnl-range-tabs"
+                                     role="group" aria-label="P&amp;L period" data-active-range="day">
+                                    <button class="hero-pnl-range-btn is-active" type="button" data-range="day" aria-pressed="true">Today</button>
+                                    <button class="hero-pnl-range-btn" type="button" data-range="month" aria-pressed="false">1M</button>
+                                    <button class="hero-pnl-range-btn" type="button" data-range="threeMonth" aria-pressed="false">3M</button>
+                                    <button class="hero-pnl-range-btn" type="button" data-range="sixMonth" aria-pressed="false">6M</button>
+                                    <button class="hero-pnl-range-btn" type="button" data-range="year" aria-pressed="false">1Y</button>
+                                </div>
                             </div>
                         </div>
 
@@ -332,8 +341,8 @@
                                 <i class="bi bi-stars" aria-hidden="true"></i>
                                 AI
                             </button>
-                            <button class="briefing-seg-btn" data-mode="local" type="button"
-                                    aria-pressed="false" id="briefing-seg-local">
+                            <button class="briefing-seg-btn briefing-seg-btn--active" data-mode="local" type="button"
+                                    aria-pressed="true" id="briefing-seg-local">
                                 <i class="bi bi-cpu-fill" aria-hidden="true"></i>
                                 Local
                             </button>
@@ -522,18 +531,6 @@
             </button>
             <span class="analytics-zone-indicator" id="analytics-zone-indicator" aria-hidden="true"></span>
         </nav>
-
-        <div class="analytics-insight-bar" id="analytics-insight-bar" data-mode="local" aria-live="polite">
-            <div class="analytics-insight-bar-inner">
-                <span class="analytics-insight-icon" id="analytics-insight-icon" aria-hidden="true">
-                    <i class="bi bi-stars"></i>
-                </span>
-                <div class="analytics-insight-copy">
-                    <span class="analytics-insight-label" id="analytics-insight-label">Insight</span>
-                    <p class="analytics-insight-text" id="analytics-module-insight"></p>
-                </div>
-            </div>
-        </div>
 
         <!-- ── Performance sub-pane ─────────────────────────────────────── -->
         <div class="analytics-sub-pane is-active" id="analytics-pane-performance"
@@ -886,13 +883,17 @@
                             <div class="correlation-chart-frame-wrap">
                                 <div id="correlation-cell-tip" class="correlation-cell-tip" hidden></div>
                                 <div class="correlation-chart-frame" id="correlation-chart-frame">
-                                    <div class="correlation-y-labels" id="correlation-y-labels" aria-hidden="true"></div>
                                     <div class="correlation-scroll" id="correlation-scroll">
                                         <div class="correlation-scroll-inner" id="correlation-scroll-inner">
-                                            <div class="analytics-chart-shell correlation-plot" id="correlation-plot">
-                                                <canvas id="correlation-chart" aria-label="Holdings correlation heatmap"></canvas>
+                                            <div class="correlation-matrix" id="correlation-matrix">
+                                                <div class="correlation-y-labels" id="correlation-y-labels" aria-hidden="true"></div>
+                                                <div class="correlation-matrix-main">
+                                                    <div class="analytics-chart-shell correlation-plot" id="correlation-plot">
+                                                        <canvas id="correlation-chart" aria-label="Holdings correlation heatmap"></canvas>
+                                                    </div>
+                                                    <div class="correlation-x-labels" id="correlation-x-labels" aria-hidden="true"></div>
+                                                </div>
                                             </div>
-                                            <div class="correlation-x-labels" id="correlation-x-labels" aria-hidden="true"></div>
                                         </div>
                                     </div>
                                 </div>
@@ -1601,9 +1602,9 @@
                     <div class="holdings-action-tray">
                         <button class="btn btn-sm btn-holding-intel tip-trigger" onclick="loadHoldingIntelligence()"
                                 data-tip-title="Holding Intel"
-                                data-tip-body="Show what each holding covers and why it moved — holding-specific benchmarks, sectors, countries, and drivers"
-                                data-tip-icon="bi-stars"
-                                data-tip-variant="ai">
+                                data-tip-body="Show what each holding covers and why it moved — on-device signals, benchmarks, sectors, and drivers (no Claude tokens)."
+                                data-tip-icon="bi-cpu-fill"
+                                data-tip-variant="local">
                             <span class="btn-intel-frame">
                                 <span class="btn-intel-glyph">
                                     <img class="btn-intel-logo btn-intel-icon" src="/static/img/brand/folio-orbit-icon.svg" alt="">
@@ -1611,8 +1612,17 @@
                                 <span class="btn-intel-text">
                                     <span class="btn-intel-command">Holding Intel</span>
                                 </span>
-                                <span class="btn-intel-badge">AI</span>
+                                <span class="btn-intel-badge">Local</span>
                             </span>
+                        </button>
+                        <button class="btn btn-sm btn-claude-summaries tip-trigger" id="btn-claude-summaries"
+                                type="button" onclick="generateAiHoldingSummaries()" hidden
+                                data-tip-title="Claude Summaries"
+                                data-tip-body="Generate Claude quips, verdict narratives, and analytics tips for your holdings. Uses API tokens — only runs when you click."
+                                data-tip-icon="bi-stars"
+                                data-tip-variant="ai">
+                            <i class="bi bi-stars" aria-hidden="true"></i>
+                            <span>Claude Summaries</span>
                         </button>
                         <button class="btn btn-sm btn-outline-success btn-refresh-data" onclick="refreshData()">
                             <i class="bi bi-arrow-clockwise"></i><span>Refresh</span>
@@ -1742,7 +1752,7 @@
     <script defer src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@2.0.1/dist/chartjs-chart-matrix.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@3.0.0/dist/chartjs-chart-treemap.min.js"></script>
     <script defer src="/static/js/analytics-charts.js?v=8"></script>
-    <script defer src="/static/js/dashboard.js?v=81"></script>
+    <script defer src="/static/js/dashboard.js?v=87"></script>
 
     <!-- Tip Popover (singleton) -->
     <div id="tip-popover" role="tooltip" aria-hidden="true"></div>
@@ -1794,63 +1804,103 @@
          aria-modal="false" aria-labelledby="portfolio-manager-title" aria-hidden="true">
         <div class="portfolio-manager-panel bg-dark border-secondary">
             <div class="portfolio-manager-header border-secondary">
-                <div>
-                    <h5 class="modal-title" id="portfolio-manager-title">Manage Portfolio</h5>
+                <div class="portfolio-manager-header-main">
+                    <div class="portfolio-manager-title-row">
+                        <svg class="manage-lucide manage-lucide--title" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/></svg>
+                        <h5 class="modal-title" id="portfolio-manager-title">Manage Portfolio</h5>
+                    </div>
                     <div class="portfolio-manager-subtitle">Edits save instantly while the dashboard refreshes behind the scenes.</div>
+                    <div class="portfolio-manager-stats" id="manage-stats-pill" aria-live="polite"></div>
                 </div>
-                <button type="button" class="btn-close btn-close-white"
-                        aria-label="Close portfolio manager" onclick="closePortfolioManager()"></button>
+                <button type="button" class="manage-close-btn"
+                        aria-label="Close portfolio manager" onclick="closePortfolioManager()">
+                    <svg class="manage-lucide" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </button>
             </div>
             <div class="portfolio-manager-body">
                 <div class="manage-add-card">
-                    <div class="manage-section-label"><i class="bi bi-plus-circle"></i> Add new holding</div>
-                    <form id="add-holding-form" class="row g-2">
-                        <div class="col-12 col-sm-4">
-                            <input type="text" class="form-control form-control-sm bg-dark
-                                border-secondary text-white"
-                                id="new-ticker" placeholder="Ticker (e.g. AAPL)"
-                                maxlength="10" pattern="[A-Za-z0-9.^-]{1,10}"
-                                autocomplete="off" autocapitalize="characters"
-                                spellcheck="false" required>
+                    <div class="manage-section-label">
+                        <svg class="manage-lucide manage-lucide--label" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
+                        Add new holding
+                    </div>
+                    <form id="add-holding-form">
+                        <div class="manage-field-grid">
+                            <label class="manage-field" for="new-ticker">
+                                <span class="manage-field-label">
+                                    <svg class="manage-lucide manage-lucide--field" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" x2="20" y1="9" y2="9"/><line x1="4" x2="20" y1="15" y2="15"/><line x1="10" x2="8" y1="3" y2="21"/><line x1="16" x2="14" y1="3" y2="21"/></svg>
+                                    Ticker
+                                </span>
+                                <input type="text" class="form-control form-control-sm"
+                                    id="new-ticker" placeholder="AAPL"
+                                    maxlength="10" pattern="[A-Za-z0-9.^-]{1,10}"
+                                    autocomplete="off" autocapitalize="characters"
+                                    spellcheck="false" required>
+                            </label>
+                            <label class="manage-field" for="new-shares">
+                                <span class="manage-field-label">
+                                    <svg class="manage-lucide manage-lucide--field" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>
+                                    Shares
+                                </span>
+                                <input type="number" class="form-control form-control-sm"
+                                    id="new-shares" placeholder="100" min="0.001"
+                                    step="0.001" required>
+                            </label>
+                            <label class="manage-field" for="new-avgcost">
+                                <span class="manage-field-label">
+                                    <svg class="manage-lucide manage-lucide--field" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                                    Avg cost
+                                </span>
+                                <input type="number" class="form-control form-control-sm"
+                                    id="new-avgcost" placeholder="Optional" min="0.01" step="0.01">
+                            </label>
                         </div>
-                        <div class="col-12 col-sm-4">
-                            <input type="number" class="form-control form-control-sm bg-dark
-                                border-secondary text-white"
-                                id="new-shares" placeholder="Shares" min="0.001"
-                                step="0.001" required>
-                        </div>
-                        <div class="col-12 col-sm-4">
-                            <input type="number" class="form-control form-control-sm bg-dark
-                                border-secondary text-white"
-                                id="new-avgcost" placeholder="Avg Cost (optional)"
-                                min="0.01" step="0.01">
-                        </div>
-                        <div class="col-12 d-flex align-items-center flex-wrap gap-2">
-                            <button type="submit" class="btn btn-success btn-sm">
-                                <i class="bi bi-plus-circle"></i> Add Holding
+                        <div class="manage-add-actions">
+                            <button type="submit" class="btn btn-success btn-sm manage-add-btn" id="add-holding-submit">
+                                <svg class="manage-lucide manage-lucide--btn" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
+                                Add holding
                             </button>
-                            <div class="form-check form-switch mb-0 ms-1">
-                                <input class="form-check-input" type="checkbox" id="new-watchlist" role="switch">
-                                <label class="form-check-label text-secondary small" for="new-watchlist">
-                                    <i class="bi bi-flask"></i> Research mode
-                                    <span class="text-muted" style="font-size:.75em">(excluded from P&amp;L)</span>
-                                </label>
+                            <div class="manage-research-toggle">
+                                <div class="form-check form-switch mb-0">
+                                    <input class="form-check-input" type="checkbox" id="new-watchlist" role="switch">
+                                    <label class="form-check-label" for="new-watchlist">
+                                        <span class="manage-research-label">
+                                            <svg class="manage-lucide manage-lucide--inline" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/></svg>
+                                            Research mode
+                                        </span>
+                                        <span class="manage-research-hint">Track without affecting P&amp;L</span>
+                                    </label>
+                                </div>
                             </div>
-                            <span id="add-msg" class="small"></span>
+                            <span id="add-msg" class="manage-add-msg small"></span>
                         </div>
                     </form>
                 </div>
 
-                <div class="manage-section-label manage-section-label--list"><i class="bi bi-collection"></i> Current holdings</div>
-                <div class="manage-holdings-table-wrap">
-                        <table class="table table-dark table-sm portfolio-manager-table">
-                            <thead><tr>
-                                <th>Ticker</th><th>Shares</th>
-                                <th>Avg Cost</th><th title="Saves immediately when toggled">Anchor</th><th>Save shares/cost</th>
-                            </tr></thead>
-                            <tbody id="manage-holdings-table"></tbody>
-                        </table>
+                <div class="manage-list-section">
+                    <div class="manage-list-toolbar">
+                        <div class="manage-section-label manage-section-label--list">
+                            <svg class="manage-lucide manage-lucide--label" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+                            Current holdings
+                        </div>
+                        <div class="manage-search-wrap">
+                            <svg class="manage-lucide manage-search-icon" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                            <input type="search" class="form-control form-control-sm manage-search-input"
+                                   id="manage-holdings-search" placeholder="Filter by ticker…"
+                                   autocomplete="off" spellcheck="false" aria-label="Filter holdings by ticker">
+                        </div>
                     </div>
+                    <div class="manage-holdings-list" id="manage-holdings-list" role="list"></div>
+                    <div class="manage-holdings-empty" id="manage-holdings-empty" hidden>
+                        <svg class="manage-lucide manage-empty-icon" xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/></svg>
+                        <p class="manage-empty-title">No holdings yet</p>
+                        <p class="manage-empty-body">Add your first position above to start tracking.</p>
+                    </div>
+                    <div class="manage-holdings-no-match" id="manage-holdings-no-match" hidden>
+                        <svg class="manage-lucide manage-empty-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                        <p class="manage-empty-title">No matches</p>
+                        <p class="manage-empty-body" id="manage-no-match-text">No holdings match your search.</p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
