@@ -8,6 +8,12 @@ from app.schemas import HoldingCreate, HoldingUpdate, PortfolioCreate
 from app.config import settings
 from app.services.stock_service import get_all_quotes, get_stock_data, validate_ticker_symbol
 from app.services.portfolio_projection import get_cached_projection
+from app.services.portfolio_analytics import (
+    compute_risk_metrics,
+    compute_correlation_matrix,
+    compute_drawdown,
+    compute_contribution,
+)
 
 # All routes in this file are grouped under the /api/portfolio prefix
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
@@ -571,3 +577,48 @@ async def get_portfolio_projection(portfolio_id: int = 1, db: Session = Depends(
     _get_portfolio_or_404(portfolio_id, db)
     result, total_value, _daily, _cost = _compute_portfolio(portfolio_id, db)
     return get_cached_projection(result, total_value)
+
+
+@router.get("/risk-metrics")
+async def get_portfolio_risk_metrics(portfolio_id: int = 1, db: Session = Depends(get_db)):
+    """Annualized return/volatility per holding plus portfolio and S&P 500 points."""
+    _get_portfolio_or_404(portfolio_id, db)
+    result, total_value, _daily, _cost = _compute_portfolio(portfolio_id, db)
+    return compute_risk_metrics(result, total_value)
+
+
+@router.get("/correlation")
+async def get_portfolio_correlation(portfolio_id: int = 1, db: Session = Depends(get_db)):
+    """Daily-return correlation matrix for current holdings."""
+    _get_portfolio_or_404(portfolio_id, db)
+    result, _total, _daily, _cost = _compute_portfolio(portfolio_id, db)
+    return compute_correlation_matrix(result)
+
+
+@router.get("/drawdown")
+async def get_portfolio_drawdown(portfolio_id: int = 1, db: Session = Depends(get_db)):
+    """Underwater chart series (% below running peak) from snapshot history."""
+    _get_portfolio_or_404(portfolio_id, db)
+    snapshots = (
+        db.query(PortfolioSnapshot)
+        .filter(PortfolioSnapshot.portfolio_id == portfolio_id)
+        .order_by(PortfolioSnapshot.snapshot_date.asc())
+        .all()
+    )
+    history = [
+        {"date": s.snapshot_date, "total_value": s.total_value}
+        for s in snapshots
+    ]
+    return compute_drawdown(history)
+
+
+@router.get("/contribution")
+async def get_portfolio_contribution(
+    period: str = "day",
+    portfolio_id: int = 1,
+    db: Session = Depends(get_db),
+):
+    """Per-holding contribution to portfolio P&L (day, week, or month)."""
+    _get_portfolio_or_404(portfolio_id, db)
+    result, _total, _daily, _cost = _compute_portfolio(portfolio_id, db)
+    return compute_contribution(result, period=period)

@@ -128,6 +128,8 @@ def generate_verdict_ai_bundles(signals: list[dict]) -> dict[str, dict]:
         "  n: integer overall nudge -12..12 (how much local confidence should move)\n"
         "  cn: array of 4 integers [-6..6] nudging [Analyst, Valuation, Momentum, Quality]\n"
         "  h: headline ≤8 plain words for the card\n"
+        "  p: 1–2 plain-English sentences (≤40 words) for a non-finance reader — "
+        "what to do and why, no jargon\n"
         "  t: up to 2 short tags (e.g. steady, core, watch)\n"
         "  w: optional watch note ≤20 words (plain English)\n"
         "  agrees: boolean — true if you agree with local action/confidence\n"

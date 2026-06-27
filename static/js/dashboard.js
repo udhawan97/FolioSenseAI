@@ -190,6 +190,7 @@ function refreshThemeAwareVisuals() {
     updateChartChrome(allocationChart);
     updateChartChrome(pnlChart);
     updateChartChrome(projectionChart);
+    window.AnalyticsCharts?.onThemeChange?.();
     if (latestHoldings.length) renderHoldings();
 }
 
@@ -1587,6 +1588,7 @@ function setDashboardZone(zone, opts = {}) {
             if (projectionChart) { projectionChart.resize(); projectionChart.update("none"); }
         });
         ensureProjectionLoaded();
+        window.AnalyticsCharts?.onAnalyticsZoneEnter?.();
     }
 }
 
@@ -3903,35 +3905,114 @@ function _localSynthTags(verdict) {
         .join("");
 }
 
-function _renderLocalSynthesisPanel(verdict) {
+const SYNTH_TAG_GLOSSARY = {
+    speculative: { label: "Higher risk", explain: "Upside is possible, but losses could be sharp — keep size small." },
+    watch: { label: "Watch first", explain: "Track news and price before committing real money." },
+    core: { label: "Core holding", explain: "Stable enough to anchor part of a diversified portfolio." },
+    steady: { label: "Steady", explain: "Predictable business with fewer surprises than average." },
+    defensive: { label: "Defensive", explain: "Tends to hold up when the broader market falls." },
+    momentum: { label: "Trending up", explain: "Recent price action is working in its favor." },
+    value: { label: "Good value", explain: "Price looks reasonable compared to fundamentals." },
+    crowded: { label: "Crowded trade", explain: "Lots of investors already own it — less room to surprise." },
+    growth: { label: "Growth story", explain: "Future expansion matters more than today's profits." },
+    income: { label: "Income focus", explain: "Dividends or cash flow are a main reason to own it." },
+};
+
+const SYNTH_ACTION_PLAIN = {
+    add: "Leaning toward buying more when the price looks right.",
+    hold: "No strong reason to buy or sell right now — patience is fine.",
+    trim: "Consider reducing your position — risks may outweigh the reward.",
+    "needs-data": "Not enough reliable data yet to make a confident call.",
+};
+
+function _holdingForTicker(ticker) {
+    return latestHoldings.find(h => h.ticker === String(ticker || "").toUpperCase()) || null;
+}
+
+function _renderSynthTag(tag, variant = "ai") {
+    const key = String(tag || "").trim().toLowerCase();
+    const entry = SYNTH_TAG_GLOSSARY[key];
+    const display = entry?.label || tag;
+    const tip = entry?.explain || `Signal tag: ${tag}`;
+    const cls = variant === "local" ? "local-synth-tag" : "ai-synth-tag";
+    return `<span class="${cls} synth-tag-glossed" title="${escapeHtml(tip)}">${escapeHtml(display)}</span>`;
+}
+
+function _synthPlainSummary(verdict, ai, ticker) {
+    if (ai?.plain_summary) return ai.plain_summary.trim();
+
+    const holding = _holdingForTicker(ticker);
+    const parts = [];
+    if (holding?.is_watchlist) {
+        parts.push("This is on your research list — no real money is invested yet.");
+    }
+    const action = verdict?.action || "hold";
+    parts.push(SYNTH_ACTION_PLAIN[action] || SYNTH_ACTION_PLAIN.hold);
+
+    const note = (ai?.note || "").trim();
+    const headline = (ai?.headline || "").trim();
+    if (note) parts.push(note);
+    else if (headline) parts.push(headline);
+    else {
+        const reason = (verdict?.reasons || [])[0];
+        if (reason) parts.push(reason);
+    }
+    return parts.join(" ");
+}
+
+function _localSynthPlainSummary(verdict, ticker) {
+    const holding = _holdingForTicker(ticker);
+    const parts = [];
+    if (holding?.is_watchlist) {
+        parts.push("This is on your research list — no real money is invested yet.");
+    }
+    const action = verdict?.action || "hold";
+    parts.push(SYNTH_ACTION_PLAIN[action] || SYNTH_ACTION_PLAIN.hold);
+    const reason = (verdict?.reasons || [])[0];
+    if (reason) parts.push(reason);
+    return parts.join(" ");
+}
+
+function _renderSynthPlainCallout(text, variant = "ai") {
+    if (!text) return "";
+    return `<div class="synth-plain-callout is-${variant}">
+        <span class="synth-plain-label">What this means</span>
+        <p class="synth-plain-text">${escapeHtml(text)}</p>
+    </div>`;
+}
+
+function _renderLocalSynthesisPanel(verdict, ticker = "") {
     if (!isLocalIntelligenceMode() || _isAiVerdictActive(verdict)) return "";
     const detail = verdict?.confidence_detail || {};
     const headline = (detail.summary || `${verdict.label || "Hold"} — ${detail.level || "mixed signals"}`).slice(0, 120);
     const note = (verdict.reasons || [])[0] || "";
     const tags = _localSynthTags(verdict);
     const score = verdict.confidence;
+    const plain = _localSynthPlainSummary(verdict, ticker);
 
     return `<div class="verdict-synthesis-panel is-local">
         <div class="verdict-synthesis-head">
             <span class="synth-kicker"><i class="bi bi-cpu-fill" aria-hidden="true"></i> Local read</span>
             ${_verdictTip({
-                title: "Deterministic synthesis",
-                body: "Built from the same four inputs as the bars below — weighted on your device, no AI nudges. The radar shows how balanced the inputs are.",
+                title: "What this panel is",
+                body: "A quick summary built on your device from analyst views, price level, trend, and quality — no cloud AI. The radar shows how balanced those four inputs are.",
                 icon: "bi-cpu-fill",
                 variant: "local",
             })}
             <span class="synth-score-badge">${Math.round(score || 0)}%</span>
         </div>
-        <div class="synth-headline">${escapeHtml(headline)}</div>
+        ${_renderSynthPlainCallout(plain, "local")}
+        ${headline ? `<div class="synth-headline"><span class="synth-headline-label">Quick take</span> ${escapeHtml(headline)}</div>` : ""}
         ${tags ? `<div class="synth-tags">${tags}</div>` : ""}
-        ${note ? `<p class="synth-note">${escapeHtml(note)}</p>` : ""}
+        ${note && note !== plain ? `<p class="synth-note"><span class="synth-note-label">Detail</span> ${escapeHtml(note)}</p>` : ""}
+        <p class="synth-radar-caption">Balance of expert views, price, trend, and quality</p>
         ${_renderSignalRadar(verdict, "local")}
     </div>`;
 }
 
-function _renderSynthesisPanel(verdict) {
-    if (_isAiVerdictActive(verdict)) return _renderAiSynthesisPanel(verdict);
-    return _renderLocalSynthesisPanel(verdict);
+function _renderSynthesisPanel(verdict, ticker = "") {
+    if (_isAiVerdictActive(verdict)) return _renderAiSynthesisPanel(verdict, ticker);
+    return _renderLocalSynthesisPanel(verdict, ticker);
 }
 
 function _verdictTip({ title, body, hint = "", icon = "bi-info-circle-fill", variant = "" }) {
@@ -3976,7 +4057,7 @@ function _renderAiDeltaBadge(verdict) {
     return `<span class="verdict-ai-delta" title="Claude adjustment vs local">${sign}${ai.delta} AI</span>`;
 }
 
-function _renderAiSynthesisPanel(verdict) {
+function _renderAiSynthesisPanel(verdict, ticker = "") {
     if (!_isAiVerdictActive(verdict)) return "";
     const ai = verdict.ai_enhancement;
     const headline = ai.headline || "";
@@ -3984,29 +4065,30 @@ function _renderAiSynthesisPanel(verdict) {
     const tags = (ai.tags || []).slice(0, 2);
     const localScore = ai.local_score;
     const aiScore = ai.ai_score;
+    const plain = _synthPlainSummary(verdict, ai, ticker);
 
-    const tagHtml = tags.map(tag =>
-        `<span class="ai-synth-tag">${escapeHtml(tag)}</span>`
-    ).join("");
+    const tagHtml = tags.map(tag => _renderSynthTag(tag, "ai")).join("");
 
     const compareHtml = Number.isFinite(localScore) && Number.isFinite(aiScore)
-        ? `<span class="ai-synth-compare">Local ${localScore}% → AI ${aiScore}%</span>`
+        ? `<span class="ai-synth-compare" title="How much Claude adjusted the signal strength score">Local ${localScore}% → AI ${aiScore}%</span>`
         : "";
 
     return `<div class="verdict-synthesis-panel is-ai">
         <div class="verdict-synthesis-head">
-            <span class="synth-kicker"><i class="bi bi-stars" aria-hidden="true"></i> Claude synthesis</span>
+            <span class="synth-kicker"><i class="bi bi-stars" aria-hidden="true"></i> Claude's second read</span>
             ${_verdictTip({
-                title: "How Claude refines this",
-                body: "One batched read of the same local stats — a headline, tiny score nudges, and a watch note. No new prices or invented data. Cached 24h like the quip.",
+                title: "What this panel is",
+                body: "Claude reviews the same stats FolioSense already computed — headline, tags, and a short note. It can nudge the score slightly but cannot invent prices or new data. Cached 24h.",
                 icon: "bi-stars",
                 variant: "ai",
             })}
             ${compareHtml}
         </div>
-        ${headline ? `<div class="synth-headline">${escapeHtml(headline)}</div>` : ""}
+        ${_renderSynthPlainCallout(plain, "ai")}
+        ${headline ? `<div class="synth-headline"><span class="synth-headline-label">Quick take</span> ${escapeHtml(headline)}</div>` : ""}
         ${tagHtml ? `<div class="synth-tags">${tagHtml}</div>` : ""}
-        ${note ? `<p class="synth-note">${escapeHtml(note)}</p>` : ""}
+        ${note && note !== plain ? `<p class="synth-note"><span class="synth-note-label">Supporting detail</span> ${escapeHtml(note)}</p>` : ""}
+        <p class="synth-radar-caption">Balance of expert views, price, trend, and quality</p>
         ${_renderSignalRadar(verdict, "ai")}
     </div>`;
 }
@@ -4041,15 +4123,16 @@ function _renderSignalRadar(verdict, variant = "ai") {
         return `<line class="ai-radar-spoke" x1="${cx}" y1="${cy}" x2="${cx + maxR * Math.cos(rad)}" y2="${cy + maxR * Math.sin(rad)}"></line>`;
     }).join("");
 
+    const textAnchors = ["middle", "start", "middle", "end"];
     const labelNodes = angles.map((deg, i) => {
         const rad = (deg * Math.PI) / 180;
         const lx = cx + (maxR + 10) * Math.cos(rad);
         const ly = cy + (maxR + 10) * Math.sin(rad);
-        return `<text class="ai-radar-label" x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="middle">${labels[i]}</text>`;
+        return `<text class="ai-radar-label" x="${lx}" y="${ly}" text-anchor="${textAnchors[i]}" dominant-baseline="middle">${labels[i]}</text>`;
     }).join("");
 
     return `<div class="signal-radar-wrap is-${variant}">
-        <svg class="signal-radar" viewBox="0 0 100 100" role="img" aria-label="Signal balance radar">
+        <svg class="signal-radar" viewBox="-14 -10 128 120" role="img" aria-label="Signal balance radar">
             ${rings}
             ${spokes}
             <polygon class="signal-radar-fill" points="${poly}"></polygon>
@@ -5172,7 +5255,7 @@ function renderAiVerdict(section, verdict, ticker) {
                     <div class="verdict-meter-fill" style="width:${meterWidth}"></div>
                 </div>
             </div>
-            ${_renderSynthesisPanel(verdict)}
+            ${_renderSynthesisPanel(verdict, ticker)}
             ${_renderClaudeTension(verdict)}
             ${_renderConfidenceStats(verdict)}
             ${_renderBookExposureStrip(ticker)}
@@ -5875,6 +5958,7 @@ function refreshDashboardData({
     return Promise.allSettled(jobs).then(results => {
         const failed = results.filter(result => result.status === "rejected");
         if (failed.length) console.warn("Dashboard refresh partially failed:", failed);
+        window.AnalyticsCharts?.onRefresh?.();
     }).finally(() => {
         if (animateButton) {
             window.setTimeout(() => refreshButton?.classList.remove("is-refreshing"), 260);
@@ -6239,6 +6323,12 @@ function _briefingShowSkeleton(show) {
     if (ct) ct.style.display = show ? "none" : "";
 }
 
+function _briefingBoldTickers(rawText) {
+    // Escape first, then bold any 2–5 uppercase-letter word that looks like a ticker
+    return escapeHtml(String(rawText || ""))
+        .replace(/\b([A-Z]{2,5})\b/g, '<strong class="briefing-inline-ticker">$1</strong>');
+}
+
 function _briefingRenderAi(data) {
     const content = document.getElementById("briefing-content");
     if (!content) return;
@@ -6249,7 +6339,7 @@ function _briefingRenderAi(data) {
         .map(d => `
             <li class="briefing-bullet-item">
                 <i class="bi bi-caret-right-fill briefing-bullet-icon briefing-bullet-icon--driver" aria-hidden="true"></i>
-                <span>${esc(d)}</span>
+                <span>${_briefingBoldTickers(d)}</span>
             </li>`)
         .join("");
 
@@ -6257,7 +6347,7 @@ function _briefingRenderAi(data) {
         .map(a => `
             <li class="briefing-bullet-item">
                 <i class="bi bi-lightbulb-fill briefing-bullet-icon briefing-bullet-icon--obs" aria-hidden="true"></i>
-                <span>${esc(a)}</span>
+                <span>${_briefingBoldTickers(a)}</span>
             </li>`)
         .join("");
 
@@ -6296,36 +6386,57 @@ function _briefingRenderAi(data) {
         </div>`;
 }
 
+function _briefingFirstSentence(text) {
+    if (!text) return "";
+    const m = text.match(/^.+?[.!?](?:\s|$)/);
+    return m ? m[0].trim() : text.slice(0, 88).trim();
+}
+
 function _briefingRenderLocal(data) {
     const content = document.getElementById("briefing-content");
     if (!content) return;
 
     const esc = s => escapeHtml(String(s || ""));
+
     const movers = (data.movers || []).map(m => {
         const isGain = m.day_change_pct >= 0;
         const sign   = isGain ? "gain" : "loss";
+        const arrow  = isGain ? "bi-caret-up-fill" : "bi-caret-down-fill";
         const pct    = (isGain ? "+" : "") + Number(m.day_change_pct).toFixed(2) + "%";
         const dollar = (m.day_change_dollar >= 0 ? "+$" : "–$") +
             Math.abs(m.day_change_dollar).toFixed(2);
-        const icon   = esc(m.icon || "bi-question-circle");
+        const tag = esc(_briefingFirstSentence(m.explanation));
+
         return `
-            <li class="briefing-mover-item">
-                <div class="briefing-mover-header">
-                    <span class="briefing-mover-bullet">
-                        <i class="bi ${icon} briefing-mover-icon text-${sign}" aria-hidden="true"></i>
-                    </span>
+            <li class="briefing-bullet-item">
+                <i class="bi ${arrow} briefing-bullet-icon briefing-bullet-icon--${sign}" aria-hidden="true"></i>
+                <span class="briefing-mover-inline">
                     <span class="briefing-mover-ticker">${esc(m.ticker)}</span>
-                    <span class="briefing-mover-change text-${sign}">${esc(pct)}</span>
-                    <span class="briefing-mover-dollar text-${sign}">${esc(dollar)}</span>
-                </div>
-                ${m.explanation ? `<p class="briefing-mover-desc">${esc(m.explanation)}</p>` : ""}
+                    <span class="briefing-mover-nums">
+                        <span class="briefing-mover-change text-${sign}">${esc(pct)}</span>
+                        <span class="briefing-mover-dollar">${esc(dollar)}</span>
+                    </span>
+                    ${tag ? `<span class="briefing-mover-tag">${tag}</span>` : ""}
+                </span>
             </li>`;
     }).join("");
 
     content.innerHTML = `
         <div class="briefing-local-wrap">
-            <p class="briefing-lead-text">${esc(data.lead)}</p>
-            <ul class="briefing-movers">${movers || "<li class='briefing-empty'>No holdings data.</li>"}</ul>
+            <div class="briefing-section">
+                <div class="briefing-section-badge briefing-section-badge--summary">
+                    <i class="bi bi-bar-chart-steps" aria-hidden="true"></i>
+                    Summary
+                </div>
+                <p class="briefing-health-text">${esc(data.lead)}</p>
+            </div>
+            <div class="briefing-section">
+                <div class="briefing-section-badge briefing-section-badge--movers">
+                    <i class="bi bi-arrow-left-right" aria-hidden="true"></i>
+                    Movers
+                </div>
+                <ul class="briefing-bullet-list">${movers || "<li class='briefing-empty'>No holdings data.</li>"}</ul>
+            </div>
         </div>`;
 }
 
@@ -6401,6 +6512,7 @@ async function initDashboard() {
     initPortfolioManager();
     initDashboardZones();
     initPortfolioBriefing();
+    window.AnalyticsCharts?.init?.();
     // Sync the sliding indicator once layout is settled
     requestAnimationFrame(syncHvtIndicator);
     window.addEventListener("resize", syncHvtIndicator, { passive: true });
@@ -6430,12 +6542,14 @@ function _marketPrice(price) {
 }
 
 const _REGION_ORDER = ["US", "Europe", "Asia", "Pacific"];
+let _cachedWorldMarketsForAnalytics = [];
 
 async function loadWorldMarkets() {
     try {
         const res = await fetch("/api/stocks/world-markets");
         if (!res.ok) return;
         const { markets } = await res.json();
+        _cachedWorldMarketsForAnalytics = markets || [];
         const strip = document.getElementById("world-markets-strip");
         if (!strip) return;
         strip.innerHTML = "";
@@ -6481,11 +6595,13 @@ async function loadWorldMarkets() {
                 strip.appendChild(tile);
             });
         });
+        window.AnalyticsCharts?.refreshMarketsTape?.(markets);
     } catch (err) {
         console.warn("World markets unavailable:", err);
         const strip = document.getElementById("world-markets-strip");
         if (strip) strip.innerHTML = `<span style="padding:1rem;color:var(--text-tertiary);font-size:.8rem">Market data unavailable</span>`;
     }
+    window.AnalyticsCharts?.refreshMarketsTape?.(_cachedWorldMarketsForAnalytics);
 }
 
 // ── Holding Intelligence ────────────────────────────────────────────────────
@@ -6604,6 +6720,56 @@ async function verifyAndRefreshIncompleteIntelligence() {
     return updateIntelligenceLoadedState();
 }
 
+function _applyIntelBatchPayload(intelData) {
+    Object.entries(intelData?.intelligence || {}).forEach(([ticker, intel]) => {
+        cachedIntelligence[ticker] = intel;
+    });
+    (intelData?.incomplete_tickers || []).forEach(ticker => {
+        if (!intelligenceRetryState[ticker]) intelligenceRetryState[ticker] = 0;
+    });
+}
+
+function _applyMovePayload(moveData) {
+    Object.entries(moveData?.explanations || {}).forEach(([ticker, exp]) => {
+        cachedExplanations[ticker] = exp;
+    });
+}
+
+function _applyVerdictPayload(verdictData) {
+    Object.entries(verdictData?.signals || {}).forEach(([ticker, sig]) => {
+        cachedVerdicts[ticker] = sig;
+    });
+    cachedPortfolioExposure = verdictData?.portfolio_exposure || cachedPortfolioExposure;
+    cachedMarketRegime = verdictData?.regime || cachedMarketRegime;
+    applyClaudeApiStatus(verdictData?.claude_live ?? null);
+}
+
+function _renderAllExpandedIntelRows(tbody) {
+    if (!tbody) return;
+    Array.from(tbody.querySelectorAll("tr[data-ticker]")).forEach(mainRow => {
+        const ticker = mainRow.dataset.ticker;
+        const expandRow = mainRow.nextElementSibling;
+        if (!expandRow || !expandRow.classList.contains("summary-expand-row")) return;
+        const coverageSection = expandRow.querySelector(".intel-coverage-section");
+        const moveSection     = expandRow.querySelector(".intel-move-section");
+        const verdictSection  = expandRow.querySelector(".intel-verdict-section");
+        if (coverageSection) renderHoldingCoverage(coverageSection, cachedIntelligence[ticker]);
+        if (moveSection)     renderMoveExplainer(moveSection, cachedExplanations[ticker], cachedIntelligence[ticker]);
+        if (verdictSection)  renderAiVerdict(verdictSection, cachedVerdicts[ticker], ticker);
+    });
+}
+
+function _syncOpenSummaryHeights(tbody) {
+    if (!tbody) return;
+    requestAnimationFrame(() => {
+        tbody.querySelectorAll(".summary-body.open").forEach(body => {
+            if (body.style.maxHeight && body.style.maxHeight !== "none") {
+                body.style.maxHeight = body.scrollHeight + "px";
+            }
+        });
+    });
+}
+
 async function loadTargetedHoldingIntelligence(ticker) {
     const normalized = String(ticker || "").trim().toUpperCase();
     if (!normalized) return;
@@ -6693,69 +6859,44 @@ async function loadHoldingIntelligence(options = {}) {
     }
 
     try {
-        // Fetch all data sources in parallel
-        const [intelRes, moveRes, verdictRes] = await Promise.all([
-            fetch("/api/ai/intelligence/all/batch"),
-            fetch("/api/ai/move-explanations/all"),
-            fetch(`/api/ai/investment-signals/all${_forcedLocalMode ? "?force_local=true" : ""}`),
-        ]);
+        const useProgressiveVerdicts = !_forcedLocalMode;
+        const intelP = fetch("/api/ai/intelligence/all/batch");
+        const moveP = fetch("/api/ai/move-explanations/all");
+        const verdictFastP = useProgressiveVerdicts
+            ? fetch("/api/ai/investment-signals/all?force_local=true")
+            : null;
+        const verdictFullP = fetch(`/api/ai/investment-signals/all${_forcedLocalMode ? "?force_local=true" : ""}`);
 
-        if (intelRes.ok) {
-            const intelData = await intelRes.json();
-            Object.entries(intelData.intelligence || {}).forEach(([ticker, intel]) => {
-                cachedIntelligence[ticker] = intel;
-            });
-            (intelData.incomplete_tickers || []).forEach(ticker => {
-                if (!intelligenceRetryState[ticker]) intelligenceRetryState[ticker] = 0;
-            });
-        }
+        const phaseOne = useProgressiveVerdicts
+            ? Promise.all([intelP, moveP, verdictFastP])
+            : Promise.all([intelP, moveP, verdictFullP]);
 
-        if (moveRes.ok) {
-            const moveData = await moveRes.json();
-            Object.entries(moveData.explanations || {}).forEach(([ticker, exp]) => {
-                cachedExplanations[ticker] = exp;
-            });
-        }
+        const [intelRes, moveRes, verdictPhaseRes] = await phaseOne;
 
-        if (verdictRes.ok) {
-            const verdictData = await verdictRes.json();
-            Object.entries(verdictData.signals || {}).forEach(([ticker, sig]) => {
-                cachedVerdicts[ticker] = sig;
-            });
-            cachedPortfolioExposure = verdictData.portfolio_exposure || null;
-            cachedMarketRegime = verdictData.regime || null;
-            applyClaudeApiStatus(verdictData.claude_live ?? null);
-            repaintOpenVerdictSparklines();
-        }
+        if (intelRes.ok) _applyIntelBatchPayload(await intelRes.json());
+        if (moveRes.ok) _applyMovePayload(await moveRes.json());
+        if (verdictPhaseRes?.ok) _applyVerdictPayload(await verdictPhaseRes.json());
 
         await verifyAndRefreshIncompleteIntelligence();
         intelligenceLoaded = updateIntelligenceLoadedState();
         intelligenceLoading = false;
         setAiChecking(false, intelligenceLoaded ? "Insights ready" : "Watching holdings", intelligenceLoaded);
 
-        // Render all expanded rows
-        Array.from(tbody.querySelectorAll("tr[data-ticker]")).forEach(mainRow => {
-            const ticker = mainRow.dataset.ticker;
-            const expandRow = mainRow.nextElementSibling;
-            if (!expandRow || !expandRow.classList.contains("summary-expand-row")) return;
-            const coverageSection = expandRow.querySelector(".intel-coverage-section");
-            const moveSection     = expandRow.querySelector(".intel-move-section");
-            const verdictSection  = expandRow.querySelector(".intel-verdict-section");
-            if (coverageSection) renderHoldingCoverage(coverageSection, cachedIntelligence[ticker]);
-            if (moveSection)     renderMoveExplainer(moveSection, cachedExplanations[ticker], cachedIntelligence[ticker]);
-            if (verdictSection)  renderAiVerdict(verdictSection, cachedVerdicts[ticker], ticker);
-        });
-
-        // If any rows were open during load, re-sync their max-height to the new content size
-        requestAnimationFrame(() => {
-            tbody.querySelectorAll(".summary-body.open").forEach(body => {
-                if (body.style.maxHeight && body.style.maxHeight !== "none") {
-                    body.style.maxHeight = body.scrollHeight + "px";
-                }
-            });
-        });
-
+        _renderAllExpandedIntelRows(tbody);
+        _syncOpenSummaryHeights(tbody);
         renderHoldings();
+
+        if (useProgressiveVerdicts) {
+            verdictFullP.then(async (verdictRes) => {
+                if (!verdictRes.ok) return;
+                _applyVerdictPayload(await verdictRes.json());
+                _renderAllExpandedIntelRows(tbody);
+                _syncOpenSummaryHeights(tbody);
+                repaintOpenVerdictSparklines();
+            }).catch(err => console.warn("Unable to upgrade AI verdicts:", err));
+        } else {
+            repaintOpenVerdictSparklines();
+        }
 
     } catch (err) {
         intelligenceLoading = false;

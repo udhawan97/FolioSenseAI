@@ -98,6 +98,7 @@ def normalize_ai_bundle(raw: dict | None) -> dict | None:
 
     return {
         "headline": str(raw.get("h") or raw.get("headline") or "").strip()[:80],
+        "plain_summary": str(raw.get("p") or raw.get("plain_summary") or "").strip()[:220],
         "overall_nudge": _int_nudge(
             raw.get("n", raw.get("overall_nudge", 0)),
             -_MAX_OVERALL_NUDGE,
@@ -203,6 +204,7 @@ def apply_ai_enhancement(sig_dict: dict, ai_raw: dict | None) -> dict:
     sig_dict["confidence_detail"] = detail
     sig_dict["ai_enhancement"] = {
         "headline": ai["headline"],
+        "plain_summary": ai.get("plain_summary", ""),
         "tags": ai["tags"],
         "note": ai["note"],
         "local_score": local_score,
