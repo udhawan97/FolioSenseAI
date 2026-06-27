@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models import AISummary, Holding
+from app.models import AISummary, Holding, VerdictSnapshot
 from app.services.ai_service import (
     MODEL,
     claude_api_heartbeat,
@@ -56,6 +56,18 @@ from app.services.verdict_ai_enhancement import (
     compact_signal_mix,
     decode_verdict_cache,
     encode_verdict_cache,
+)
+from app.services.portfolio_exposure import (
+    build_portfolio_exposure,
+    exposure_context_for_ticker,
+)
+from app.services.market_regime import get_market_regime
+from app.services.peer_relative import compute_peer_relative
+from app.services.event_calendar import build_event_context
+from app.services.verdict_calibration import (
+    calibration_footnote,
+    calibration_summary,
+    log_verdict_snapshot,
 )
 
 logger = logging.getLogger(__name__)
@@ -236,6 +248,40 @@ def _enrich_intelligence_dict(intel_dict: dict, stock_data: dict | None) -> dict
         }
     )
     return intel_dict
+
+
+def _recent_add_count(db: Session, ticker: str, days: int = 30) -> int:
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    return (
+        db.query(VerdictSnapshot)
+        .filter(
+            VerdictSnapshot.ticker == ticker.upper(),
+            VerdictSnapshot.action == "add",
+            VerdictSnapshot.generated_at >= cutoff,
+        )
+        .count()
+    )
+
+
+def _user_context(meta: dict, quote_data: dict | None, db: Session, ticker: str) -> dict:
+    quote = quote_data or {}
+    return {
+        "shares": meta.get("shares"),
+        "avg_cost": meta.get("avg_cost"),
+        "current_price": quote.get("current_price"),
+        "recent_add_count": _recent_add_count(db, ticker),
+    }
+
+
+def _holdings_for_exposure(holding_meta: dict, alloc_map: dict) -> list[dict]:
+    return [
+        {
+            "ticker": ticker,
+            "allocation_pct": alloc_map.get(ticker, 0),
+            "is_watchlist": meta.get("is_watchlist", False),
+        }
+        for ticker, meta in holding_meta.items()
+    ]
 
 
 def _active_portfolio_tickers(db: Session, portfolio_id: int = 1) -> list[str]:
@@ -681,7 +727,7 @@ _ACTION_CACHE_CODE = {"add": "a", "hold": "h", "trim": "t", "needs-data": "n"}
 _MOOD_CACHE_CODE = {
     "hot": "hot", "warm": "warm", "neutral": "neut", "cooling": "cool", "cold": "cold"
 }
-_HOLD_CLASS_CACHE_CODE = {"auto": "auto", "anchor": "anch"}
+_HOLD_CLASS_CACHE_CODE = {"auto": "auto", "anchor": "anch", "trade": "trd", "core": "core"}
 
 VERDICT_BRAND_COPY = {
     "kicker": VERDICT_BRAND_KICKER,
@@ -883,6 +929,16 @@ async def get_investment_signal_single(ticker: str, db: Session = Depends(get_db
         closes,
     )
     rec = get_analyst_recommendation(ticker, closes=closes)
+    regime = get_market_regime()
+    peer = compute_peer_relative(
+        ticker,
+        stock_data=quote_data if not quote_data.get("error") else None,
+        closes=closes,
+    )
+    event_ctx = build_event_context(
+        ticker,
+        security_type=rec.security_type,
+    )
     sig = build_investment_signal(
         rec,
         allocation_pct=allocation_pct,
@@ -890,6 +946,10 @@ async def get_investment_signal_single(ticker: str, db: Session = Depends(get_db
         stock_data=quote_data if not quote_data.get("error") else None,
         hold_class=hold_class,
         timing=timing,
+        regime=regime,
+        peer_relative=peer,
+        event_context=event_ctx,
+        user_context=_user_context(holding, quote_data, db, ticker),
     )
     sig_dict = signal_to_dict(sig)
     scan_snapshot_changed = attach_since_last_scan(db, ticker, sig_dict)
@@ -920,6 +980,12 @@ async def get_all_investment_signals(  # pylint: disable=too-many-statements,too
     history_map = get_batched_history_closes(active_tickers)
     alloc_map = _compute_allocation_pcts(holding_meta, quotes)
 
+    portfolio_exposure = build_portfolio_exposure(
+        _holdings_for_exposure(holding_meta, alloc_map),
+        quotes=quotes,
+    )
+    regime = get_market_regime()
+
     signals: dict[str, dict] = {}
     missing_quip_tickers: list[str] = []
     scan_snapshot_changed = False
@@ -938,6 +1004,18 @@ async def get_all_investment_signals(  # pylint: disable=too-many-statements,too
                 closes,
             )
             rec = get_analyst_recommendation(ticker, closes=closes)
+            peer = compute_peer_relative(
+                ticker,
+                own_percentile=(rec.price_signal or {}).get("percentile"),
+                zone=(rec.price_signal or {}).get("priceZoneLabel"),
+                stock_data=quote_data if not quote_data.get("error") else None,
+                closes=closes,
+            )
+            event_ctx = build_event_context(
+                ticker,
+                security_type=rec.security_type,
+            )
+            exp_ctx = exposure_context_for_ticker(portfolio_exposure, ticker)
             sig = build_investment_signal(
                 rec,
                 allocation_pct=allocation_pct,
@@ -945,8 +1023,28 @@ async def get_all_investment_signals(  # pylint: disable=too-many-statements,too
                 stock_data=quote_data if not quote_data.get("error") else None,
                 hold_class=hold_class,
                 timing=timing,
+                regime=regime,
+                peer_relative=peer,
+                exposure_context=exp_ctx,
+                event_context=event_ctx,
+                user_context=_user_context(meta, quote_data, db, ticker),
             )
             sig_dict = signal_to_dict(sig)
+            footnote = calibration_footnote(
+                db, action=sig.action, confidence=sig.confidence,
+            )
+            if footnote:
+                sig_dict["calibration_footnote"] = footnote
+            log_verdict_snapshot(
+                db,
+                ticker=ticker,
+                action=sig.action,
+                confidence=sig.confidence,
+                local_score=sig.confidence,
+                ai_score=None,
+                price_at_scan=quote_data.get("current_price"),
+                hold_class=hold_class,
+            )
             scan_snapshot_changed = (
                 attach_since_last_scan(db, ticker, sig_dict) or scan_snapshot_changed
             )
@@ -1142,9 +1240,83 @@ async def get_all_investment_signals(  # pylint: disable=too-many-statements,too
     return {
         "signals": signals,
         "count": len(signals),
+        "portfolio_exposure": portfolio_exposure,
         "portfolio_health": portfolio_health,
+        "calibration_summary": calibration_summary(db),
+        "regime": regime,
         "claude_live": claude_live,
     }
+
+
+@router.get("/portfolio-exposure")
+async def get_portfolio_exposure(db: Session = Depends(get_db)):
+    """Look-through sector, country, and theme exposure for the active portfolio."""
+    holding_meta = _holding_meta(db)
+    tickers = list(holding_meta.keys())
+    quotes = {q["ticker"]: q for q in get_all_quotes(tickers)}
+    alloc_map = _compute_allocation_pcts(holding_meta, quotes)
+    exposure = build_portfolio_exposure(
+        _holdings_for_exposure(holding_meta, alloc_map),
+        quotes=quotes,
+    )
+    return exposure
+
+
+@router.get("/verdict-calibration")
+async def get_verdict_calibration(db: Session = Depends(get_db)):
+    """Lightweight calibration buckets from logged verdict snapshots."""
+    return calibration_summary(db)
+
+
+@router.get("/intelligence/{ticker}/deep")
+async def get_holding_intelligence_deep(ticker: str):
+    """
+    Tier-2 intelligence fetch — richer data for expanded holding panel.
+    Does not block initial verdict render; called async on expand.
+    """
+    ticker = ticker.upper()
+    stock_data = get_stock_data(ticker)
+    if stock_data.get("error"):
+        raise HTTPException(status_code=404, detail=QUOTE_FETCH_ERROR)
+
+    intel = get_holding_intelligence(ticker, stock_data)
+    intel_dict = _enrich_intelligence_dict(intelligence_to_dict(intel), stock_data)
+
+    closes = get_cached_history_closes(ticker)
+    peer = compute_peer_relative(
+        ticker,
+        stock_data=stock_data,
+        closes=closes,
+    )
+
+    deep: dict = {
+        "ticker": ticker,
+        "peer_relative": peer,
+        "revenue_growth": stock_data.get("revenue_growth"),
+        "earnings_growth": stock_data.get("earnings_growth"),
+        "eps_trailing": stock_data.get("eps_trailing"),
+        "eps_forward": stock_data.get("eps_forward"),
+    }
+
+    if intel_dict.get("coverage_type") != "equity":
+        from app.services.holding_intelligence import _try_yfinance_enrichment
+        live_s, live_c, live_h = _try_yfinance_enrichment(ticker)
+        if live_h:
+            deep["top_holdings_fresh"] = [
+                {"ticker": h.ticker, "name": h.name, "weight": h.weight}
+                for h in live_h[:15]
+            ]
+        if live_s:
+            deep["sectors_fresh"] = [{"name": s.name, "weight": s.weight} for s in live_s[:8]]
+
+    event_ctx = build_event_context(
+        ticker,
+        security_type="ETF" if intel.coverage_type.startswith("etf") else "STOCK",
+    )
+    if event_ctx:
+        deep["events"] = event_ctx
+
+    return {"deep": deep, "generated_at": datetime.now(timezone.utc).isoformat()}
 
 
 @router.get("/analyst-recommendation/{ticker}")

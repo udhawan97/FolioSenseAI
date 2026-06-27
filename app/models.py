@@ -104,6 +104,23 @@ class RealizedTrade(Base):
     created_at = Column(DateTime, default=func.now())
 
 
+class VerdictSnapshot(Base):
+    """
+    Point-in-time verdict log for calibration — one row per ticker per scan.
+    """
+    __tablename__ = "verdict_snapshots"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ticker = Column(String(10), nullable=False, index=True)
+    action = Column(String(20), nullable=False)
+    confidence = Column(Integer, nullable=False, default=0)
+    local_score = Column(Integer, nullable=True)
+    ai_score = Column(Integer, nullable=True)
+    price_at_scan = Column(Float, nullable=True)
+    hold_class = Column(String(20), nullable=False, default="auto")
+    generated_at = Column(DateTime, default=func.now(), index=True)
+
+
 class PortfolioSnapshot(Base):
     """
     A point-in-time snapshot of portfolio totals, used to chart cumulative

@@ -59,3 +59,33 @@ def ensure_startup_migrations():
                     "ADD COLUMN hold_class VARCHAR(20) NOT NULL DEFAULT 'auto'"
                 )
             )
+        tables = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table'")
+            ).fetchall()
+        }
+        if "verdict_snapshots" not in tables:
+            conn.execute(
+                text(
+                    "CREATE TABLE verdict_snapshots ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "ticker VARCHAR(10) NOT NULL, "
+                    "action VARCHAR(20) NOT NULL, "
+                    "confidence INTEGER NOT NULL DEFAULT 0, "
+                    "local_score INTEGER, "
+                    "ai_score INTEGER, "
+                    "price_at_scan FLOAT, "
+                    "hold_class VARCHAR(20) NOT NULL DEFAULT 'auto', "
+                    "generated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
+                )
+            )
+            conn.execute(
+                text("CREATE INDEX ix_verdict_snapshots_ticker ON verdict_snapshots (ticker)")
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX ix_verdict_snapshots_generated_at "
+                    "ON verdict_snapshots (generated_at)"
+                )
+            )

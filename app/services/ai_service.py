@@ -130,7 +130,11 @@ def generate_verdict_ai_bundles(signals: list[dict]) -> dict[str, dict]:
         "  h: headline ≤8 plain words for the card\n"
         "  t: up to 2 short tags (e.g. steady, core, watch)\n"
         "  w: optional watch note ≤20 words (plain English)\n"
-        "Rules: never invent prices or percentages; nudge only when mix/reason justify it; "
+        "  agrees: boolean — true if you agree with local action/confidence\n"
+        "  tension: short phrase when inputs conflict (empty string if none)\n"
+        "  flip_if: optional {metric, direction} when a specific change would flip the call\n"
+        "Rules: never invent prices or percentages; only set n/cn when tension is non-empty "
+        "OR agrees is false — otherwise n=0 and cn=[0,0,0,0]; "
         "hold calls usually stay near local score; BOOK ticker gets q only (no n/cn/h/t/w). "
         "Return ONLY JSON."
     )

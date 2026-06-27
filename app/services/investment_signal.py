@@ -48,7 +48,7 @@ class InvestmentSignal:  # pylint: disable=too-many-instance-attributes
 
 
 def signal_to_dict(sig: InvestmentSignal) -> dict:
-    return {
+    out = {
         "ticker": sig.ticker,
         "action": sig.action,
         "label": sig.label,
@@ -67,6 +67,11 @@ def signal_to_dict(sig: InvestmentSignal) -> dict:
         "timing": sig.timing,
         "confidence_detail": sig.confidence_detail,
     }
+    for key in ("regime_context", "peer_relative", "events", "exposure_context", "calibration_footnote"):
+        val = getattr(sig, key, None)
+        if val is not None:
+            out[key] = val
+    return out
 
 
 def _clamp(value: int, lo: int = 0, hi: int = 100) -> int:
@@ -315,7 +320,160 @@ _COMPONENT_META: dict[str, dict[str, str]] = {
 _STOCK_COMPONENT_WEIGHTS = {"analyst": 32, "valuation": 26, "momentum": 24, "quality": 18}
 _ETF_COMPONENT_WEIGHTS = {"analyst": 8, "valuation": 34, "momentum": 26, "quality": 32}
 
+# Time horizon presets — same four inputs, different emphasis
+_HORIZON_WEIGHTS: dict[str, dict[str, int]] = {
+    "trade": {"analyst": 18, "valuation": 22, "momentum": 38, "quality": 22},
+    "core": {"analyst": 24, "valuation": 34, "momentum": 16, "quality": 26},
+    "anchor": {"analyst": 20, "valuation": 28, "momentum": 18, "quality": 34},
+    "auto": {},  # use stock/etf defaults
+}
+
 _MOOD_SCORES = {"hot": 84, "warm": 70, "neutral": 50, "cooling": 36, "cold": 22}
+
+
+def _horizon_weights(hold_class: str, is_etf: bool) -> dict[str, int]:
+    preset = _HORIZON_WEIGHTS.get(hold_class) or {}
+    if preset:
+        return dict(preset)
+    return dict(_ETF_COMPONENT_WEIGHTS if is_etf else _STOCK_COMPONENT_WEIGHTS)
+
+
+def _compute_confidence_range(
+    components: list[dict],
+    modifiers: list[dict],
+    final_score: int,
+) -> tuple[int, int]:
+    """Derive low/high band from component spread and modifier uncertainty."""
+    if not components:
+        return final_score, final_score
+    scores = [int(c.get("score") or 0) for c in components]
+    spread = max(scores) - min(scores) if scores else 0
+    mod_uncertainty = sum(abs(int(m.get("delta") or 0)) for m in modifiers) // 2
+    half_band = max(2, min(12, spread // 3 + mod_uncertainty // 2))
+    low = _clamp(final_score - half_band)
+    high = _clamp(final_score + half_band)
+    if high - low < 4 and spread >= 20:
+        low = _clamp(final_score - 4)
+        high = _clamp(final_score + 4)
+    return low, high
+
+
+def _build_scenarios(
+    action: str,
+    zone: str | None,
+    market_mood: str,
+    final_score: int,
+) -> dict[str, str]:
+    """Deterministic Base/Bull/Bear one-liners from action + zone + mood."""
+    mood_word = {
+        "hot": "momentum stays hot",
+        "warm": "trend holds up",
+        "neutral": "price stays range-bound",
+        "cooling": "momentum fades",
+        "cold": "selling pressure continues",
+    }.get(market_mood, "conditions stay similar")
+
+    zone_word = zone or "fair value"
+    action_phrases = {
+        "add": {
+            "base": f"If {zone_word.lower()} holds and {mood_word}, adding still looks reasonable.",
+            "bull": "A sharper rebound or positive surprise could make this an strong entry.",
+            "bear": "If momentum breaks down, the add case weakens — patience may pay.",
+        },
+        "trim": {
+            "base": f"Richness near {zone_word.lower()} with {mood_word} supports a light trim.",
+            "bull": "If the trend re-accelerates, trimming early could mean leaving gains.",
+            "bear": "A deeper pullback would validate trimming before further weakness.",
+        },
+        "hold": {
+            "base": f"Mixed inputs at ~{final_score}% — sitting tight is the default.",
+            "bull": "Clearer bullish signals could flip this toward Add.",
+            "bear": "Further deterioration could push toward Trim.",
+        },
+    }
+    phrases = action_phrases.get(action, action_phrases["hold"])
+    return {"base": phrases["base"], "bull": phrases["bull"], "bear": phrases["bear"]}
+
+
+def _apply_user_grounding(
+    sig: InvestmentSignal,
+    *,
+    user_context: dict | None,
+    is_watchlist: bool,
+) -> None:
+    """Tax hints, pacing, and research labels from user-specific data."""
+    if is_watchlist:
+        sig.risks = [
+            r for r in sig.risks
+            if "concentration" not in r.lower() and "large position" not in r.lower()
+        ]
+        if "Paper idea" not in " ".join(sig.reasons):
+            sig.reasons = _prepend_reason(sig.reasons, "Paper idea — research mode, no live P&L")
+        return
+
+    if not user_context:
+        return
+
+    current_price = _num(user_context.get("current_price"))
+    avg_cost = _num(user_context.get("avg_cost"))
+    shares = _num(user_context.get("shares"))
+    recent_add_count = int(user_context.get("recent_add_count") or 0)
+
+    if (
+        sig.action == "trim"
+        and current_price
+        and avg_cost
+        and shares
+        and current_price > avg_cost * 1.25
+    ):
+        gain_pct = (current_price - avg_cost) / avg_cost * 100
+        sig.risks.append(
+            f"Large unrealized gain (~{gain_pct:.0f}%) — consider tax lot strategy before trimming"
+        )
+        sig.source_fields.append("avg_cost")
+
+    if sig.action == "add" and recent_add_count >= 2:
+        sig.action = "hold"
+        sig.label = "Hold"
+        sig.reasons = _prepend_reason(
+            sig.reasons,
+            "You added this recently — pacing suggests waiting before another add",
+        )
+        sig.confidence = _clamp(min(sig.confidence, 52))
+        sig.source_fields.append("recent_add_pacing")
+
+
+def _exposure_modifier(
+    exposure_context: dict | None,
+    action: str,
+) -> dict | None:
+    if not exposure_context or action != "add":
+        return None
+    crowded = exposure_context.get("crowded_themes") or []
+    sector = exposure_context.get("sector_already_heavy")
+    if crowded:
+        theme = crowded[0]
+        pct = theme.get("weight_pct", 0)
+        return {
+            "label": f"Book already heavy: {theme.get('theme', 'overlap')}",
+            "delta": -8 if pct >= 35 else -5,
+            "tip_title": "Look-through exposure",
+            "tip_body": (
+                f"{theme.get('label', '')}. Adding more increases hidden overlap "
+                "across your ETFs — the score is adjusted down."
+            ),
+        }
+    if sector:
+        return {
+            "label": f"Already {sector.get('weight_pct', 0):.0f}% {sector.get('name', '')}",
+            "delta": -6,
+            "tip_title": "Sector overlap",
+            "tip_body": (
+                f"Your book already has ~{sector.get('weight_pct')}% look-through "
+                f"exposure to {sector.get('name')} via other holdings."
+            ),
+        }
+    return None
 
 
 def _confidence_level(score: int) -> str:
@@ -463,12 +621,30 @@ def _attach_confidence_detail(
     etf_quality_score: int | None = None,
     allocation_pct: float | None = None,
     is_watchlist: bool = False,
+    regime: dict | None = None,
+    peer_relative: dict | None = None,
+    exposure_context: dict | None = None,
+    event_context: dict | None = None,
 ) -> None:
     """Compute transparent weighted confidence and attach layman-readable detail."""
     is_etf = rec.security_type == "ETF"
-    weights = _ETF_COMPONENT_WEIGHTS if is_etf else _STOCK_COMPONENT_WEIGHTS
+    weights = _horizon_weights(sig.hold_class, is_etf)
+
+    if regime and regime.get("component_adjustments"):
+        from app.services.market_regime import apply_regime_to_weights
+        weights = apply_regime_to_weights(weights, regime["component_adjustments"])
 
     mix_map = {item.get("label"): item.get("stance") for item in sig.signal_mix}
+
+    val_score = _valuation_component_score(
+        action=sig.action,
+        upside=upside,
+        zone=zone,
+        percentile=percentile,
+    )
+    if peer_relative:
+        from app.services.peer_relative import peer_valuation_nudge
+        val_score = _clamp(val_score + peer_valuation_nudge(peer_relative, sig.action))
 
     components = [
         _component_payload(
@@ -479,12 +655,7 @@ def _attach_confidence_detail(
         ),
         _component_payload(
             "valuation",
-            _valuation_component_score(
-                action=sig.action,
-                upside=upside,
-                zone=zone,
-                percentile=percentile,
-            ),
+            val_score,
             weights["valuation"],
             mix_map.get("Valuation", "neutral"),
         ),
@@ -521,6 +692,21 @@ def _attach_confidence_detail(
             ),
         })
 
+    exp_mod = _exposure_modifier(exposure_context, sig.action)
+    if exp_mod:
+        modifiers.append(exp_mod)
+
+    if regime and regime.get("label"):
+        adj = regime.get("component_adjustments") or {}
+        net = sum(adj.values())
+        if net != 0:
+            modifiers.append({
+                "label": f"Market backdrop: {regime.get('label', '')}",
+                "delta": _clamp(net // 3, -4, 4),
+                "tip_title": regime.get("tip_title", "Market backdrop"),
+                "tip_body": regime.get("tip_body", ""),
+            })
+
     if sig.hold_class == "anchor":
         pre_anchor = base + sum(m["delta"] for m in modifiers)
         anchor_target = _clamp(min(max(pre_anchor, 45), 68))
@@ -537,6 +723,18 @@ def _attach_confidence_detail(
             })
 
     final = _clamp(base + sum(m["delta"] for m in modifiers))
+
+    if event_context and sig.action == "add":
+        cap = event_context.get("confidence_cap")
+        if cap is not None and final > cap:
+            modifiers.append({
+                "label": "Earnings window discount",
+                "delta": cap - final,
+                "tip_title": event_context.get("tip_title", "Upcoming earnings"),
+                "tip_body": event_context.get("tip_body", ""),
+            })
+            final = cap
+
     sig.confidence = final
 
     agreement = {"supporting": 0, "neutral": 0, "opposing": 0}
@@ -549,8 +747,14 @@ def _attach_confidence_detail(
         else:
             agreement["neutral"] += 1
 
+    range_low, range_high = _compute_confidence_range(components, modifiers, final)
+    scenarios = _build_scenarios(sig.action, zone, sig.market_mood, final)
+
     sig.confidence_detail = {
         "score": final,
+        "range_low": range_low,
+        "range_high": range_high,
+        "scenarios": scenarios,
         "level": _confidence_level(final),
         "summary": _confidence_summary(final, sig.action),
         "components": components,
@@ -1223,6 +1427,62 @@ def _build_etf_signal(
     return sig
 
 
+def _extract_signal_params(rec: AnalystRec) -> dict:
+    """Pull zone/percentile/upside/quality from AnalystRec for confidence detail."""
+    price_signal = rec.price_signal or {}
+    quality = rec.etf_quality or {}
+    zone = (price_signal.get("priceZoneLabel") or None)
+    if zone:
+        zone = zone.strip()
+    return {
+        "zone": zone,
+        "percentile": price_signal.get("percentile"),
+        "upside": rec.target_upside_pct,
+        "etf_quality_score": quality.get("score"),
+    }
+
+
+def _finalize_signal_context(
+    sig: InvestmentSignal,
+    rec: AnalystRec,
+    *,
+    allocation_pct: Optional[float] = None,
+    is_watchlist: bool = False,
+    regime: dict | None = None,
+    peer_relative: dict | None = None,
+    exposure_context: dict | None = None,
+    event_context: dict | None = None,
+    user_context: dict | None = None,
+) -> InvestmentSignal:
+    params = _extract_signal_params(rec)
+    _apply_user_grounding(sig, user_context=user_context, is_watchlist=is_watchlist)
+    if event_context:
+        for note in [event_context.get("risk_note"), event_context.get("wait_reason")]:
+            if note and note not in sig.risks and sig.action == "add":
+                sig.risks.append(note)
+        sig.risks = sig.risks[:2]
+    _attach_confidence_detail(
+        sig,
+        rec=rec,
+        allocation_pct=allocation_pct,
+        is_watchlist=is_watchlist,
+        regime=regime,
+        peer_relative=peer_relative,
+        exposure_context=exposure_context,
+        event_context=event_context,
+        **params,
+    )
+    if regime:
+        sig.regime_context = regime  # type: ignore[attr-defined]
+    if peer_relative:
+        sig.peer_relative = peer_relative  # type: ignore[attr-defined]
+    if event_context:
+        sig.events = event_context  # type: ignore[attr-defined]
+    if exposure_context:
+        sig.exposure_context = exposure_context  # type: ignore[attr-defined]
+    return sig
+
+
 def build_investment_signal(
     rec: AnalystRec,
     *,
@@ -1231,6 +1491,11 @@ def build_investment_signal(
     stock_data: dict | None = None,
     hold_class: str = "auto",
     timing: dict | None = None,
+    regime: dict | None = None,
+    peer_relative: dict | None = None,
+    exposure_context: dict | None = None,
+    event_context: dict | None = None,
+    user_context: dict | None = None,
 ) -> InvestmentSignal:
     """
     Build a deterministic InvestmentSignal from an AnalystRec + holding context.
@@ -1238,20 +1503,32 @@ def build_investment_signal(
     """
     try:
         if rec.security_type == "ETF" and rec.action == "etf-quality":
-            return _build_etf_signal(rec, allocation_pct, is_watchlist, hold_class, timing)
-
-        if rec.action in ("buy", "hold", "sell"):
-            return _build_stock_signal(
+            sig = _build_etf_signal(rec, allocation_pct, is_watchlist, hold_class, timing)
+        elif rec.action in ("buy", "hold", "sell"):
+            sig = _build_stock_signal(
                 rec, allocation_pct, is_watchlist, stock_data, hold_class, timing
             )
-
-        # Stock with no analyst coverage — try FCF yield fallback
-        if rec.action in ("unavailable",):
-            return _build_stock_no_analyst_signal(
+        elif rec.action in ("unavailable",):
+            sig = _build_stock_no_analyst_signal(
                 rec, allocation_pct, is_watchlist, stock_data, hold_class, timing
             )
+        else:
+            return _needs_data(rec.ticker)
 
-        return _needs_data(rec.ticker)
+        if sig.action == "needs-data":
+            return sig
+
+        return _finalize_signal_context(
+            sig,
+            rec,
+            allocation_pct=allocation_pct,
+            is_watchlist=is_watchlist,
+            regime=regime,
+            peer_relative=peer_relative,
+            exposure_context=exposure_context,
+            event_context=event_context,
+            user_context=user_context,
+        )
 
     except Exception as exc:  # pylint: disable=broad-except
         logger.warning(

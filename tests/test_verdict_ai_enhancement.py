@@ -39,11 +39,35 @@ def test_apply_ai_enhancement_adjusts_confidence():
     sig = build_investment_signal(_etf_rec("Fair"))
     base = sig.confidence
     sig_dict = signal_to_dict(sig)
-    apply_ai_enhancement(sig_dict, {"n": 6, "cn": [0, 2, 2, 4], "h": "Core hold", "t": ["steady"]})
+    apply_ai_enhancement(sig_dict, {
+        "n": 6, "cn": [0, 2, 2, 4], "h": "Core hold", "t": ["steady"],
+        "tension": "Momentum cold while valuation fair",
+    })
     assert sig_dict["confidence"] >= base
     assert sig_dict["ai_enhancement"]["delta"] == sig_dict["confidence"] - base
     assert sig_dict["ai_enhancement"]["headline"] == "Core hold"
+    assert sig_dict["ai_enhancement"]["nudge_applied"] is True
     assert sig_dict["confidence_detail"]["ai_applied"] is True
+
+
+def test_apply_ai_enhancement_skips_nudge_without_tension():
+    sig = build_investment_signal(_etf_rec("Fair"))
+    base = sig.confidence
+    sig_dict = signal_to_dict(sig)
+    apply_ai_enhancement(sig_dict, {"n": 6, "cn": [0, 2, 2, 4], "agrees": True, "tension": ""})
+    assert sig_dict["confidence"] == base
+    assert sig_dict["ai_enhancement"]["nudge_applied"] is False
+
+
+def test_tension_and_flip_if_preserved():
+    ai = normalize_ai_bundle({
+        "tension": "Valuation rich",
+        "agrees": False,
+        "flip_if": {"metric": "Price vs 50-day", "direction": "reclaims above"},
+    })
+    assert ai["tension"] == "Valuation rich"
+    assert ai["agrees"] is False
+    assert ai["flip_if"]["metric"] == "Price vs 50-day"
 
 
 def test_normalize_ai_bundle_clamps_nudges():

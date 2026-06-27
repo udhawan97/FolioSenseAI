@@ -394,6 +394,9 @@ function _defaultScanSubtitle() {
 // Rating state: stock analyst ratings or ETF quality labels
 let cachedRecommendations = {};  // ticker → rec object from /api/ai/analyst-recommendations/all
 let cachedVerdicts = {};         // ticker → verdict object from /api/ai/investment-signals/all
+let cachedPortfolioExposure = null;
+let cachedMarketRegime = null;
+const cachedDeepIntel = {};      // ticker → deep read payload
 let aiCheckInterval = null;
 
 const AI_CHECK_MESSAGES = [
@@ -2162,6 +2165,15 @@ function toggleSummaryRow(mainRow) {
     if (!isOpen) {
         mainRow.classList.remove("has-intel-ready");
         holdingPetReaction(mainRow);
+        const ticker = mainRow.dataset.ticker;
+        if (ticker) {
+            setTimeout(() => {
+                loadDeepIntelligence(ticker).then(data => {
+                    const coverage = expandRow.querySelector(".intel-coverage-section");
+                    if (coverage && data) _injectDeepIntelSection(coverage, data);
+                });
+            }, 400);
+        }
     }
 }
 
@@ -3651,6 +3663,185 @@ function _anchorTipAttrs() {
         data-tip-icon="bi-anchor"`;
 }
 
+function _renderHorizonPill(verdict, ticker) {
+    const hc = verdict?.hold_class || "auto";
+    if (hc === "anchor") return "";
+    const labels = { auto: "Auto", trade: "Trade", core: "Core", anchor: "Anchor" };
+    const label = labels[hc] || "Auto";
+    const holding = latestHoldings.find(h => h.ticker === ticker);
+    if (!holding?.id) return "";
+    return `<span class="verdict-anchor-sep" aria-hidden="true">|</span>
+        <button class="verdict-horizon-pill tip-trigger" type="button"
+            onclick="cycleHorizonHold(event, ${holding.id}, ${inlineJsString(ticker)})"
+            data-tip-title="Time horizon"
+            data-tip-body="Trade weights momentum and events higher. Core favors quality and valuation. Auto uses default weights. Anchor suppresses trim calls."
+            data-tip-icon="bi-hourglass-split">
+            <i class="bi bi-hourglass-split" aria-hidden="true"></i> ${escapeHtml(label)}
+        </button>`;
+}
+
+function _renderMarketBackdropChip(verdict) {
+    const regime = verdict?.regime_context || cachedMarketRegime;
+    if (!regime?.label) return "";
+    return `<span class="verdict-context-chip verdict-regime-chip">
+        <i class="bi bi-globe2" aria-hidden="true"></i> ${escapeHtml(regime.label)}
+        ${_verdictTip({
+            title: regime.tip_title || "Market backdrop",
+            body: regime.tip_body || "Current macro environment shifts how much each input counts.",
+            icon: "bi-globe2",
+        })}
+    </span>`;
+}
+
+function _renderPeerRelativeLine(verdict) {
+    const peer = verdict?.peer_relative;
+    if (!peer?.vs_own_range && peer?.peer_comparison === "unavailable") return "";
+    const comparison = {
+        cheaper_than_peers: "Cheaper vs peers",
+        richer_than_peers: "Richer vs peers",
+        in_line_with_peers: "In line with peers",
+    }[peer.peer_comparison] || peer.vs_own_label || "";
+    if (!comparison) return "";
+    return `<div class="verdict-peer-line">
+        <span class="verdict-face-label">${escapeHtml(peer.peer_label || "Vs peers")}</span>
+        <span class="verdict-peer-copy">${escapeHtml(comparison)}</span>
+        ${_verdictTip({
+            title: peer.tip_title || "Vs peers",
+            body: peer.tip_body || "",
+            icon: "bi-bar-chart-steps",
+        })}
+    </div>`;
+}
+
+function _renderEventChip(verdict) {
+    const ev = verdict?.events;
+    if (!ev?.label) return "";
+    return `<span class="verdict-context-chip verdict-event-chip">
+        <i class="bi bi-calendar-event" aria-hidden="true"></i> ${escapeHtml(ev.label)}
+        ${_verdictTip({
+            title: ev.tip_title || "Upcoming event",
+            body: ev.tip_body || "",
+            icon: "bi-calendar-event",
+        })}
+    </span>`;
+}
+
+function _renderConfidenceRange(verdict, conf) {
+    const detail = verdict?.confidence_detail;
+    const low = detail?.range_low;
+    const high = detail?.range_high;
+    if (!Number.isFinite(low) || !Number.isFinite(high) || high - low < 3) return "";
+    return `<span class="verdict-conf-range">${low}–${high}% band</span>`;
+}
+
+function _renderScenarios(verdict) {
+    const scenarios = verdict?.confidence_detail?.scenarios;
+    if (!scenarios?.base) return "";
+    const pills = [
+        { key: "base", label: "Base", text: scenarios.base },
+        { key: "bull", label: "Bull", text: scenarios.bull },
+        { key: "bear", label: "Bear", text: scenarios.bear },
+    ];
+    return `<div class="verdict-scenarios-row">
+        ${pills.map(p => `<span class="verdict-scenario-pill tip-trigger" type="button"
+            data-tip-title="${escapeHtml(p.label)} case"
+            data-tip-body="${escapeHtml(p.text)}"
+            data-tip-icon="bi-signpost-2">${escapeHtml(p.label)}</span>`).join("")}
+    </div>`;
+}
+
+function _renderClaudeTension(verdict) {
+    const ai = verdict?.ai_enhancement;
+    if (!_isAiVerdictActive(verdict) || !ai?.tension) return "";
+    const flip = ai.flip_if;
+    const flipBody = flip
+        ? `Would reconsider if ${flip.metric || "signal"} ${flip.direction || "changes"}.`
+        : "";
+    return `<div class="verdict-tension-row">
+        <span class="verdict-tension-label"><i class="bi bi-flag" aria-hidden="true"></i> Claude flag</span>
+        <span class="verdict-tension-copy">${escapeHtml(ai.tension)}</span>
+        ${_verdictTip({
+            title: "Claude disagreement",
+            body: `${ai.tension}${flipBody ? " " + flipBody : ""}`,
+            icon: "bi-flag",
+            variant: "ai",
+        })}
+    </div>`;
+}
+
+function _renderCalibrationFootnote(verdict) {
+    const note = verdict?.calibration_footnote;
+    if (!note?.text) return "";
+    return `<div class="verdict-calibration-footnote">
+        <span class="verdict-cal-footnote-text">${escapeHtml(note.text)}</span>
+        ${_verdictTip({
+            title: note.tip_title || "Calibration",
+            body: `${note.tip_body || ""} ${note.caveat || ""}`.trim(),
+            icon: "bi-graph-up-arrow",
+        })}
+    </div>`;
+}
+
+function _renderBookExposureStrip() {
+    const exp = cachedPortfolioExposure;
+    if (!exp?.sector_exposure?.length) return "";
+    const top = exp.sector_exposure.slice(0, 4);
+    const pills = top.map(s =>
+        `<span class="book-exp-pill" style="--pill-pct:${Math.min(100, s.weight_pct)}%">
+            ${escapeHtml(s.name)} ${s.weight_pct.toFixed(0)}%
+        </span>`
+    ).join("");
+    const dupNote = (exp.duplicate_flags || []).length
+        ? ` · ${exp.duplicate_flags.length} overlap flag(s)`
+        : "";
+    return `<div class="verdict-book-exposure">
+        <span class="verdict-face-label">Your book exposure</span>
+        <div class="book-exp-pills">${pills}</div>
+        ${_verdictTip({
+            title: "Look-through math",
+            body: "Each holding's sector/country weights × your allocation %, summed across the portfolio. Reveals hidden overlap (e.g. VOO + QQQ both loading US tech).",
+            icon: "bi-layers",
+        })}
+        ${dupNote ? `<span class="book-exp-dup">${escapeHtml(dupNote.trim())}</span>` : ""}
+    </div>`;
+}
+
+async function loadDeepIntelligence(ticker) {
+    if (cachedDeepIntel[ticker]) return cachedDeepIntel[ticker];
+    try {
+        const res = await fetch(`/api/ai/intelligence/${encodeURIComponent(ticker)}/deep`);
+        if (!res.ok) return null;
+        const data = await res.json();
+        cachedDeepIntel[ticker] = data;
+        return data;
+    } catch (_) {
+        return null;
+    }
+}
+
+function _injectDeepIntelSection(section, deepData) {
+    if (!deepData?.deep || section.querySelector(".intel-deep-section")) return;
+    const deep = deepData.deep;
+    const peer = deep.peer_relative;
+    const rows = [];
+    if (peer?.vs_peer_median != null) {
+        rows.push(`Peer median percentile: ${peer.vs_peer_median}%`);
+    }
+    if (deep.revenue_growth != null) {
+        rows.push(`Revenue growth: ${(deep.revenue_growth * 100).toFixed(1)}%`);
+    }
+    if (deep.eps_forward != null) {
+        rows.push(`Forward EPS: ${Number(deep.eps_forward).toFixed(2)}`);
+    }
+    if (!rows.length) return;
+    const wrap = document.createElement("div");
+    wrap.className = "intel-deep-section";
+    wrap.innerHTML = `<div class="intel-label"><i class="bi bi-zoom-in"></i> Deep read</div>
+        ${rows.map(r => `<div class="intel-spec-row"><span>${escapeHtml(r)}</span></div>`).join("")}`;
+    const coverage = section.closest(".intel-grid")?.querySelector(".intel-coverage-section");
+    if (coverage) coverage.appendChild(wrap);
+}
+
 function _renderAnchorPill(verdict, ticker) {
     const isAnchor = verdict?.hold_class === "anchor";
     const holding = latestHoldings.find(h => h.ticker === ticker);
@@ -3896,8 +4087,12 @@ function renderAiVerdict(section, verdict, ticker) {
     const shouldReveal = !alreadySettled && !reducedMotion;
     const brandCopy = _verdictBrand(verdict);
     const anchorPill = _renderAnchorPill(verdict, ticker);
+    const horizonPill = _renderHorizonPill(verdict, ticker);
     const isAi = _isAiVerdictActive(verdict);
     const aiClass = isAi ? " is-ai-enhanced" : "";
+    const confDetail = verdict.confidence_detail || {};
+    const displayConf = conf;
+    const rangeHtml = _renderConfidenceRange(verdict, conf);
 
     const reasonsHtml = reasons.map(r =>
         `<div class="intel-spec-row verdict-reason-row">
@@ -3932,7 +4127,13 @@ function renderAiVerdict(section, verdict, ticker) {
                 <span class="verdict-header-sep" aria-hidden="true">·</span>
                 <span class="verdict-header-ticker">${escapeHtml(ticker)}</span>
                 ${anchorPill}
+                ${horizonPill}
             </div>
+            <div class="verdict-context-row">
+                ${_renderMarketBackdropChip(verdict)}
+                ${_renderEventChip(verdict)}
+            </div>
+            ${_renderBookExposureStrip()}
             <div class="verdict-hero">
                 <div class="verdict-die ${dieClass}" aria-hidden="true">
                     <img src="/static/img/brand/folio-orbit-icon.svg" alt="">
@@ -3948,7 +4149,8 @@ function renderAiVerdict(section, verdict, ticker) {
                 </div>
                 <div class="verdict-hero-conf">
                     ${isAi ? _renderAiOrbital(conf) : ""}
-                    <span class="verdict-conf-pct" data-conf-target="${conf}">${initialConf}</span>
+                    <span class="verdict-conf-pct" data-conf-target="${displayConf}">${initialConf}</span>
+                    ${rangeHtml}
                     ${_renderAiDeltaBadge(verdict)}
                     <span class="verdict-conf-label">${confLevel ? `<span class="verdict-conf-level">${escapeHtml(confLevel)}</span>` : ""} signal strength ${_confidenceTip(isAi)}</span>
                 </div>
@@ -3964,7 +4166,10 @@ function renderAiVerdict(section, verdict, ticker) {
                 </div>
             </div>
             ${_renderAiSynthesisPanel(verdict)}
+            ${_renderClaudeTension(verdict)}
             ${_renderConfidenceStats(verdict)}
+            ${_renderPeerRelativeLine(verdict)}
+            ${_renderScenarios(verdict)}
             ${_renderVerdictSparkline(verdict, ticker)}
             ${_renderFlipTriggers(verdict)}
             ${_renderTimingLine(verdict)}
@@ -3973,6 +4178,7 @@ function renderAiVerdict(section, verdict, ticker) {
             ${_renderQuip(quip)}
             ${reasonsHtml ? `<div class="intel-spec-rows verdict-spec-rows verdict-reasons-group">${reasonsHtml}</div>` : ""}
             ${risksHtml ? `<div class="intel-spec-rows verdict-spec-rows verdict-risks-group">${risksHtml}</div>` : ""}
+            ${_renderCalibrationFootnote(verdict)}
             ${disc ? `<div class="intel-meta-row">
                 <span class="fact-tag">${escapeHtml(disc)}</span>
             </div>` : ""}
@@ -5198,6 +5404,8 @@ async function loadHoldingIntelligence(options = {}) {
             Object.entries(verdictData.signals || {}).forEach(([ticker, sig]) => {
                 cachedVerdicts[ticker] = sig;
             });
+            cachedPortfolioExposure = verdictData.portfolio_exposure || null;
+            cachedMarketRegime = verdictData.regime || null;
             applyClaudeApiStatus(verdictData.claude_live ?? null);
         }
 
@@ -5506,6 +5714,37 @@ async function toggleAnchorHold(event, holdingId, ticker) {
     } catch (err) {
         console.warn("Unable to toggle anchor:", err);
         showToast("Anchor update failed", "danger");
+    }
+}
+
+async function cycleHorizonHold(event, holdingId, ticker) {
+    event?.stopPropagation();
+    event?.preventDefault();
+    if (!holdingId) {
+        showToast("Open Manage Holdings to set horizon", "info");
+        return;
+    }
+    const holding = latestHoldings.find(h => h.id === holdingId || h.ticker === ticker) || {};
+    const order = ["auto", "trade", "core"];
+    const current = holding.hold_class === "anchor" ? "auto" : (holding.hold_class || "auto");
+    const idx = order.indexOf(current);
+    const nextClass = order[(idx + 1) % order.length];
+
+    try {
+        const res = await fetch(`/api/portfolio/holdings/${holdingId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ hold_class: nextClass }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        latestHoldings = latestHoldings.map(h => (
+            h.id === holdingId || h.ticker === ticker ? { ...h, hold_class: nextClass } : h
+        ));
+        showToast(`${ticker} horizon: ${nextClass}`, "success");
+        refreshAiVerdicts();
+    } catch (err) {
+        console.warn("Unable to cycle horizon:", err);
+        showToast("Horizon update failed", "danger");
     }
 }
 

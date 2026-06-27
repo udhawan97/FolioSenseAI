@@ -705,3 +705,57 @@ def test_portfolio_quip_cache_and_fallback(monkeypatch):
 
     cached_rows = db.query(AISummary).filter(AISummary.ticker == "BOOK").all()
     assert cached_rows
+
+
+def test_confidence_detail_has_range_and_scenarios():
+    sig = build_investment_signal(_etf_rec("Fair"))
+    detail = sig.confidence_detail
+    assert "range_low" in detail
+    assert "range_high" in detail
+    assert detail["range_high"] >= detail["range_low"]
+    assert "base" in detail["scenarios"]
+    assert "bull" in detail["scenarios"]
+    assert "bear" in detail["scenarios"]
+
+
+def test_horizon_trade_weights_momentum_heavier():
+    from app.services.investment_signal import _horizon_weights
+    trade = _horizon_weights("trade", is_etf=False)
+    auto = _horizon_weights("auto", is_etf=False)
+    assert trade["momentum"] > auto["momentum"]
+    assert trade["valuation"] <= auto["valuation"]
+
+
+def test_regime_modifier_in_confidence():
+    regime = {
+        "label": "Risk-off",
+        "component_adjustments": {"analyst": 0, "valuation": 2, "momentum": -4, "quality": 4},
+        "tip_title": "Market backdrop",
+        "tip_body": "Test",
+    }
+    sig = build_investment_signal(_etf_rec("Fair"), regime=regime)
+    mod_labels = [m["label"] for m in sig.confidence_detail.get("modifiers") or []]
+    assert any("Market backdrop" in lbl for lbl in mod_labels)
+
+
+def test_exposure_context_penalizes_add():
+    exposure_ctx = {
+        "crowded_themes": [{"theme": "US tech", "weight_pct": 40, "label": "~40% US tech"}],
+    }
+    sig = build_investment_signal(_etf_rec("Bargain"), exposure_context=exposure_ctx)
+    mod_labels = [m["label"] for m in sig.confidence_detail.get("modifiers") or []]
+    assert any("Book already heavy" in lbl for lbl in mod_labels)
+
+
+def test_earnings_cap_on_add():
+    from datetime import date, timedelta
+    event = {
+        "confidence_cap": 55,
+        "tip_title": "Earnings",
+        "tip_body": "Soon",
+        "risk_note": "Earnings soon",
+    }
+    sig = build_investment_signal(_stock_rec("buy"), event_context=event)
+    if sig.action == "add":
+        assert sig.confidence <= 55
+

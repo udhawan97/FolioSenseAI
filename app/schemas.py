@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 # ── Holding Schemas ────────────────────────────────────────────────────
 
 _TICKER_PATTERN = re.compile(r"^[A-Z0-9.^-]{1,10}$")
-_HOLD_CLASS_VALUES = {"auto", "anchor"}
+_HOLD_CLASS_VALUES = {"auto", "anchor", "trade", "core"}
 
 
 def _normalize_hold_class(value: Optional[str]) -> Optional[str]:
@@ -26,7 +26,7 @@ def _normalize_hold_class(value: Optional[str]) -> Optional[str]:
         return None
     hold_class = str(value).strip().lower()
     if hold_class not in _HOLD_CLASS_VALUES:
-        raise ValueError("hold_class must be 'auto' or 'anchor'")
+        raise ValueError("hold_class must be one of: auto, anchor, trade, core")
     return hold_class
 
 class HoldingCreate(BaseModel):

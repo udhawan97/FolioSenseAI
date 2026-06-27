@@ -90,7 +90,21 @@ def normalize_ai_bundle(raw: dict | None) -> dict | None:
         "component_nudges": cn,
         "tags": tags,
         "note": str(raw.get("w") or raw.get("note") or "").strip()[:160],
+        "agrees": raw.get("agrees") if raw.get("agrees") is not None else True,
+        "tension": str(raw.get("tension") or "").strip()[:120],
+        "flip_if": raw.get("flip_if") if isinstance(raw.get("flip_if"), dict) else None,
     }
+
+
+def _should_apply_nudge(ai: dict) -> bool:
+    """Only nudge when Claude surfaces tension or explicit disagreement."""
+    tension = (ai.get("tension") or "").strip()
+    agrees = ai.get("agrees")
+    if tension:
+        return True
+    if agrees is False:
+        return True
+    return False
 
 
 def apply_ai_enhancement(sig_dict: dict, ai_raw: dict | None) -> dict:
@@ -101,6 +115,11 @@ def apply_ai_enhancement(sig_dict: dict, ai_raw: dict | None) -> dict:
     ai = normalize_ai_bundle(ai_raw)
     if not ai:
         return sig_dict
+
+    apply_nudge = _should_apply_nudge(ai)
+    if not apply_nudge:
+        ai["overall_nudge"] = 0
+        ai["component_nudges"] = [0, 0, 0, 0]
 
     detail = dict(sig_dict.get("confidence_detail") or {})
     local_score = int(sig_dict.get("confidence") or detail.get("score") or 0)
@@ -154,6 +173,10 @@ def apply_ai_enhancement(sig_dict: dict, ai_raw: dict | None) -> dict:
         "delta": final - local_score,
         "component_nudges": ai["component_nudges"],
         "overall_nudge": ai["overall_nudge"],
+        "agrees": ai.get("agrees", True),
+        "tension": ai.get("tension", ""),
+        "flip_if": ai.get("flip_if"),
+        "nudge_applied": apply_nudge,
     }
     return sig_dict
 
