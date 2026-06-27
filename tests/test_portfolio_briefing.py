@@ -11,7 +11,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.models import AISummary, Base, Holding, Portfolio
+from app.models import Base, Holding, Portfolio
 from app.routers import ai as ai_router
 
 
@@ -24,7 +24,7 @@ def _make_db(tickers=("AAPL", "MSFT")):
         poolclass=StaticPool,
     )
     Base.metadata.create_all(bind=engine)
-    Session = sessionmaker(bind=engine)
+    Session = sessionmaker(bind=engine)  # pylint: disable=invalid-name
     db = Session()
     db.add(Portfolio(id=1, name="Test"))
     for ticker in tickers:
@@ -83,10 +83,10 @@ _BRIEFING_AI_RESPONSE = {
 
 def _patch_portfolio_compute(monkeypatch):
     """Monkeypatch _compute_portfolio and _cumulative_realized used inside ai_router."""
-    def fake_compute(portfolio_id, db):
+    def fake_compute(_portfolio_id, _db):
         return _FAKE_HOLDINGS, 5000.0, 4.0, 2000.0
 
-    def fake_realized(portfolio_id, db):
+    def fake_realized(_portfolio_id, _db):
         return 200.0
 
     monkeypatch.setattr(
@@ -238,7 +238,7 @@ class TestAiBriefing:
 
         call_count = []
 
-        def fake_generate(snapshot):
+        def fake_generate(_snapshot):
             call_count.append(1)
             return _BRIEFING_AI_RESPONSE.copy()
 
@@ -258,7 +258,7 @@ class TestAiBriefing:
 
         call_count = []
 
-        def fake_generate(snapshot):
+        def fake_generate(_snapshot):
             call_count.append(1)
             return _BRIEFING_AI_RESPONSE.copy()
 

@@ -3,6 +3,7 @@ Portfolio analytics — risk metrics, correlation, drawdown, and attribution.
 
 Computes from cached/batched price history server-side (same cache as timing signals).
 """
+# pylint: disable=too-many-lines
 
 from __future__ import annotations
 
@@ -14,7 +15,11 @@ from typing import Any
 
 import numpy as np
 
-from app.services.portfolio_projection import BENCHMARK_TICKER, TRADING_DAYS, _portfolio_daily_returns
+from app.services.portfolio_projection import (
+    BENCHMARK_TICKER,
+    TRADING_DAYS,
+    _portfolio_daily_returns,
+)
 from app.services.portfolio_exposure import build_portfolio_exposure
 from app.services.stock_service import get_all_quotes, get_historical_prices
 from app.services.timing_signal import get_batched_history_closes
@@ -220,8 +225,7 @@ def compute_drawdown(history: list[dict]) -> dict[str, Any]:
 
     for row in rows:
         value = float(row["total_value"])
-        if value > peak:
-            peak = value
+        peak = max(peak, value)
         dd = ((value - peak) / peak * 100) if peak > 0 else 0.0
         if dd < max_dd:
             max_dd = dd
@@ -411,7 +415,7 @@ def _correlation_label(value: float) -> str:
     return "Low"
 
 
-def _market_insight(correlation: float, geo_weight: float, name: str) -> str:
+def _market_insight(correlation: float, geo_weight: float, _name: str) -> str:
     if geo_weight >= 25 and correlation >= 0.45:
         return f"~{geo_weight:.0f}% look-through exposure — tends to move with your book"
     if correlation >= 0.65:
@@ -472,7 +476,9 @@ def compute_market_context(
     """
     Enrich world indices with portfolio correlation and geographic alignment.
     """
-    cache_key = f"mktctx:{_tickers_key([h['ticker'] for h in holdings if not h.get('is_watchlist')])}"
+    cache_key = (
+        f"mktctx:{_tickers_key([h['ticker'] for h in holdings if not h.get('is_watchlist')])}"
+    )
     cached = _cache_get(cache_key)
     if cached is not None:
         quote_map = {m["ticker"]: m for m in world_markets}
@@ -487,7 +493,10 @@ def compute_market_context(
             })
         return {**cached, "markets": markets}
 
-    active = [h for h in holdings if not h.get("is_watchlist") and float(h.get("allocation_pct") or 0) > 0]
+    active = [
+        h for h in holdings
+        if not h.get("is_watchlist") and float(h.get("allocation_pct") or 0) > 0
+    ]
     if not active:
         return _cache_set(cache_key, {
             "has_data": False,
@@ -533,8 +542,8 @@ def compute_market_context(
     summary_parts: list[str] = []
     if best and best.get("correlation", 0) > 0.2:
         summary_parts.append(
-            f"Your portfolio is most in sync with {best['name']} "
-            f"({best['correlation'] * 100:.0f}% correlated over the past year)."
+            f"Your portfolio is most in sync with {best.get('name', '')} "
+            f"({best.get('correlation', 0) * 100:.0f}% correlated over the past year)."
         )
     if us_weight >= 30:
         summary_parts.append(
@@ -617,7 +626,10 @@ def compute_benchmark_comparison(
 ) -> dict[str, Any]:
     """Portfolio vs S&P 500 returns by range with aligned chart series."""
     rows = [r for r in (history or []) if r.get("date") and r.get("total_value") is not None]
-    active = [h for h in holdings if not h.get("is_watchlist") and float(h.get("current_value") or 0) > 0]
+    active = [
+        h for h in holdings
+        if not h.get("is_watchlist") and float(h.get("current_value") or 0) > 0
+    ]
 
     if len(rows) < 2 or not active:
         return {
@@ -817,15 +829,26 @@ def compute_sector_tilt(holdings: list[dict]) -> dict[str, Any]:
     quotes = get_all_quotes([h["ticker"] for h in active])
     exposure = build_portfolio_exposure(
         [
-            {"ticker": h["ticker"], "allocation_pct": h.get("allocation_pct"), "is_watchlist": False}
+            {
+                "ticker": h["ticker"],
+                "allocation_pct": h.get("allocation_pct"),
+                "is_watchlist": False,
+            }
             for h in active
         ],
         quotes={q["ticker"]: q for q in quotes},
     )
-    port_sectors = {s["name"]: float(s["weight_pct"]) for s in (exposure.get("sector_exposure") or [])}
+    port_sectors = {
+        s["name"]: float(s["weight_pct"])
+        for s in (exposure.get("sector_exposure") or [])
+    }
     bench_map = {s["name"]: float(s["weight_pct"]) for s in _SPY_SECTOR_BENCHMARK}
 
-    all_names = sorted(set(port_sectors) | set(bench_map), key=lambda n: port_sectors.get(n, 0), reverse=True)
+    all_names = sorted(
+        set(port_sectors) | set(bench_map),
+        key=lambda n: port_sectors.get(n, 0),
+        reverse=True,
+    )
     sectors: list[dict] = []
     for name in all_names[:11]:
         port_w = port_sectors.get(name, 0.0)
@@ -945,7 +968,11 @@ def compute_confidence_spectrum(
         {"band": "40–59%", "key": "low", "weight_pct": round(buckets["low"] / total * 100, 1)},
         {"band": "60–69%", "key": "mid", "weight_pct": round(buckets["mid"] / total * 100, 1)},
         {"band": "70–84%", "key": "high", "weight_pct": round(buckets["high"] / total * 100, 1)},
-        {"band": "85%+", "key": "very_high", "weight_pct": round(buckets["very_high"] / total * 100, 1)},
+        {
+            "band": "85%+",
+            "key": "very_high",
+            "weight_pct": round(buckets["very_high"] / total * 100, 1),
+        },
     ]
     # Rounding each bucket independently can leave the sum at 99.9 or 100.1.
     # Adjust the largest bucket by the residual so all four always sum to 100.
@@ -996,7 +1023,11 @@ def compute_market_sensitivity(
         })
 
     indices.sort(key=lambda x: abs(x["impact_per_1pct"]), reverse=True)
-    return {"has_data": bool(indices), "indices": indices[:10], "portfolio_vol_pct": round(port_vol, 1)}
+    return {
+        "has_data": bool(indices),
+        "indices": indices[:10],
+        "portfolio_vol_pct": round(port_vol, 1),
+    }
 
 
 def compute_macro_alignment(

@@ -1,11 +1,9 @@
 """Tests for earnings event calendar."""
 from datetime import date, timedelta
-from unittest.mock import patch
 
 from app.services.event_calendar import (
     build_event_context,
     apply_earnings_cap,
-    _EARNINGS_WINDOW_DAYS,
 )
 
 

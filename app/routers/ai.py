@@ -68,6 +68,7 @@ from app.services.portfolio_exposure import (
 from app.services.market_regime import get_market_regime
 from app.services.peer_relative import compute_peer_relative
 from app.services.event_calendar import build_event_context
+from app.services.portfolio_state import portfolio_state_signature
 from app.services.verdict_calibration import (
     calibration_footnote,
     calibration_summary,
@@ -823,38 +824,8 @@ def _timing_for_quote(quote_data: dict | None, closes: list[float]) -> dict:
 
 
 def _portfolio_state_signature(signals: dict[str, dict], alloc_map: dict[str, float]) -> dict:
-    """Coarse portfolio-state cache key: dominant action mix + concentration band."""
-    counts = {"add": 0, "hold": 0, "trim": 0, "needs-data": 0}
-    for sig in signals.values():
-        action = sig.get("action", "needs-data")
-        counts[action if action in counts else "needs-data"] += 1
-
-    dominant_action = max(
-        counts,
-        key=lambda action: (
-            counts[action],
-            {"hold": 3, "add": 2, "trim": 1, "needs-data": 0}[action],
-        ),
-    )
-    max_alloc = max(alloc_map.values(), default=0)
-    if max_alloc >= 25:
-        concentration_band = "high"
-    elif max_alloc >= 12:
-        concentration_band = "medium"
-    else:
-        concentration_band = "low"
-
-    return {
-        "dominant_action": dominant_action,
-        "concentration_band": concentration_band,
-        "summary_type": (
-            f"vp:{_ACTION_CACHE_CODE.get(dominant_action, 'n')}:{concentration_band}"
-        ),
-        "reason": (
-            f"Action mix add={counts['add']}, hold={counts['hold']}, "
-            f"trim={counts['trim']}; concentration {concentration_band}"
-        ),
-    }
+    """Backward-compatible alias for portfolio_state_signature."""
+    return portfolio_state_signature(signals, alloc_map)
 
 
 def _portfolio_fallback_quip(dominant_action: str, concentration_band: str) -> str:
@@ -1301,7 +1272,7 @@ async def get_holding_intelligence_deep(ticker: str):
 
     if intel_dict.get("coverage_type") != "equity":
         from app.services.holding_intelligence import _try_yfinance_enrichment
-        live_s, live_c, live_h = _try_yfinance_enrichment(ticker)
+        live_s, _, live_h = _try_yfinance_enrichment(ticker)
         if live_h:
             deep["top_holdings_fresh"] = [
                 {"ticker": h.ticker, "name": h.name, "weight": h.weight}
@@ -1376,7 +1347,10 @@ def _briefing_snapshot(db: Session) -> tuple[dict, list[dict]]:
     Build the compact portfolio snapshot fed to Haiku (and used for the local
     briefing lead line).  Returns (snapshot_dict, non_watchlist_holdings).
     """
-    from app.routers.portfolio import _compute_portfolio, _cumulative_realized  # lazy — no circular dep
+    from app.routers.portfolio import (  # lazy — no circular dep
+        _compute_portfolio,
+        _cumulative_realized,
+    )
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     holdings_rows, total_value, total_daily_change, total_cost_basis = _compute_portfolio(1, db)
@@ -1594,7 +1568,9 @@ async def get_portfolio_summary(
             return _briefing_local(db)
         except Exception as exc:
             logger.error("Local briefing failed; exception_type=%s", type(exc).__name__)
-            raise HTTPException(status_code=500, detail="Briefing temporarily unavailable.")
+            raise HTTPException(
+                status_code=500, detail="Briefing temporarily unavailable."
+            ) from exc
 
     # AI mode — check 24 h cache first
     if not force_refresh:
@@ -1620,7 +1596,9 @@ async def get_portfolio_summary(
         snapshot, _ = _briefing_snapshot(db)
     except Exception as exc:
         logger.error("Briefing snapshot failed; exception_type=%s", type(exc).__name__)
-        raise HTTPException(status_code=500, detail="Briefing temporarily unavailable.")
+        raise HTTPException(
+            status_code=500, detail="Briefing temporarily unavailable."
+        ) from exc
 
     # Call Haiku; fall back deterministically on any failure
     try:
@@ -1650,6 +1628,60 @@ async def get_portfolio_summary(
 
 
 _ANALYTICS_INSIGHTS_CACHE_TYPE = "analytics_insights"
+_ANALYTICS_WIDGET_INSIGHTS_VERSION = 2
+
+
+def _analytics_cache_needs_regeneration(stored: dict) -> bool:
+    from app.services.analytics_insights import KEY_TIP_WIDGETS
+
+    wids = stored.get("widget_insights") or {}
+    cache_has_tips = any(isinstance(wids.get(k), dict) for k in KEY_TIP_WIDGETS)
+    cache_version = stored.get("widget_insights_version", 1)
+    if wids and not cache_has_tips:
+        logger.info("Analytics insights cache is pre-tip-card format — regenerating.")
+        return True
+    if cache_version < _ANALYTICS_WIDGET_INSIGHTS_VERSION:
+        logger.info(
+            "Analytics insights cache predates AI-only widget tips — regenerating."
+        )
+        return True
+    return False
+
+
+def _merge_ai_widget_insights(local_widgets: dict, ai_widgets: dict) -> dict:
+    merged: dict = {}
+    for key, ai_val in ai_widgets.items():
+        if ai_val is None:
+            continue
+        local_val = local_widgets.get(key)
+        if isinstance(ai_val, dict) and ai_val.get("insight"):
+            merged[key] = ai_val
+        elif isinstance(ai_val, str) and ai_val.strip():
+            if isinstance(local_val, dict):
+                merged[key] = {
+                    "headline": local_val.get("headline", ""),
+                    "insight": ai_val,
+                }
+            else:
+                merged[key] = ai_val.strip()
+    return merged
+
+
+def _cache_analytics_insights(db: Session, payload: dict) -> None:
+    try:
+        db.add(AISummary(
+            ticker=_PORTFOLIO_CACHE_TICKER,
+            summary_type=_ANALYTICS_INSIGHTS_CACHE_TYPE,
+            summary_text=json.dumps(payload),
+            price_when_generated=None,
+            model_used=MODEL,
+        ))
+        db.commit()
+    except Exception as exc:
+        logger.debug(
+            "Failed to cache analytics insights; exception_type=%s",
+            type(exc).__name__,
+        )
 
 
 @router.get("/analytics-insights")
@@ -1667,6 +1699,7 @@ async def get_analytics_insights(
         build_analytics_fallback,
         build_analytics_snapshot,
         build_local_analytics_insights,
+        build_local_widget_insights,
     )
 
     if mode not in ("ai", "local"):
@@ -1677,8 +1710,14 @@ async def get_analytics_insights(
             snapshot = build_analytics_snapshot(db)
             return build_local_analytics_insights(snapshot)
         except Exception as exc:
-            logger.error("Local analytics insights failed; exception_type=%s", type(exc).__name__)
-            raise HTTPException(status_code=500, detail="Analytics insights temporarily unavailable.")
+            logger.error(
+                "Local analytics insights failed; exception_type=%s",
+                type(exc).__name__,
+            )
+            raise HTTPException(
+                status_code=500,
+                detail="Analytics insights temporarily unavailable.",
+            ) from exc
 
     if not force_refresh:
         cached = (
@@ -1693,14 +1732,7 @@ async def get_analytics_insights(
         if cached and _cache_is_fresh(cached):
             try:
                 stored = json.loads(getattr(cached, "summary_text", None) or "{}")
-                # Bust caches that pre-date the structured tip-card format: if any KEY widget
-                # is a plain string instead of a {headline, insight} dict, regenerate.
-                from app.services.analytics_insights import KEY_TIP_WIDGETS
-                wids = stored.get("widget_insights") or {}
-                cache_has_tips = any(isinstance(wids.get(k), dict) for k in KEY_TIP_WIDGETS)
-                if wids and not cache_has_tips:
-                    logger.info("Analytics insights cache is pre-tip-card format — regenerating.")
-                else:
+                if not _analytics_cache_needs_regeneration(stored):
                     stored["from_cache"] = True
                     return stored
             except Exception:
@@ -1710,57 +1742,29 @@ async def get_analytics_insights(
         snapshot = build_analytics_snapshot(db)
     except Exception as exc:
         logger.error("Analytics snapshot failed; exception_type=%s", type(exc).__name__)
-        raise HTTPException(status_code=500, detail="Analytics insights temporarily unavailable.")
+        raise HTTPException(
+            status_code=500,
+            detail="Analytics insights temporarily unavailable.",
+        ) from exc
 
     try:
         parsed = generate_analytics_insights(snapshot)
-        from app.services.analytics_insights import build_local_widget_insights
-
         local_widgets = build_local_widget_insights(snapshot)
-        ai_widgets = parsed.get("widget_insights") or {}
-
-        # Merge strategy: AI's structured dict wins; if AI returned a plain string for a
-        # key widget that local has structured, preserve the headline from local and use
-        # AI's insight text so the tip card still renders properly.
-        merged_widgets: dict = {}
-        for k in set(list(local_widgets.keys()) + list(ai_widgets.keys())):
-            ai_val = ai_widgets.get(k)
-            local_val = local_widgets.get(k)
-            if ai_val is not None:
-                if isinstance(ai_val, dict) and ai_val.get("insight"):
-                    merged_widgets[k] = ai_val
-                elif isinstance(ai_val, str) and ai_val.strip():
-                    if isinstance(local_val, dict):
-                        # AI returned a flat string for a key widget — fold it into the card
-                        merged_widgets[k] = {
-                            "headline": local_val.get("headline", ""),
-                            "insight": ai_val,
-                        }
-                    else:
-                        merged_widgets[k] = ai_val
-            if k not in merged_widgets and local_val is not None:
-                merged_widgets[k] = local_val
+        merged_widgets = _merge_ai_widget_insights(
+            local_widgets,
+            parsed.get("widget_insights") or {},
+        )
         payload: dict = {
             "mode": "ai",
             "source": "claude",
             "insights": parsed.get("insights") or {},
             "widget_insights": merged_widgets,
+            "widget_insights_version": _ANALYTICS_WIDGET_INSIGHTS_VERSION,
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
-        try:
-            db.add(AISummary(
-                ticker=_PORTFOLIO_CACHE_TICKER,
-                summary_type=_ANALYTICS_INSIGHTS_CACHE_TYPE,
-                summary_text=json.dumps(payload),
-                price_when_generated=None,
-                model_used=MODEL,
-            ))
-            db.commit()
-        except Exception as exc:
-            logger.debug("Failed to cache analytics insights; exception_type=%s", type(exc).__name__)
+        _cache_analytics_insights(db, payload)
         return payload
 
     except Exception as exc:
         logger.warning("AI analytics insights failed; exception_type=%s", type(exc).__name__)
-        fallback = build_analytics_fallback(snapshot)
-        return fallback
+        return build_analytics_fallback(snapshot)

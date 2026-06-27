@@ -99,7 +99,7 @@ def _portfolio_daily_returns(
     return port_rets
 
 
-def _growth_path(
+def _growth_path(  # pylint: disable=too-many-positional-arguments
     start_value: float,
     mu: float,
     sigma: float,

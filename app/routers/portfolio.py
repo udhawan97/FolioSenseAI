@@ -6,7 +6,11 @@ from app.database import get_db
 from app.models import Portfolio, Holding, RealizedTrade, PortfolioSnapshot
 from app.schemas import HoldingCreate, HoldingUpdate, PortfolioCreate
 from app.config import settings
-from app.services.stock_service import get_all_quotes, get_portfolio_quotes, get_stock_data, validate_ticker_symbol
+from app.services.stock_service import (
+    get_portfolio_quotes,
+    get_stock_data,
+    validate_ticker_symbol,
+)
 from app.services.portfolio_projection import get_cached_projection
 from app.services.portfolio_analytics import (
     compute_risk_metrics,
@@ -724,5 +728,3 @@ async def get_macro_alignment(portfolio_id: int = 1, db: Session = Depends(get_d
     result, _total, _daily, _cost = _compute_portfolio(portfolio_id, db)
     world_payload = get_world_markets()
     return compute_macro_alignment(result, world_payload.get("markets", []))
-
-

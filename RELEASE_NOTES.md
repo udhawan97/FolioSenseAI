@@ -1,121 +1,127 @@
-# FolioSenseAI v3 Release Notes
+# FolioSenseAI v3.0 Release Notes
 
-Release date: June 27, 2026
+**Release date:** June 27, 2026
 
-## Headline
+---
 
-FolioSenseAI v3 is the "your portfolio is a system, not a bag of tickers" release: richer local intelligence, Claude that can disagree on purpose, a full Analytics zone, and a dashboard that finally learned negative space. Exposure overlap, market mood, peer context, earnings risk, three scenarios, growth projection, and — when Claude is connected — a probability bar for which future is least delusional.
+## ✦ The Portfolio Stopped Pretending It Was Diversified
+
+> *FolioSenseAI v3.0 is the release where your book gets treated like a system — overlap, mood, timelines, and three futures with probability bars — instead of a decorative pile of tickers wearing a diversification costume.*
+
+Your portfolio finally has **look-through exposure**, a **market-regime chip**, **peer context**, **earnings risk flags**, **Base/Bull/Bear scenarios**, and an entire **Analytics** tab with five sub-zones and per-chart insight lines. Claude and Local Intelligence now share one engine across briefing, analytics, and verdicts. The navbar got an overflow menu. The pet only wiggles on hover. Very composed. Still judging you.
+
+---
 
 ## What's New
 
-- **Dashboard zones**: Overview, Holdings, and Analytics with persistent tab state and zone-aware chart lifecycle.
-- **Portfolio briefing card**: `/api/ai/portfolio-summary` with AI (Claude Haiku, 24 h cache) and Local deterministic modes.
-- **Analytics zone**: five sub-tabs (Performance, Risk, Exposure, Signals, Markets), lazy Chart.js charts, per-tab insight bar, and per-widget insight lines via `/api/ai/analytics-insights`.
-- **Portfolio analytics engine**: risk metrics, correlation, drawdown, contribution, benchmark comparison, return calendar, beta, rolling vol, sector tilt, conviction gaps, confidence spectrum, macro alignment, and growth projection under `/api/portfolio/*`.
-- **Look-through portfolio exposure**: sector, country, theme overlap, duplicate detection, and HHI concentration via `/api/ai/portfolio-exposure`.
-- **Market regime context**: SPY/TLT/VIX/UUP backdrop with cached daily component weight shifts.
-- **Peer-relative positioning**: own-range percentile vs peer median on each verdict card.
-- **Earnings event awareness**: names with earnings inside 14 days get capped confidence and a risk note.
-- **Time horizons**: `auto` / `trade` / `core` / `anchor` with a cycle pill on the verdict card and Manage Holdings support.
-- **Confidence ranges**: `range_low` / `range_high` beside the headline score.
-- **Base / Bull / Bear scenarios**: local paths plus Claude probability splits (`likely`, `sc_p`, `sc_w`) when AI is connected.
-- **Claude tension gating**: nudges only when inputs conflict (`agrees`, `tension`, `flip_if`); agreement does not get performative drama.
-- **Verdict calibration snapshots**: logged to SQLite with bucket summaries via `/api/ai/verdict-calibration`.
-- **Deep intelligence on expand**: `/api/ai/intelligence/{ticker}/deep` loads richer holding context async when a row opens.
-- **Navbar overflow menu**: theme, text size, pet mode, and AI-cost controls in one settings sheet.
-- **Semantic color tokens**: `--color-gain/loss/neutral/state/brand` so green always means money up.
-- **Global state hardening**: mode toggles, sync HUD, and verdict rendering no longer step on each other.
+### Dashboard &amp; UX
+
+- **Three zones** — Overview, Holdings, and Analytics with persistent tab state
+- **Portfolio briefing card** — Claude narrative or deterministic local digest
+- **Navbar overflow menu** — theme, text size, pet mode, AI-cost controls in one sheet
+- **Semantic color tokens** — green means money up, not "design liked it"
+- **Local Intelligence guide** — dismissible banner when Claude is available but Local mode is active
+- **Holdings command deck** — action tray, agent status pill (idle / scanning / ready)
+
+### Intelligence &amp; Verdicts
+
+- **Look-through exposure** — sector, country, theme overlap, duplicate detection, HHI concentration
+- **Market regime context** — SPY/TLT/VIX/UUP backdrop with cached daily weight shifts
+- **Peer-relative positioning** — own-range percentile vs peer median
+- **Earnings event awareness** — names inside 14 days get capped confidence and a risk note
+- **Time horizons** — `auto` / `trade` / `core` / `anchor` with cycle pill on verdict card
+- **Confidence ranges** — `range_low` / `range_high` beside headline score
+- **Base / Bull / Bear scenarios** — local paths plus Claude probability splits when AI is connected
+- **Claude tension gating** — nudges only when inputs conflict; agreement skips the drama
+- **Verdict calibration snapshots** — logged to SQLite for future hit-rate accountability
+- **Deep intelligence on expand** — richer context loads async when you open a row
+
+### Analytics *(new zone)*
+
+- **Five sub-tabs** — Performance, Risk, Exposure, Signals, Markets
+- Lazy Chart.js visualizations with per-tab insight bar and per-widget tip cards
+- Growth projection, correlation matrix, drawdown, beta, rolling vol, sector tilt, conviction gaps, macro alignment, and more
+
+---
 
 ## Developer Notes
 
-- Bumped FastAPI metadata version to `3.0.0`.
-- Updated the dashboard intro badge to `v3`.
-- Added services: `portfolio_exposure.py`, `market_regime.py`, `peer_relative.py`, `event_calendar.py`, `verdict_calibration.py`, `verdict_ai_enhancement.py`, `portfolio_analytics.py`, `portfolio_projection.py`, `analytics_insights.py`.
-- Extended `investment_signal.py` with horizon weights, confidence ranges, scenario builders, and modifier hooks.
-- Extended Claude prompts in `ai_service.py` for disagreement, scenario-probability, briefing, and analytics-narrator fields.
-- Added `VerdictSnapshot` model and startup migration for `verdict_snapshots`.
-- Extended `hold_class` schema to accept `trade` and `core` alongside `auto` and `anchor`.
-- Extended `/api/ai/investment-signals/all` with `portfolio_exposure`, `regime`, `calibration_summary`, and per-signal context fields.
-- Added `/api/stocks/world-markets`, `/api/stocks/history/batch`, `/api/ai/portfolio-summary`, and `/api/ai/analytics-insights`.
-- Shipped `analytics-charts.js` plus a large `dashboard.js` / `style.css` pass for zones, exposure strips, regime chips, scenario UI, and nav overflow.
-- Bumped static asset cache keys to `style.css?v=86`, `dashboard.js?v=79`, `analytics-charts.js?v=8`.
-- **286 tests passing**, including new coverage for analytics wiring, portfolio briefing, projection, nav overflow, semantic tokens, scenario normalization, and calibration logging.
+- FastAPI metadata version **`3.0.0`**
+- New services: `portfolio_exposure.py`, `market_regime.py`, `peer_relative.py`, `event_calendar.py`, `verdict_calibration.py`, `verdict_ai_enhancement.py`, `portfolio_analytics.py`, `portfolio_projection.py`, `analytics_insights.py`
+- Extended `investment_signal.py` — horizon weights, confidence ranges, scenario builders, modifier hooks
+- Extended Claude prompts in `ai_service.py` — disagreement, scenario-probability, briefing, analytics-narrator
+- `VerdictSnapshot` model + startup migration for `verdict_snapshots`
+- Extended `hold_class` schema — `trade` and `core` alongside `auto` and `anchor`
+- New API routes under `/api/portfolio/*`, `/api/ai/portfolio-summary`, `/api/ai/analytics-insights`, `/api/ai/portfolio-exposure`, `/api/ai/verdict-calibration`, `/api/ai/intelligence/{ticker}/deep`, `/api/stocks/world-markets`, `/api/stocks/history/batch`
+- Static cache keys: `style.css?v=93`, `dashboard.js?v=88`, `analytics-charts.js?v=9`
+- Analytics insights cache version **`widget_insights_version: 2`**
+- **`297 tests passing`** — analytics, briefing, projection, intelligence engine UI, calibration, scenarios
 
-## Upgrade Notes
+---
 
-Existing installs pick up a new `verdict_snapshots` table automatically on startup via `ensure_startup_migrations()`. No `.env` change is required.
+## Install &amp; Upgrade
 
-`force_local=true` still skips Claude; all local intelligence features work offline.
+### Fresh install
 
-Install v3 from the latest `main` branch:
+**Mac / Linux**
 
 ```bash
-curl -L -o FolioSenseAI-main.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/heads/main.zip
-unzip FolioSenseAI-main.zip
-cd FolioSenseAI-main
+curl -L -o FolioSenseAI-v3.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v3.zip
+unzip FolioSenseAI-v3.zip
+cd FolioSenseAI-release-v3
 ./scripts/setup.sh
 ```
 
-Windows PowerShell:
+**Windows PowerShell**
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/heads/main.zip" -OutFile "FolioSenseAI-main.zip"
-Expand-Archive -Path "FolioSenseAI-main.zip" -DestinationPath .
-cd FolioSenseAI-main
+Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v3.zip" -OutFile "FolioSenseAI-v3.zip"
+Expand-Archive -Path "FolioSenseAI-v3.zip" -DestinationPath .
+cd FolioSenseAI-release-v3
 .\scripts\setup.ps1
 ```
 
-Prefer a frozen zip? [release-v2.4](https://github.com/udhawan97/FolioSenseAI/releases/tag/release-v2.4) still works — you just miss everything above.
+Open [http://localhost:8000](http://localhost:8000). Anthropic API key is optional.
+
+### Upgrade from v2.x
+
+1. Stop the app (`Ctrl+C`).
+2. Back up `database/` and `.env`.
+3. Download v3 into a **new folder** — do not overwrite in place.
+4. Copy `database/` and `.env` into the new tree.
+5. Run setup once, then `start.sh` / `start.ps1` going forward.
+
+The `verdict_snapshots` table is created automatically on startup. No `.env` changes required. `force_local=true` still skips Claude; all local intelligence works offline.
+
+---
 
 ## Final Word
 
-v3 still is not financial advice. It is a more honest briefing layer that treats your portfolio like a system with overlap, mood, and timelines — not a bag of tickers wearing a diversification costume.
+v3.0 still is not financial advice. It is a more honest briefing layer — overlap, mood, timelines, and futures with probability bars — for portfolios that stopped pretending five tech ETFs count as diversification.
 
 ---
 
 # FolioSenseAI v2.4 Release Notes
 
-Release date: June 25, 2026
+**Release date:** June 25, 2026
 
 ## Headline
 
-FolioSenseAI v2.4 is the mode-control release: a polished Claude AI / Local Intel toggle, deterministic verdict quips on demand, faster repeated quote reads, and a last-sync HUD that stays graceful when refreshes fail. Claude gets the charm. Local Intelligence gets the quiet competence. You get to choose. Flirty? Only in the most professionally documented way.
+FolioSenseAI v2.4 is the mode-control release: Claude when you want the charm, Local Intelligence when you want deterministic quiet, and fresher-feeling market data without extra drama.
 
 ## What's New
 
-- **Claude AI / Local Intel toggle**: switch verdict quips into deterministic local mode for the session without removing your Anthropic API key.
-- **Forced-local verdict path**: `/api/ai/investment-signals/all?force_local=true` skips Claude quip generation and uses fallback/local quips for holdings and portfolio health.
-- **Persistent mode preference**: the dashboard remembers your local-mode choice in browser storage and updates verdict labels/kickers in place.
-- **Smarter offline state**: the mode toggle disables cleanly when Claude is offline and opens the setup guidance instead of pretending a network problem is a personality trait.
-- **Quote caching**: live quote reads are cached for 60 seconds in `stock_service`, cutting repeated Yahoo Finance calls during tight dashboard refresh loops.
-- **Last-sync resilience**: the HUD keeps the last good sync timestamp when a refresh fails, marks the state clearly, and avoids replacing usable data with panic confetti.
-- **Sync state before render**: HUD timestamp and loaded-state are committed as soon as data arrives from the API, so a Chart.js or rendering error cannot flip the sync indicator back to "failed."
-- **In-flight guard**: a `_portfolioValueInFlight` flag prevents overlapping `loadPortfolioValue` calls from racing to create duplicate chart canvases and triggering false refresh failures.
-- **% column polish**: the percentage column in the target-trend list is wider and `white-space: nowrap`; `formatSignalPct` drops the decimal when the value hits triple digits so the string stays compact for any holding.
-- **Toggle polish**: placement, labels, title text, and dashboard pet copy now make the Claude/local relationship clearer and a little more charming.
-
-## Developer Notes
-
-- Bumped FastAPI metadata version to `2.4.0`.
-- Updated the dashboard intro badge to `v2.4`.
-- Added `force_local: bool = False` to `get_all_investment_signals()`.
-- Updated dashboard signal fetches to append `?force_local=true` when Local Intel mode is active.
-- Added `_QUOTE_CACHE` and `_QUOTE_TTL = 60` to `app/services/stock_service.py`.
-- Added HUD sync failure handling so stale-but-valid data remains visible after a failed refresh.
-- Moved HUD DOM update (timestamp, `_hasLoadedOnce`) to run immediately after API response, before any rendering — rendering errors can no longer affect sync display.
-- Added `_portfolioValueInFlight` guard to `loadPortfolioValue` to prevent concurrent calls from racing on the chart canvas.
-- Wrapped all rendering code in an inner `try/catch`; a render error now warns to the console instead of surfacing "Refresh failed" to the user.
-- Widened `.target-trend-list` percentage column (`2.7rem → 3rem`), added `white-space: nowrap` to `.target-trend-line strong`, and updated `formatSignalPct` to drop the decimal at ≥100.
-- Added `.pet-mode-toggle` CSS and related state styling.
-- Bumped the dashboard script cache key to load the new frontend behavior.
+- **Claude AI / Local Intel toggle** — switch verdict quips without removing your API key
+- **`force_local=true`** on `/api/ai/investment-signals/all` — deterministic local quips on demand
+- **Persistent mode preference** in browser storage
+- **60-second quote cache** — snappier repeated dashboard loads
+- **Last-sync resilience** — keeps last good timestamp on failed refresh
+- **Sync-state race fix** — HUD commits before render; in-flight guard on portfolio value load
+- **Toggle polish** — placement, labels, pet copy
 
 ## Upgrade Notes
 
-No database migration or `.env` change is required. Existing installs continue to run as before.
-
-The new Local Intel mode is client-side selectable. With Claude configured, users can switch between Claude-backed quips and deterministic local quips. Without Claude configured, the app continues in offline/local mode and shows setup guidance.
-
-If you use GitHub release archives, install v2.4 with:
+No database migration or `.env` change required.
 
 ```bash
 curl -L -o FolioSenseAI-v2.4.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v2.4.zip
@@ -124,15 +130,23 @@ cd FolioSenseAI-release-v2.4
 ./scripts/setup.sh
 ```
 
-Windows PowerShell:
+---
 
-```powershell
-Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v2.4.zip" -OutFile "FolioSenseAI-v2.4.zip"
-Expand-Archive -Path "FolioSenseAI-v2.4.zip" -DestinationPath .
-cd FolioSenseAI-release-v2.4
-.\scripts\setup.ps1
-```
+# FolioSenseAI v2.3 Release Notes
+
+**Release date:** June 2026
+
+## Headline
+
+FolioSenseAI v2.3 is the graceful-offline release: clearer no-key behavior, sharper local labels, and one less thing for CodeQL to side-eye.
+
+## What's New
+
+- Claude offline setup guidance in the brand callout
+- **Local Intelligence Verdict** labels when Claude is disconnected
+- Dynamic verdict kicker updates on reconnect
+- Day-change rendering polish and timing-signal log sanitization
 
 ## Final Word
 
-v2.4 still is not financial advice. It is a more controllable, more resilient dashboard that lets Claude bring the sparkle when invited and lets Local Intelligence keep working when you prefer the numbers without the perfume.
+v2.3 still is not financial advice. It just stopped pretending Claude was whispering when he wasn't in the room.

@@ -10,7 +10,6 @@ from app.services.analytics_insights import (
     MODULE_DIGEST,
     WIDGET_TIP_HEADLINES,
     build_ai_analytics_prompt_snapshot,
-    build_analytics_snapshot,
     build_local_analytics_insights,
 )
 
@@ -127,7 +126,10 @@ def test_analytics_insights_local_endpoint():
     from app.routers.ai import get_analytics_insights
 
     db = MagicMock()
-    with patch("app.services.analytics_insights.build_analytics_snapshot", return_value=_FAKE_SNAPSHOT):
+    with patch(
+        "app.services.analytics_insights.build_analytics_snapshot",
+        return_value=_FAKE_SNAPSHOT,
+    ):
         result = asyncio.run(get_analytics_insights(mode="local", force_refresh=False, db=db))
     assert result["mode"] == "local"
     assert result["digest"]["risk"] == MODULE_DIGEST["risk"]
@@ -140,7 +142,10 @@ def test_analytics_insights_ai_endpoint_uses_claude():
     db = MagicMock()
     db.query.return_value.filter.return_value.order_by.return_value.first.return_value = None
 
-    with patch("app.services.analytics_insights.build_analytics_snapshot", return_value=_FAKE_SNAPSHOT), patch(
+    with patch(
+        "app.services.analytics_insights.build_analytics_snapshot",
+        return_value=_FAKE_SNAPSHOT,
+    ), patch(
         "app.routers.ai.generate_analytics_insights",
         return_value={"insights": _AI_INSIGHTS, "widget_insights": _AI_WIDGET_INSIGHTS},
     ):
@@ -148,6 +153,7 @@ def test_analytics_insights_ai_endpoint_uses_claude():
 
     assert result["mode"] == "ai"
     assert result["source"] == "claude"
+    assert result["widget_insights_version"] == 2
     assert result["insights"]["markets"] == _AI_INSIGHTS["markets"]
     db.add.assert_called_once()
     db.commit.assert_called_once()
@@ -158,6 +164,7 @@ def test_analytics_insights_ai_endpoint_uses_claude():
     assert isinstance(bt, dict), "benchmark-tracker should be a structured dict"
     assert bt["insight"] == _AI_WIDGET_INSIGHTS["benchmark-tracker"]["insight"]
     assert isinstance(wids.get("total-return"), str), "total-return should stay a plain string"
+    assert "correlation" not in wids, "local-only widgets must not be backfilled into AI tips"
 
 
 def test_analytics_insights_ai_serves_cache():
@@ -170,6 +177,8 @@ def test_analytics_insights_ai_serves_cache():
         "mode": "ai",
         "source": "claude",
         "insights": _AI_INSIGHTS,
+        "widget_insights": _AI_WIDGET_INSIGHTS,
+        "widget_insights_version": 2,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
     cached = AISummary(

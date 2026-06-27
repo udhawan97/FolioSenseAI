@@ -1,5 +1,4 @@
 """Tests for portfolio look-through exposure."""
-from app.services.holding_intelligence import intelligence_to_dict, get_holding_intelligence
 from app.services.portfolio_exposure import (
     build_portfolio_exposure,
     exposure_context_for_ticker,

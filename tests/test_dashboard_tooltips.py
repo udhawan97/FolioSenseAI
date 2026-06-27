@@ -15,19 +15,20 @@ def test_tip_system_uses_delegation_for_dynamic_verdict_triggers():
     assert 'if (event.target.closest(".tip-trigger")) return;' in js
     assert "data-tip-title" in js
     assert "FolioSense's take" in js
-    assert "Anchor hold" in js
-    assert "Time horizon" in js
+    assert "Anchor mode" in js
+    assert "Standard mode" in js
     assert "How FolioSense decides" in js
     assert "It blends the signals that fit each holding" in js
 
 
-def test_injected_anchor_tip_uses_dataset_attributes():
+def test_injected_hold_mode_tips_use_dataset_attributes():
     js = (ROOT / "static/js/dashboard.js").read_text(encoding="utf-8")
 
-    assert "function _anchorTipAttrs()" in js
-    assert 'data-tip-title="Anchor hold"' in js
+    assert "_HOLD_MODE_META" in js
+    assert 'tipTitle: "Anchor mode"' in js
     assert "dataset.tipTitle" in js
     assert "toggleAnchorHold(event" in js
+    assert "manage-hold-mode-box" in js
 
 
 def test_existing_column_header_tooltips_still_use_shared_markup():
@@ -55,5 +56,11 @@ def test_nav_overflow_menu_holds_settings_and_ai_cost():
 def test_semantic_color_tokens_defined_in_css():
     css = (ROOT / "static/css/style.css").read_text(encoding="utf-8")
 
-    for token in ("--color-gain", "--color-loss", "--color-neutral", "--color-state", "--color-brand"):
+    for token in (
+        "--color-gain",
+        "--color-loss",
+        "--color-neutral",
+        "--color-state",
+        "--color-brand",
+    ):
         assert token in css

@@ -96,10 +96,14 @@ def build_local_analytics_insights(snapshot: dict[str, Any]) -> dict[str, Any]:
     insights: dict[str, str] = {}
 
     if perf.get("has_holdings"):
+        hist_note = (
+            f" with {perf.get('history_days', 0)} days of history tracked"
+            if perf.get("history_days")
+            else ""
+        )
         insights["performance"] = (
             f"You're {perf.get('total_return_pct', 0):+.1f}% all-in"
-            f"{' with ' + str(perf.get('history_days', 0)) + ' days of history tracked' if perf.get('history_days') else ''}"
-            f"; today is {perf.get('today_pnl_pct', 0):+.1f}%."
+            f"{hist_note}; today is {perf.get('today_pnl_pct', 0):+.1f}%."
         )
     else:
         insights["performance"] = (
@@ -136,7 +140,8 @@ def build_local_analytics_insights(snapshot: dict[str, Any]) -> dict[str, Any]:
     if signals.get("has_data"):
         dom = (signals.get("dominant_action") or "hold").upper()
         insights["signals"] = (
-            f"Overall tone is {dom} with ~{signals.get('hold_weight_pct', 0):.0f}% of the book on hold"
+            f"Overall tone is {dom} with "
+            f"~{signals.get('hold_weight_pct', 0):.0f}% of the book on hold"
             f" and average confidence {signals.get('avg_confidence', 0):.0f}%."
         )
     else:
@@ -154,7 +159,9 @@ def build_local_analytics_insights(snapshot: dict[str, Any]) -> dict[str, Any]:
             )
         )
     else:
-        insights["markets"] = "Markets context links global indices to your book once holdings exist."
+        insights["markets"] = (
+            "Markets context links global indices to your book once holdings exist."
+        )
 
     return {
         "mode": "local",
@@ -171,20 +178,14 @@ def _beta_layman_short(beta: float) -> str:
     if beta < 1.15:
         return f"Sensitivity {beta:.2f}× — tends to move in step with the S&P 500."
     extra = round((beta - 1) * 100)
-    return f"Sensitivity {beta:.2f}× — about {extra}% more swing than the S&P 500 on typical market days."
+    return (
+        f"Sensitivity {beta:.2f}× — about {extra}% more swing "
+        f"than the S&P 500 on typical market days."
+    )
 
 
-def build_local_widget_insights(snapshot: dict[str, Any]) -> dict[str, str]:
-    """Deterministic one-liner per analytics widget card."""
-    perf = snapshot.get("performance") or {}
-    risk = snapshot.get("risk") or {}
-    exposure = snapshot.get("exposure") or {}
-    signals = snapshot.get("signals") or {}
-    markets = snapshot.get("markets") or {}
-    widgets = snapshot.get("widgets") or {}
-
+def _widget_perf_insights(perf: dict) -> dict[str, str]:
     out: dict[str, str] = {}
-
     if perf.get("has_holdings"):
         out["total-return"] = (
             f"All-in return is {perf.get('total_return_pct', 0):+.1f}%"
@@ -195,20 +196,28 @@ def build_local_widget_insights(snapshot: dict[str, Any]) -> dict[str, str]:
 
     hist_days = perf.get("history_days") or 0
     if hist_days >= 2:
-        out["pnl-history"] = f"{hist_days} days of performance history charted against the S&P 500."
+        out["pnl-history"] = (
+            f"{hist_days} days of performance history charted against the S&P 500."
+        )
     else:
         out["pnl-history"] = "Visit daily to build your performance history chart."
 
     out["projection"] = (
         "Scenarios use 3-year historical return and volatility — not a forecast."
     )
+    return out
 
+
+def _widget_benchmark_calendar_insights(widgets: dict) -> dict[str, str]:
+    out: dict[str, str] = {}
     bench = widgets.get("benchmark") or {}
     if bench.get("has_data"):
         alpha = (bench.get("ranges") or {}).get("1y", {}).get("alpha_pct")
         if alpha is not None:
             word = "ahead of" if alpha >= 0 else "behind"
-            bench_insight = f"Over the past year you're {abs(alpha):.1f}pp {word} the S&P 500."
+            bench_insight = (
+                f"Over the past year you're {abs(alpha):.1f}pp {word} the S&P 500."
+            )
         else:
             bench_insight = "Your cumulative return path vs the S&P 500 is being tracked."
         out["benchmark-tracker"] = _make_tip("benchmark-tracker", bench_insight)
@@ -222,63 +231,102 @@ def build_local_widget_insights(snapshot: dict[str, Any]) -> dict[str, str]:
     if cal.get("has_data"):
         months = cal.get("months") or []
         pos = sum(1 for m in months if m.get("return_pct", 0) > 0)
-        out["return-calendar"] = (
-            f"{pos} of {len(months)} recent months finished positive."
-        )
+        out["return-calendar"] = f"{pos} of {len(months)} recent months finished positive."
     else:
         out["return-calendar"] = "Monthly tiles appear after a few weeks of history."
+    return out
 
-    if risk.get("has_data"):
-        port = (widgets.get("risk_reward") or {}).get("portfolio") or {}
-        rr_insight = (
-            f"Your portfolio sits at ~{port.get('annual_return_pct', 0):+.0f}% annual return"
-            f" and ~{port.get('annual_vol_pct', 0):.0f}% volatility — check where it lands vs peers."
-        )
-        out["risk-reward"] = _make_tip("risk-reward", rr_insight)
 
-        out["correlation"] = _make_tip(
-            "correlation",
-            "Warmer tiles mean those holdings tend to rise and fall together, reducing diversification.",
-        )
-
-        hhi = float(risk.get("concentration_hhi") or 0)
-        conc_word = _concentration_word(hhi)
-        conc_insight = (
-            f"Your book reads {conc_word} (HHI {(hhi * 100):.0f}) —"
-            f" {'spread your bets further to reduce single-name risk' if hhi >= 0.5 else 'diversification looks healthy'}."
-        )
-        out["concentration"] = _make_tip("concentration", conc_insight)
-
-        dd = risk.get("max_drawdown_pct")
-        if dd:
-            out["drawdown"] = _make_tip(
-                "drawdown",
-                f"Your worst peak-to-trough dip has been {dd:.1f}% — the shaded area shows how long you stayed underwater.",
+def _widget_risk_insights(risk: dict, widgets: dict) -> dict[str, str]:
+    out: dict[str, str] = {}
+    if not risk.get("has_data"):
+        for key in ("risk-reward", "correlation", "concentration", "drawdown"):
+            out[key] = _make_tip(key, "Add holdings to populate this risk reading.")
+        beta = widgets.get("beta") or {}
+        if beta.get("has_data"):
+            out["beta-dial"] = _make_tip(
+                "beta-dial",
+                _beta_layman_short(float(beta.get("beta") or 1)),
             )
         else:
-            out["drawdown"] = _make_tip(
-                "drawdown",
-                "The shaded area shows how far below your high-water mark the portfolio has fallen.",
+            out["beta-dial"] = _make_tip(
+                "beta-dial",
+                "Your portfolio's sensitivity to the S&P 500 will appear here "
+                "once holdings are set up.",
             )
+        roll = widgets.get("rolling_vol") or {}
+        if roll.get("has_data"):
+            vol = roll.get("current_vol_pct", 0)
+            lvl = "calm" if vol < 14 else "typical" if vol < 22 else "choppy"
+            roll_insight = (
+                f"Your trailing 30-day bumpiness reads {lvl} at ~{vol:.0f}% annualised —"
+                f" higher means bigger day-to-day swings."
+            )
+            out["rolling-vol"] = _make_tip("rolling-vol", roll_insight)
+        else:
+            out["rolling-vol"] = _make_tip(
+                "rolling-vol",
+                "Tracks how choppy your portfolio has been over the last month.",
+            )
+        return out
+
+    port = (widgets.get("risk_reward") or {}).get("portfolio") or {}
+    rr_insight = (
+        f"Your portfolio sits at ~{port.get('annual_return_pct', 0):+.0f}% annual return"
+        f" and ~{port.get('annual_vol_pct', 0):.0f}% volatility — "
+        f"check where it lands vs peers."
+    )
+    out["risk-reward"] = _make_tip("risk-reward", rr_insight)
+    out["correlation"] = _make_tip(
+        "correlation",
+        "Warmer tiles mean those holdings tend to rise and fall together, "
+        "reducing diversification.",
+    )
+
+    hhi = float(risk.get("concentration_hhi") or 0)
+    conc_word = _concentration_word(hhi)
+    spread_note = (
+        "spread your bets further to reduce single-name risk"
+        if hhi >= 0.5
+        else "diversification looks healthy"
+    )
+    conc_insight = (
+        f"Your book reads {conc_word} (HHI {(hhi * 100):.0f}) — {spread_note}."
+    )
+    out["concentration"] = _make_tip("concentration", conc_insight)
+
+    dd = risk.get("max_drawdown_pct")
+    if dd:
+        dd_insight = (
+            f"Your worst peak-to-trough dip has been {dd:.1f}% — "
+            f"the shaded area shows how long you stayed underwater."
+        )
+        out["drawdown"] = _make_tip("drawdown", dd_insight)
     else:
-        for k in ("risk-reward", "correlation", "concentration", "drawdown"):
-            out[k] = _make_tip(k, "Add holdings to populate this risk reading.")
+        out["drawdown"] = _make_tip(
+            "drawdown",
+            "The shaded area shows how far below your high-water mark "
+            "the portfolio has fallen.",
+        )
 
     beta = widgets.get("beta") or {}
     if beta.get("has_data"):
-        out["beta-dial"] = _make_tip("beta-dial", _beta_layman_short(float(beta.get("beta") or 1)))
+        out["beta-dial"] = _make_tip(
+            "beta-dial", _beta_layman_short(float(beta.get("beta") or 1))
+        )
     else:
         out["beta-dial"] = _make_tip(
             "beta-dial",
-            "Your portfolio's sensitivity to the S&P 500 will appear here once holdings are set up.",
+            "Your portfolio's sensitivity to the S&P 500 will appear here "
+            "once holdings are set up.",
         )
 
     roll = widgets.get("rolling_vol") or {}
     if roll.get("has_data"):
-        v = roll.get("current_vol_pct", 0)
-        lvl = "calm" if v < 14 else "typical" if v < 22 else "choppy"
+        vol = roll.get("current_vol_pct", 0)
+        lvl = "calm" if vol < 14 else "typical" if vol < 22 else "choppy"
         roll_insight = (
-            f"Your trailing 30-day bumpiness reads {lvl} at ~{v:.0f}% annualised —"
+            f"Your trailing 30-day bumpiness reads {lvl} at ~{vol:.0f}% annualised —"
             f" higher means bigger day-to-day swings."
         )
         out["rolling-vol"] = _make_tip("rolling-vol", roll_insight)
@@ -287,94 +335,120 @@ def build_local_widget_insights(snapshot: dict[str, Any]) -> dict[str, str]:
             "rolling-vol",
             "Tracks how choppy your portfolio has been over the last month.",
         )
+    return out
 
-    if exposure.get("has_data"):
-        sectors = exposure.get("top_sectors") or []
-        s0 = sectors[0]["name"] if sectors else "your largest sector"
-        s0_pct = sectors[0].get("weight_pct", 0) if sectors else 0
-        treemap_insight = (
-            f"{s0} is your largest look-through sector at {s0_pct:.0f}% —"
-            f" tap any tile to see the exact weight."
-        ) if sectors else "Tap any tile to explore your sector weights after ETF look-through."
-        out["sector-treemap"] = _make_tip("sector-treemap", treemap_insight)
-        countries = exposure.get("top_countries") or []
-        c0 = countries[0]["name"] if countries else "multiple regions"
-        out["geo-exposure"] = f"Geography leans {c0} after fund look-through."
-        out["allocation-table"] = "Sorted by weight — tap headers to re-order."
-        tilt = widgets.get("sector_tilt") or {}
-        tilts = tilt.get("sectors") or []
-        if tilts:
-            top = max(tilts, key=lambda s: abs(s.get("tilt_pct") or 0))
-            direction = "overweight" if top.get("tilt_pct", 0) > 0 else "underweight"
-            out["sector-tilt"] = (
-                f"Largest tilt vs S&P 500: {top.get('name')} ({direction} {abs(top.get('tilt_pct', 0)):.0f}pp)."
-            )
-        else:
-            out["sector-tilt"] = "Sector tilt compares your look-through mix to the S&P 500."
-    else:
+
+def _widget_exposure_insights(exposure: dict, widgets: dict) -> dict[str, str]:
+    out: dict[str, str] = {}
+    if not exposure.get("has_data"):
         out["sector-treemap"] = _make_tip(
             "sector-treemap",
             "Sector exposure tiles appear once holdings have look-through data.",
         )
-        for k in ("geo-exposure", "allocation-table", "sector-tilt"):
-            out[k] = "Exposure maps appear once holdings have look-through data."
+        for key in ("geo-exposure", "allocation-table", "sector-tilt"):
+            out[key] = "Exposure maps appear once holdings have look-through data."
+        return out
 
-    if signals.get("has_data"):
-        out["contribution"] = _make_tip(
-            "contribution",
-            "The bars show dollar P&L per holding — the tallest bar is your biggest driver this period.",
+    sectors = exposure.get("top_sectors") or []
+    s0 = sectors[0]["name"] if sectors else "your largest sector"
+    s0_pct = sectors[0].get("weight_pct", 0) if sectors else 0
+    treemap_insight = (
+        f"{s0} is your largest look-through sector at {s0_pct:.0f}% —"
+        f" tap any tile to see the exact weight."
+        if sectors
+        else "Tap any tile to explore your sector weights after ETF look-through."
+    )
+    out["sector-treemap"] = _make_tip("sector-treemap", treemap_insight)
+    countries = exposure.get("top_countries") or []
+    c0 = countries[0]["name"] if countries else "multiple regions"
+    out["geo-exposure"] = f"Geography leans {c0} after fund look-through."
+    out["allocation-table"] = "Sorted by weight — tap headers to re-order."
+    tilt = widgets.get("sector_tilt") or {}
+    tilts = tilt.get("sectors") or []
+    if tilts:
+        top = max(tilts, key=lambda s: abs(s.get("tilt_pct") or 0))
+        direction = "overweight" if top.get("tilt_pct", 0) > 0 else "underweight"
+        out["sector-tilt"] = (
+            f"Largest tilt vs S&P 500: {top.get('name')} "
+            f"({direction} {abs(top.get('tilt_pct', 0)):.0f}pp)."
         )
-        out["signal-board"] = "Greener tiles lean add/buy; redder tiles lean trim/sell."
-        dom = (signals.get("dominant_action") or "hold").upper()
-        out["verdict-mix"] = f"Book tone skews {dom} by allocation weight."
-        gaps = widgets.get("conviction_gaps") or {}
-        gap_rows = gaps.get("gaps") or []
-        summary = gaps.get("summary") or {}
-        flagged = summary.get("flagged", len(gap_rows))
-        total_h = summary.get("total", 0)
-        flagged_alloc = summary.get("flagged_alloc_pct", 0)
-        if gap_rows:
-            g0 = gap_rows[0]
-            gap_type = g0.get("gap_type", "")
-            ticker = g0.get("ticker", "")
-            alloc = g0.get("allocation_pct", 0)
-            action = (g0.get("action") or "hold").lower()
-            count_note = f"{flagged} of {total_h} holdings flagged ({flagged_alloc:.0f}% of portfolio). " if total_h else ""
-            if gap_type == "large_trim":
-                gap_insight = f"{count_note}Biggest: {ticker} at {alloc:.0f}% but a {action} signal — may be oversized."
-            elif gap_type == "small_add":
-                gap_insight = f"{count_note}Biggest opportunity: {ticker} has a buy signal but only {alloc:.0f}% allocated."
-            elif gap_type == "heavy_hold":
-                gap_insight = f"{count_note}Biggest: {ticker} at {alloc:.0f}% with just a hold signal — large bet, limited upside case."
-            elif gap_type == "uncertain_hold":
-                gap_insight = f"{count_note}Biggest uncertainty: {ticker} at {alloc:.0f}% — AI confidence is low on this signal."
-            else:
-                gap_insight = f"{count_note}{ticker}: {action} signal on {alloc:.0f}% of the book — worth reviewing."
-            out["conviction-gap"] = _make_tip("conviction-gap", gap_insight)
-        else:
-            out["conviction-gap"] = _make_tip(
-                "conviction-gap",
-                "All positions broadly match their signals — no major sizing mismatches right now.",
-            )
-        spec = widgets.get("confidence_spectrum") or {}
-        if spec.get("has_data"):
-            avg_conf = spec.get("avg_confidence") or 0
-            dominant = spec.get("dominant_band") or "unknown"
-            if avg_conf >= 75:
-                out["confidence-spectrum"] = (
-                    f"Most weight is in the {dominant} band — signals are generally strong across your portfolio."
-                )
-            elif avg_conf >= 60:
-                out["confidence-spectrum"] = (
-                    f"Most weight is in the {dominant} band — signals are mixed; some positions have less certainty behind them."
-                )
-            else:
-                out["confidence-spectrum"] = (
-                    f"Most weight is in the {dominant} band — average confidence is low ({avg_conf}%), signals are uncertain."
-                )
-        else:
-            out["confidence-spectrum"] = "Confidence spectrum shows how much of your portfolio has strong vs weak AI signals."
     else:
+        out["sector-tilt"] = "Sector tilt compares your look-through mix to the S&P 500."
+    return out
+
+
+def _conviction_gap_insight(gaps: dict) -> str:
+    gap_rows = gaps.get("gaps") or []
+    summary = gaps.get("summary") or {}
+    if not gap_rows:
+        return (
+            "All positions broadly match their signals — "
+            "no major sizing mismatches right now."
+        )
+    g0 = gap_rows[0]
+    gap_type = g0.get("gap_type", "")
+    ticker = g0.get("ticker", "")
+    alloc = g0.get("allocation_pct", 0)
+    action = (g0.get("action") or "hold").lower()
+    flagged = summary.get("flagged", len(gap_rows))
+    total_h = summary.get("total", 0)
+    flagged_alloc = summary.get("flagged_alloc_pct", 0)
+    count_note = (
+        f"{flagged} of {total_h} holdings flagged ({flagged_alloc:.0f}% of portfolio). "
+        if total_h
+        else ""
+    )
+    templates = {
+        "large_trim": (
+            f"{count_note}Biggest: {ticker} at {alloc:.0f}% but a {action} signal "
+            f"— may be oversized."
+        ),
+        "small_add": (
+            f"{count_note}Biggest opportunity: {ticker} has a buy signal but only "
+            f"{alloc:.0f}% allocated."
+        ),
+        "heavy_hold": (
+            f"{count_note}Biggest: {ticker} at {alloc:.0f}% with just a hold signal "
+            f"— large bet, limited upside case."
+        ),
+        "uncertain_hold": (
+            f"{count_note}Biggest uncertainty: {ticker} at {alloc:.0f}% — "
+            f"AI confidence is low on this signal."
+        ),
+    }
+    return templates.get(
+        gap_type,
+        f"{count_note}{ticker}: {action} signal on {alloc:.0f}% of the book — worth reviewing.",
+    )
+
+
+def _confidence_spectrum_insight(spec: dict) -> str:
+    if not spec.get("has_data"):
+        return (
+            "Confidence spectrum shows how much of your portfolio has "
+            "strong vs weak AI signals."
+        )
+    avg_conf = spec.get("avg_confidence") or 0
+    dominant = spec.get("dominant_band") or "unknown"
+    if avg_conf >= 75:
+        return (
+            f"Most weight is in the {dominant} band — signals are generally "
+            f"strong across your portfolio."
+        )
+    if avg_conf >= 60:
+        return (
+            f"Most weight is in the {dominant} band — signals are mixed; "
+            f"some positions have less certainty behind them."
+        )
+    return (
+        f"Most weight is in the {dominant} band — average confidence is low "
+        f"({avg_conf}%), signals are uncertain."
+    )
+
+
+def _widget_signals_insights(signals: dict, widgets: dict) -> dict[str, str]:
+    out: dict[str, str] = {}
+    if not signals.get("has_data"):
         out["contribution"] = _make_tip(
             "contribution",
             "Signals and attribution appear once holdings are set up.",
@@ -383,37 +457,81 @@ def build_local_widget_insights(snapshot: dict[str, Any]) -> dict[str, str]:
             "conviction-gap",
             "Conviction gap analysis requires holdings with active FolioSense signals.",
         )
-        for k in ("signal-board", "verdict-mix", "confidence-spectrum"):
-            out[k] = "Signals summarize FolioSense's read once holdings are set up."
+        for key in ("signal-board", "verdict-mix", "confidence-spectrum"):
+            out[key] = "Signals summarize FolioSense's read once holdings are set up."
+        return out
 
-    if markets.get("has_data"):
-        out["markets-tape"] = "Scrolling live quotes — hover to pause."
-        name = markets.get("best_match_name") or "global equities"
-        corr = float(markets.get("best_correlation") or 0)
-        sens = widgets.get("market_sensitivity") or {}
-        top_idx = (sens.get("indices") or [{}])[0]
-        if top_idx.get("name") and top_idx.get("impact_per_1pct") is not None:
-            out["markets-grid"] = (
-                f"Closest daily link: {name} ({corr * 100:.0f}% correlated). "
-                f"A 1% {top_idx['name']} move may shift your book "
-                f"~{top_idx.get('impact_per_1pct', 0):+.2f}%."
-            )
-        else:
-            out["markets-grid"] = f"Closest daily link: {name} ({corr * 100:.0f}% correlated)."
-        macro = widgets.get("macro_alignment") or {}
-        pts = macro.get("points") or []
-        if pts:
-            hot = max(pts, key=lambda p: (p.get("correlation") or 0) * (p.get("geo_weight_pct") or 0))
-            out["macro-alignment"] = (
-                f"{hot.get('name')} pairs {hot.get('correlation', 0) * 100:.0f}% correlation"
-                f" with ~{hot.get('geo_weight_pct', 0):.0f}% geo exposure."
-            )
-        else:
-            out["macro-alignment"] = "Plots correlation vs geographic exposure per index."
+    out["contribution"] = _make_tip(
+        "contribution",
+        "The bars show dollar P&L per holding — the tallest bar is your biggest "
+        "driver this period.",
+    )
+    out["signal-board"] = "Greener tiles lean add/buy; redder tiles lean trim/sell."
+    dom = (signals.get("dominant_action") or "hold").upper()
+    out["verdict-mix"] = f"Book tone skews {dom} by allocation weight."
+    gaps = widgets.get("conviction_gaps") or {}
+    out["conviction-gap"] = _make_tip(
+        "conviction-gap",
+        _conviction_gap_insight(gaps),
+    )
+    spec = widgets.get("confidence_spectrum") or {}
+    out["confidence-spectrum"] = _confidence_spectrum_insight(spec)
+    return out
+
+
+def _widget_markets_insights(markets: dict, widgets: dict) -> dict[str, str]:
+    out: dict[str, str] = {}
+    if not markets.get("has_data"):
+        for key in ("markets-tape", "markets-grid", "macro-alignment"):
+            out[key] = "Markets context links global indices to your book once holdings exist."
+        return out
+
+    out["markets-tape"] = "Scrolling live quotes — hover to pause."
+    name = markets.get("best_match_name") or "global equities"
+    corr = float(markets.get("best_correlation") or 0)
+    sens = widgets.get("market_sensitivity") or {}
+    top_idx = (sens.get("indices") or [{}])[0]
+    if top_idx.get("name") and top_idx.get("impact_per_1pct") is not None:
+        out["markets-grid"] = (
+            f"Closest daily link: {name} ({corr * 100:.0f}% correlated). "
+            f"A 1% {top_idx['name']} move may shift your book "
+            f"~{top_idx.get('impact_per_1pct', 0):+.2f}%."
+        )
     else:
-        for k in ("markets-tape", "markets-grid", "macro-alignment"):
-            out[k] = "Markets context links global indices to your book once holdings exist."
+        out["markets-grid"] = f"Closest daily link: {name} ({corr * 100:.0f}% correlated)."
 
+    macro = widgets.get("macro_alignment") or {}
+    pts = macro.get("points") or []
+    if pts:
+        hot = max(
+            pts,
+            key=lambda p: (p.get("correlation") or 0) * (p.get("geo_weight_pct") or 0),
+        )
+        out["macro-alignment"] = (
+            f"{hot.get('name')} pairs {hot.get('correlation', 0) * 100:.0f}% correlation"
+            f" with ~{hot.get('geo_weight_pct', 0):.0f}% geo exposure."
+        )
+    else:
+        out["macro-alignment"] = "Plots correlation vs geographic exposure per index."
+    return out
+
+
+def build_local_widget_insights(snapshot: dict[str, Any]) -> dict[str, str]:
+    """Deterministic one-liner per analytics widget card."""
+    perf = snapshot.get("performance") or {}
+    risk = snapshot.get("risk") or {}
+    exposure = snapshot.get("exposure") or {}
+    signals = snapshot.get("signals") or {}
+    markets = snapshot.get("markets") or {}
+    widgets = snapshot.get("widgets") or {}
+
+    out: dict[str, str] = {}
+    out.update(_widget_perf_insights(perf))
+    out.update(_widget_benchmark_calendar_insights(widgets))
+    out.update(_widget_risk_insights(risk, widgets))
+    out.update(_widget_exposure_insights(exposure, widgets))
+    out.update(_widget_signals_insights(signals, widgets))
+    out.update(_widget_markets_insights(markets, widgets))
     return {k: out.get(k, "") for k in WIDGET_KEYS if out.get(k)}
 
 
@@ -472,7 +590,7 @@ def fetch_world_markets_sync() -> list[dict]:
 
 def _signals_snapshot(db, non_watchlist: list[dict]) -> dict[str, Any]:
     from app.models import AISummary
-    from app.routers.ai import _portfolio_state_signature
+    from app.services.portfolio_state import portfolio_state_signature
     from app.services.verdict_ai_enhancement import decode_verdict_cache
 
     signals_dict: dict[str, dict] = {}
@@ -500,7 +618,7 @@ def _signals_snapshot(db, non_watchlist: list[dict]) -> dict[str, Any]:
             signals_dict[ticker] = {"action": "needs-data", "confidence": 50}
 
     alloc_map = {h["ticker"]: float(h.get("allocation_pct") or 0) for h in non_watchlist}
-    state = _portfolio_state_signature(signals_dict, alloc_map)
+    state = portfolio_state_signature(signals_dict, alloc_map)
 
     buckets = {"add": 0.0, "hold": 0.0, "trim": 0.0}
     conf_weighted = 0.0
@@ -605,7 +723,10 @@ def build_analytics_snapshot(db) -> dict[str, Any]:
         if cached:
             try:
                 v = decode_verdict_cache(getattr(cached, "summary_text", ""))
-                signals_dict[ticker] = {"action": v.get("action", "hold"), "confidence": v.get("confidence", 50)}
+                signals_dict[ticker] = {
+                    "action": v.get("action", "hold"),
+                    "confidence": v.get("confidence", 50),
+                }
             except Exception:
                 signals_dict[ticker] = {"action": "hold", "confidence": 50}
         else:

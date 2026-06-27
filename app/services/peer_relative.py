@@ -45,7 +45,7 @@ def _peer_label(peers: list[str], sector_etf: Optional[str]) -> str:
     return "vs market"
 
 
-def compute_peer_relative(
+def compute_peer_relative(  # pylint: disable=too-many-branches
     ticker: str,
     *,
     own_percentile: Optional[float] = None,

@@ -121,7 +121,10 @@ def calibration_footnote(
     if not match or match["sample_size"] < _MIN_SAMPLE_FOR_FOOTNOTE:
         return None
     return {
-        "text": f"Historically, {action} calls in the {band}% band are being tracked ({match['sample_size']} samples).",
+        "text": (
+            f"Historically, {action} calls in the {band}% band are being tracked "
+            f"({match['sample_size']} samples)."
+        ),
         "sample_size": match["sample_size"],
         "predicted_band": band,
         "tip_title": "Calibration note",

@@ -1517,18 +1517,45 @@ table tbody tr:hover {
 }
 
 
-.holdings-header-actions {
+.holdings-card-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem 1rem;
+}
+
+.holdings-header-title {
+    min-width: 0;
+    flex: 0 1 auto;
+}
+
+.holdings-card-toolbar {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     gap: 0.5rem;
+    margin-left: auto;
     min-width: 0;
+    flex: 1 1 320px;
+}
+
+.holdings-header-actions {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    flex-shrink: 0;
 }
 
 .holdings-action-tray {
     display: inline-flex;
     align-items: center;
+    flex-shrink: 0;
     gap: 0.35rem;
-    height: 38px;
+    min-height: 38px;
     padding: 2px;
     border: 1px solid var(--hairline-soft);
     border-radius: 999px;
@@ -1536,31 +1563,153 @@ table tbody tr:hover {
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
+.holdings-action-tray > * {
+    flex-shrink: 0;
+}
+
+.holdings-action-tray .holdings-intel-hub {
+    border: none;
+    box-shadow: none;
+    background: transparent;
+}
+
+.holdings-action-tray .holdings-intel-hub.is-engine-claude.is-claude-idle:not(.is-scanning):not(.is-ready) {
+    background: transparent;
+    box-shadow: none;
+}
+
+.btn-holdings-refresh {
+    display: inline-grid !important;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    min-height: 34px;
+    padding: 0 !important;
+    margin-right: 1px;
+    border-radius: 50% !important;
+    border: 1px solid rgba(111, 214, 240, 0.24) !important;
+    background: rgba(111, 214, 240, 0.06) !important;
+    color: var(--accent-cyan) !important;
+    font-size: 0.84rem;
+    line-height: 1;
+    transition: background 0.18s var(--ease), color 0.18s var(--ease),
+                border-color 0.18s var(--ease), transform 0.18s var(--spring);
+}
+
+.btn-holdings-refresh[data-engine="claude"] {
+    border-color: rgba(191, 90, 242, 0.34) !important;
+    background: rgba(191, 90, 242, 0.1) !important;
+    color: #e9d5ff !important;
+}
+
+.btn-holdings-refresh:hover:not(:disabled) {
+    transform: translateY(-1px);
+    background: rgba(111, 214, 240, 0.12) !important;
+    border-color: rgba(111, 214, 240, 0.42) !important;
+    color: var(--text-primary) !important;
+}
+
+.btn-holdings-refresh[data-engine="claude"]:hover:not(:disabled) {
+    background: rgba(191, 90, 242, 0.16) !important;
+    border-color: rgba(191, 90, 242, 0.48) !important;
+    color: #f3ecff !important;
+}
+
+.btn-holdings-refresh:active:not(:disabled) {
+    transform: translateY(0) scale(0.96);
+}
+
+.btn-holdings-refresh:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+
+.btn-holdings-refresh.is-refreshing i {
+    animation: refreshSpin 0.64s var(--ease);
+}
+
+.btn-holdings-refresh.tip-trigger {
+    width: 34px !important;
+    height: 34px !important;
+    min-width: 34px !important;
+    min-height: 34px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+}
+
 .ai-agent-status {
     display: inline-flex;
     position: relative;
     align-items: center;
-    gap: 0.44rem;
-    height: 36px;
-    min-width: 184px;
-    max-width: 248px;
-    padding: 0 0.68rem 0 0.34rem;
-    border: 1px solid rgba(111, 214, 240, 0.16);
+    gap: 0.38rem;
+    height: 38px;
+    width: max-content;
+    max-width: min(100%, 280px);
+    flex-shrink: 0;
+    padding: 0 0.62rem 0 0.38rem;
+    border: 1px solid var(--hairline-soft);
     border-radius: 999px;
-    background: rgba(111, 214, 240, 0.055);
+    background: color-mix(in srgb, var(--surface-strong) 52%, transparent);
     color: var(--text-secondary);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
     overflow: hidden;
     isolation: isolate;
-    transform-origin: center right;
+    transform-origin: center left;
     transition: background 0.24s var(--ease),
                 border-color 0.24s var(--ease),
                 box-shadow 0.24s var(--ease),
                 transform 0.24s var(--spring);
 }
 
+#holdings-card .ai-agent-status {
+    border-color: rgba(111, 214, 240, 0.22);
+    background:
+        linear-gradient(135deg, rgba(111, 214, 240, 0.12), rgba(151, 172, 236, 0.08)),
+        color-mix(in srgb, var(--surface-strong) 52%, transparent);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 12px 26px -22px rgba(111, 214, 240, 0.55);
+}
+
 .ai-agent-status[hidden] {
     display: none !important;
+}
+
+.ai-agent-status.is-idle {
+    border-color: rgba(111, 214, 240, 0.14);
+    background: rgba(111, 214, 240, 0.04);
+    opacity: 0.92;
+}
+
+.ai-agent-status.is-scanning {
+    border-color: rgba(111, 214, 240, 0.34);
+    background:
+        radial-gradient(circle at 18% 48%, rgba(111, 214, 240, 0.16), transparent 38%),
+        rgba(111, 214, 240, 0.07);
+    animation: aiAgentScanPulse 1.8s ease-in-out infinite;
+}
+
+.ai-agent-status.is-scanning .ai-agent-line {
+    color: var(--text-primary);
+}
+
+.ai-agent-status.is-scanning .ai-agent-avatar::before {
+    opacity: 0.65;
+    animation: aiAgentScanRing 2.4s linear infinite;
+}
+
+@keyframes aiAgentScanPulse {
+    0%, 100% { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0 0 0 rgba(111, 214, 240, 0); }
+    50% { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 0 0 1px rgba(111, 214, 240, 0.22); }
+}
+
+@keyframes aiAgentScanRing {
+    to { transform: rotate(360deg); }
+}
+
+.ai-agent-status.is-ready .ai-agent-line {
+    color: var(--text-primary);
 }
 
 .ai-agent-status::before,
@@ -1640,13 +1789,14 @@ table tbody tr:hover {
 .ai-agent-avatar {
     position: relative;
     z-index: 1;
-    width: 26px;
-    height: 26px;
+    width: 22px;
+    height: 22px;
     display: grid;
     place-items: center;
     flex: 0 0 auto;
-    border-radius: 9px;
-    box-shadow: 0 8px 18px -12px rgba(111, 214, 240, 0.75);
+    border-radius: 8px;
+    background: rgba(111, 214, 240, 0.12);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
 }
 
 .ai-agent-avatar::before,
@@ -1676,8 +1826,8 @@ table tbody tr:hover {
 .ai-agent-avatar img {
     position: relative;
     z-index: 1;
-    width: 100%;
-    height: 100%;
+    width: 15px;
+    height: 15px;
     display: block;
     border-radius: inherit;
 }
@@ -1701,13 +1851,134 @@ table tbody tr:hover {
 }
 
 .ai-agent-line {
-    margin-top: 0.16rem;
-    font-size: 0.66rem;
-    font-weight: 650;
-    color: var(--text-secondary);
+    margin-top: 0.14rem;
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* Unified holdings intel hub — FolioSense pill + holding intel + Claude summaries */
+.holdings-intel-hub {
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.holdings-intel-hub:not(:disabled):hover {
+    transform: translateY(-1px);
+    border-color: rgba(111, 214, 240, 0.42);
+}
+
+.holdings-intel-hub:not(:disabled):active {
+    transform: translateY(0);
+}
+
+.holdings-intel-hub:disabled {
+    cursor: default;
+}
+
+.holdings-intel-hub .ai-agent-avatar {
+    position: relative;
+}
+
+.hub-icon {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    transition: opacity 0.38s var(--ease), transform 0.42s var(--spring);
+}
+
+.hub-icon--folio img {
+    width: 15px;
+    height: 15px;
+}
+
+.hub-icon--claude {
+    opacity: 0;
+    transform: scale(0.72) rotate(-10deg);
+    color: #e9d5ff;
+    font-size: 0.82rem;
+}
+
+.holdings-intel-hub.is-engine-claude.is-claude-idle:not(.is-scanning) .hub-icon--folio {
+    opacity: 0;
+    transform: scale(0.72);
+}
+
+.holdings-intel-hub.is-engine-claude.is-claude-idle:not(.is-scanning) .hub-icon--claude {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+}
+
+.holdings-intel-hub.is-claude-action.is-scanning .hub-icon--folio {
+    opacity: 0;
+    transform: scale(0.72);
+}
+
+.holdings-intel-hub.is-claude-action.is-scanning .hub-icon--claude {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+}
+
+.hub-line-stack {
+    position: relative;
+    display: grid;
+    min-width: 0;
+}
+
+.hub-line {
+    grid-area: 1 / 1;
+    transition: opacity 0.38s var(--ease), transform 0.38s var(--ease);
+}
+
+.hub-line--claude {
+    opacity: 0;
+    transform: translateY(5px);
+    color: #f3ecff;
+}
+
+.holdings-intel-hub.is-engine-claude.is-claude-idle:not(.is-scanning):not(.is-ready) .hub-line--local {
+    opacity: 0;
+    transform: translateY(-5px);
+}
+
+.holdings-intel-hub.is-engine-claude.is-claude-idle:not(.is-scanning):not(.is-ready) .hub-line--claude {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.holdings-intel-hub.is-engine-claude.is-claude-idle:not(.is-scanning):not(.is-ready) {
+    border-color: rgba(191, 90, 242, 0.38);
+    background:
+        linear-gradient(135deg, rgba(191, 90, 242, 0.14), rgba(111, 214, 240, 0.08)),
+        color-mix(in srgb, var(--surface-strong) 52%, transparent);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 12px 26px -22px rgba(191, 90, 242, 0.45);
+}
+
+.holdings-intel-hub.is-engine-switching .hub-icon,
+.holdings-intel-hub.is-engine-switching .hub-line {
+    transition-duration: 0.42s;
+}
+
+.holdings-intel-hub.is-loading .hub-icon--claude i {
+    animation: spin 0.8s linear infinite;
+}
+
+.holdings-intel-hub.is-claude-action.is-scanning .hub-icon--claude i {
+    animation: hubClaudePulse 1.35s ease-in-out infinite;
+}
+
+@keyframes hubClaudePulse {
+    0%, 100% { opacity: 0.82; filter: drop-shadow(0 0 0 transparent); }
+    50% { opacity: 1; filter: drop-shadow(0 0 5px rgba(191, 90, 242, 0.65)); }
 }
 
 [data-bs-theme="light"] .ai-agent-status {
@@ -2461,20 +2732,20 @@ table tbody tr:hover {
         padding-right: 0.8rem;
     }
 
-    #holdings-card .card-header {
+    #holdings-card .card-header,
+    #holdings-card .holdings-card-header {
         align-items: center !important;
         gap: 0.8rem;
     }
 
-    .holdings-header-actions {
-        flex-wrap: nowrap;
+    .holdings-card-toolbar {
+        width: auto;
+        margin-left: auto;
         justify-content: flex-end;
     }
 
-    .ai-agent-status {
-        order: -1;
-        min-width: 168px;
-        max-width: 210px;
+    .holdings-header-actions {
+        flex-shrink: 0;
     }
 }
 
@@ -2489,37 +2760,73 @@ table tbody tr:hover {
         padding-right: 0.68rem;
     }
 
-    #holdings-card .card-header {
+    #holdings-card .card-header,
+    #holdings-card .holdings-card-header {
         flex-direction: column;
         align-items: stretch !important;
     }
 
-    .holdings-header-actions {
+    .holdings-card-toolbar {
         width: 100%;
-        justify-content: space-between;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.55rem;
+        margin-left: 0;
+    }
+
+    .holdings-header-actions {
+        flex: 1 1 auto;
+        min-width: 0;
+        justify-content: flex-end;
         gap: 0.42rem;
+        overflow-x: auto;
+        overflow-y: visible;
+        padding-bottom: 2px;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
     }
 
-    .ai-agent-status {
-        width: 36px;
-        min-width: 36px;
-        max-width: 36px;
-        padding: 0;
-        justify-content: center;
-    }
-
-    .ai-agent-copy {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
+    .holdings-header-actions::-webkit-scrollbar {
+        display: none;
     }
 
     .holdings-action-tray {
-        flex: 1;
+        margin-left: auto;
+    }
+
+    #holdings-card .ai-agent-status,
+    #holdings-card .holdings-intel-hub {
+        max-width: min(100%, 220px);
+    }
+
+    .ai-agent-copy {
+        position: static;
+        width: auto;
+        height: auto;
+        overflow: hidden;
+        clip: auto;
+    }
+
+    .ai-agent-line {
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+
+    .holdings-action-tray {
+        flex: 0 1 auto;
         justify-content: flex-end;
         min-width: 0;
+    }
+
+    .holdings-header-actions .btn-claude-summaries {
+        padding: 0 0.55rem;
+        font-size: 0.72rem;
+    }
+
+    .holdings-header-actions .btn-claude-label {
+        max-width: 7.5rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .holdings-header-actions .btn-intel-frame {
@@ -2570,6 +2877,21 @@ table tbody tr:hover {
     }
 
     .ai-scan-row-label { display: none; }
+}
+
+@media (max-width: 420px) {
+    .holdings-header-actions .btn-claude-label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+    }
+
+    .holdings-header-actions .btn-claude-summaries {
+        width: 38px;
+        padding: 0;
+    }
 }
 
 /* Allocation legend swatches → tidy color dots */
@@ -2653,23 +2975,19 @@ body > .portfolio-manager-popover {
     justify-content: center;
     padding: calc(72px + env(safe-area-inset-top)) 1rem 1.5rem;
     background: rgba(0, 0, 0, 0);
-    backdrop-filter: blur(0px);
-    -webkit-backdrop-filter: blur(0px);
     pointer-events: none;
-    transition: background 0.16s var(--ease), backdrop-filter 0.16s var(--ease);
+    /* Only animate background — no backdrop-filter to avoid a compositor layer */
+    transition: background 0.14s var(--ease);
 }
 
 body > .portfolio-manager-popover.is-visible {
-    background: rgba(0, 0, 0, 0.68);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    background: rgba(0, 0, 0, 0.62);
     pointer-events: auto;
 }
 
 .portfolio-manager-panel {
-    background: var(--modal-surface) !important;
-    backdrop-filter: saturate(160%) blur(20px);
-    -webkit-backdrop-filter: saturate(160%) blur(20px);
+    /* Solid near-opaque surface — no blur needed when the panel covers most of the bg */
+    background: var(--popover-surface) !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
     border-radius: 20px !important;
     box-shadow: 0 32px 80px -20px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(255,255,255,0.04);
@@ -2678,9 +2996,10 @@ body > .portfolio-manager-popover.is-visible {
     width: min(720px, 100%);
     max-height: calc(100dvh - 88px - env(safe-area-inset-top) - 1.5rem);
     overflow: hidden;
-    transform: translateY(-10px) scale(0.98);
+    transform: translateY(-8px) scale(0.985);
     opacity: 0;
-    transition: transform 0.16s var(--ease), opacity 0.14s var(--ease);
+    /* Snappy enter: 120ms → feels instant */
+    transition: transform 0.12s var(--ease), opacity 0.1s var(--ease);
     will-change: transform, opacity;
 }
 
@@ -2938,7 +3257,7 @@ body > .portfolio-manager-popover.is-visible .portfolio-manager-panel {
 
 .manage-holding-card {
     content-visibility: auto;
-    contain-intrinsic-size: auto 118px;
+    contain-intrinsic-size: auto 196px;
     border-radius: 14px;
     border: 1px solid var(--hairline);
     background: var(--surface);
@@ -3080,53 +3399,190 @@ body > .portfolio-manager-popover.is-visible .portfolio-manager-panel {
 
 .manage-card-footer {
     display: flex;
-    align-items: flex-start;
-    gap: 0.55rem;
-    padding-top: 0.55rem;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding-top: 0.65rem;
     border-top: 1px solid var(--hairline-soft);
 }
 
-.manage-anchor-toggle {
+/* ── Hold mode segmented control (Apple-inspired) ─────────────────────── */
+
+.manage-hold-mode-section {
     display: flex;
-    align-items: flex-start;
-    gap: 0.45rem;
-    flex: 1;
+    flex-direction: column;
+    gap: 0.52rem;
+    width: 100%;
     min-width: 0;
-    cursor: pointer;
 }
 
-.manage-anchor-toggle input {
-    width: 1.05rem;
-    height: 1.05rem;
-    margin-top: 0.12rem;
-    flex-shrink: 0;
-    cursor: pointer;
-    border-radius: 6px;
-    border: 1px solid var(--hairline-hover);
-    background-color: var(--surface-strong);
-    accent-color: var(--accent-blue);
-}
-
-.manage-anchor-copy { min-width: 0; }
-
-.manage-anchor-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.28rem;
-    font-size: 0.74rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-}
-
-.manage-anchor-hint {
-    display: block;
-    margin-top: 0.1rem;
-    font-size: 0.64rem;
-    line-height: 1.35;
+.manage-hold-mode-heading {
+    font-size: 0.585rem;
+    font-weight: 700;
+    letter-spacing: 0.065em;
+    text-transform: uppercase;
     color: var(--text-tertiary);
 }
 
-.manage-holding-card.is-anchor .manage-anchor-label { color: var(--accent-blue); }
+/* iOS UISegmentedControl trough */
+.manage-hold-mode-grid {
+    display: flex;
+    align-items: stretch;
+    background: rgba(118, 118, 128, 0.12);
+    border-radius: 11px;
+    padding: 2px;
+    gap: 2px;
+}
+
+[data-bs-theme="light"] .manage-hold-mode-grid {
+    background: rgba(0, 0, 0, 0.065);
+}
+
+/* Each segment */
+.manage-hold-mode-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.15rem;
+    flex: 1;
+    min-height: 48px;
+    padding: 0.38rem 0.2rem;
+    border-radius: 9px;
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    font-size: 0.595rem;
+    font-weight: 600;
+    line-height: 1.2;
+    text-align: center;
+    cursor: pointer;
+    transition:
+        color      0.15s var(--ease),
+        background 0.15s var(--ease);
+    -webkit-tap-highlight-color: transparent;
+}
+
+.manage-hold-mode-box i {
+    font-size: 0.88rem;
+    opacity: 0.45;
+    transition: opacity 0.2s var(--ease), transform 0.22s var(--spring);
+}
+
+.manage-hold-mode-box-label {
+    display: block;
+    letter-spacing: 0.015em;
+}
+
+/* ── Active: floating pill ──────────────────────── */
+.manage-hold-mode-box.is-active {
+    color: var(--accent-green);
+    background: rgba(255, 255, 255, 0.09);
+    box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.32),
+        0 1px 1px rgba(0, 0, 0, 0.18),
+        inset 0 0.5px 0 rgba(255, 255, 255, 0.07);
+}
+
+[data-bs-theme="light"] .manage-hold-mode-box.is-active {
+    background: #ffffff;
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.08),
+        0 2px 6px rgba(0, 0, 0, 0.07);
+}
+
+.manage-hold-mode-box.is-active i {
+    opacity: 1;
+    transform: scale(1.1) translateY(-0.5px);
+}
+
+.manage-hold-mode-box[data-hold-mode="trade"].is-active {
+    color: var(--accent-cyan);
+}
+
+.manage-hold-mode-box[data-hold-mode="core"].is-active {
+    color: var(--accent-purple, #bf5af2);
+}
+
+/* anchor uses accent-green — no extra rule needed */
+
+/* ── Hover on inactive segments ─────────────────── */
+.manage-hold-mode-box:not(.is-active):hover {
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+[data-bs-theme="light"] .manage-hold-mode-box:not(.is-active):hover {
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.manage-hold-mode-box:not(.is-active):hover i {
+    opacity: 0.72;
+    transform: translateY(-0.5px);
+}
+
+.manage-hold-mode-box:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: -2px;
+}
+
+/* ── Mode detail callout ─────────────────────────── */
+@keyframes hold-detail-in {
+    from { opacity: 0; transform: translateY(3px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.manage-hold-mode-detail {
+    margin: 0;
+    padding: 0.5rem 0.62rem 0.5rem 0.7rem;
+    border-radius: 9px;
+    border: none;
+    border-left: 2px solid var(--accent-green);
+    background: rgba(48, 209, 88, 0.05);
+    font-size: 0.67rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.manage-hold-mode-detail.is-entering {
+    animation: hold-detail-in 0.28s var(--ease) both;
+}
+
+.manage-hold-mode-detail strong {
+    color: var(--text-primary);
+    font-weight: 650;
+}
+
+/* Per-mode callout accent — driven by data-hold-mode on .manage-hold-mode-section */
+.manage-hold-mode-section[data-hold-mode="trade"] .manage-hold-mode-detail {
+    border-left-color: var(--accent-cyan);
+    background: rgba(100, 210, 255, 0.05);
+}
+
+.manage-hold-mode-section[data-hold-mode="core"] .manage-hold-mode-detail {
+    border-left-color: var(--accent-purple, #bf5af2);
+    background: rgba(191, 90, 242, 0.05);
+}
+
+/* ── Card border accents ─────────────────────────── */
+.manage-holding-card.is-anchor {
+    border-color: color-mix(in srgb, var(--accent-green) 24%, var(--hairline));
+}
+
+.manage-holding-card.is-hold-mode-trade {
+    border-color: color-mix(in srgb, var(--accent-cyan) 22%, var(--hairline));
+}
+
+.manage-holding-card.is-hold-mode-core {
+    border-color: color-mix(in srgb, var(--accent-purple, #bf5af2) 22%, var(--hairline));
+}
+
+@media (max-width: 420px) {
+    .manage-hold-mode-box {
+        font-size: 0.55rem;
+        min-height: 44px;
+    }
+}
 
 /* Skeleton cards */
 .manage-holding-card--skeleton {
@@ -5496,6 +5952,181 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.55; transform: translateX(1px); 
 .move-badge.mixed            { color: #bf5af2; }
 .move-badge.etf-index        { color: #30d158; }
 
+.holdings-header-actions .btn-claude-summaries {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    flex-shrink: 0;
+    gap: 0.35rem;
+    width: auto !important;
+    height: auto !important;
+    min-height: 38px;
+    padding: 0 0.72rem;
+    border-radius: 999px;
+    border: 1px solid rgba(191, 90, 242, 0.45);
+    background: linear-gradient(135deg, rgba(191, 90, 242, 0.18), rgba(111, 214, 240, 0.12));
+    color: #f3ecff;
+    font-weight: 600;
+    font-size: 0.76rem;
+    white-space: nowrap;
+    position: static;
+    transition: transform 0.2s var(--spring), opacity 0.2s var(--ease);
+}
+
+.holdings-header-actions .btn-claude-summaries:hover:not(:disabled) {
+    transform: translateY(-1px);
+    border-color: rgba(210, 160, 255, 0.65);
+}
+
+.holdings-header-actions .btn-claude-summaries.is-loading i {
+    animation: spin 0.8s linear infinite;
+}
+
+.holdings-header-actions .btn-claude-summaries:disabled {
+    opacity: 0.65;
+}
+
+.holdings-header-actions .btn-claude-summaries[hidden] {
+    display: none !important;
+}
+
+.local-intel-guide {
+    margin: 0 0 1rem;
+    padding: 0.72rem 0.85rem;
+    border-radius: 14px;
+    border: 1px solid rgba(111, 214, 240, 0.28);
+    background: linear-gradient(135deg, rgba(111, 214, 240, 0.1), rgba(48, 209, 88, 0.06));
+    box-shadow: 0 10px 28px -22px rgba(111, 214, 240, 0.85);
+}
+
+.local-intel-guide[hidden] {
+    display: none !important;
+}
+
+.local-intel-guide-inner {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+}
+
+.local-intel-guide-icon {
+    flex-shrink: 0;
+    width: 2rem;
+    height: 2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    background: rgba(111, 214, 240, 0.14);
+    color: var(--brand-cyan, #6fd6f0);
+    font-size: 1rem;
+}
+
+.local-intel-guide-copy {
+    flex: 1;
+    min-width: 0;
+}
+
+.local-intel-guide-title {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 650;
+    color: var(--text-primary);
+    margin-bottom: 0.2rem;
+}
+
+.local-intel-guide-text {
+    margin: 0;
+    font-size: 0.74rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+}
+
+.local-intel-guide-link {
+    display: inline;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--brand-cyan, #6fd6f0);
+    font: inherit;
+    font-weight: 650;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+    vertical-align: baseline;
+}
+
+.local-intel-guide-link:hover {
+    color: #9de8f8;
+}
+
+.local-intel-guide-dots {
+    font-size: 0.72rem;
+    opacity: 0.85;
+    vertical-align: -0.05em;
+}
+
+.local-intel-guide-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-shrink: 0;
+}
+
+.local-intel-guide-enable {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    white-space: nowrap;
+    border: 1px solid rgba(191, 90, 242, 0.45) !important;
+    background: linear-gradient(135deg, rgba(191, 90, 242, 0.2), rgba(111, 214, 240, 0.12)) !important;
+    color: #f3ecff !important;
+    font-weight: 600;
+}
+
+.local-intel-guide-dismiss {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+}
+
+.local-intel-guide-dismiss:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-secondary);
+}
+
+.nav-menu-row.local-intel-guide-highlight {
+    background: rgba(191, 90, 242, 0.12);
+    box-shadow: inset 0 0 0 1px rgba(191, 90, 242, 0.35);
+    border-radius: 8px;
+    animation: localIntelGuidePulse 1.6s ease-in-out 2;
+}
+
+@keyframes localIntelGuidePulse {
+    0%, 100% { background: rgba(191, 90, 242, 0.12); }
+    50% { background: rgba(191, 90, 242, 0.22); }
+}
+
+@media (max-width: 767.98px) {
+    .local-intel-guide-inner {
+        flex-wrap: wrap;
+    }
+
+    .local-intel-guide-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+}
+
 /* ── Holding Intel button — futuristic AI action ─────────────────────── */
 .btn-holding-intel {
     position: relative;
@@ -5980,6 +6611,45 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.55; transform: translateX(1px); 
     background: linear-gradient(135deg, rgba(111, 214, 240, 0.28), rgba(191, 90, 242, 0.26) 48%, rgba(48, 209, 88, 0.22)) !important;
     color: #eefbff !important;
     transform: scale(1.02);
+}
+
+/* holdings-intel-hub is a tip-trigger — undo the 20×20 icon-only defaults */
+.holdings-intel-hub.tip-trigger {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: flex-start;
+    width: auto !important;
+    height: auto !important;
+    min-width: 0;
+    min-height: 38px;
+    padding: 0 0.62rem 0 0.38rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--surface-strong) 52%, transparent);
+    color: inherit;
+}
+
+.holdings-intel-hub.tip-trigger:hover {
+    background: color-mix(in srgb, var(--surface-strong) 52%, transparent);
+    color: inherit;
+}
+
+/* btn-claude-summaries is a tip-trigger — undo the 20×20 icon-only defaults */
+.btn-claude-summaries.tip-trigger {
+    width: auto !important;
+    height: auto !important;
+    min-height: 38px;
+    border-radius: 999px !important;
+    margin-left: 0;
+    top: 0;
+    vertical-align: unset;
+    font-size: 0.76rem;
+    line-height: 1.2;
+    position: static;
+}
+
+.btn-claude-summaries.tip-trigger:hover {
+    color: #f3ecff !important;
+    transform: translateY(-1px);
 }
 
 /* ── Floating tip popover ────────────────────────────────────────────────── */
@@ -11541,6 +12211,81 @@ svg.signal-radar {
 
 .briefing-verdict-pill i { font-size: 0.72rem; opacity: 0.85; }
 
+.hold-mode-strip {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.1rem;
+}
+
+.hold-mode-sep {
+    opacity: 0.22;
+    margin: 0 0.08rem;
+    font-weight: 400;
+    color: var(--text-tertiary);
+    user-select: none;
+}
+
+.hold-mode-seg {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    min-height: 22px;
+    padding: 0.12rem 0.42rem;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--text-secondary) 22%, transparent);
+    background: transparent;
+    color: var(--text-tertiary);
+    font-size: 0.58rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.hold-mode-seg.is-active {
+    color: var(--accent-green);
+    background: color-mix(in srgb, var(--accent-green) 16%, transparent);
+    border-color: color-mix(in srgb, var(--accent-green) 40%, transparent);
+}
+
+.hold-mode-seg[data-hold-mode="trade"].is-active {
+    color: var(--accent-cyan);
+    background: color-mix(in srgb, var(--accent-cyan) 14%, transparent);
+    border-color: color-mix(in srgb, var(--accent-cyan) 36%, transparent);
+}
+
+.hold-mode-seg[data-hold-mode="core"].is-active {
+    color: var(--accent-purple, #bf5af2);
+    background: color-mix(in srgb, var(--accent-purple, #bf5af2) 14%, transparent);
+    border-color: color-mix(in srgb, var(--accent-purple, #bf5af2) 34%, transparent);
+}
+
+.hold-mode-seg:hover,
+.hold-mode-seg:focus-visible {
+    color: var(--text-primary);
+    border-color: color-mix(in srgb, var(--text-primary) 28%, transparent);
+    outline: none;
+}
+
+.hold-mode-seg.is-active:hover,
+.hold-mode-seg.is-active:focus-visible {
+    color: var(--accent-green);
+    border-color: color-mix(in srgb, var(--accent-green) 54%, transparent);
+}
+
+.hold-mode-seg[data-hold-mode="trade"].is-active:hover,
+.hold-mode-seg[data-hold-mode="trade"].is-active:focus-visible {
+    color: var(--accent-cyan);
+    border-color: color-mix(in srgb, var(--accent-cyan) 50%, transparent);
+}
+
+.hold-mode-seg[data-hold-mode="core"].is-active:hover,
+.hold-mode-seg[data-hold-mode="core"].is-active:focus-visible {
+    color: var(--accent-purple, #bf5af2);
+    border-color: color-mix(in srgb, var(--accent-purple, #bf5af2) 48%, transparent);
+}
+
 .briefing-headline {
     grid-area: headline;
     margin: 0;
@@ -11592,20 +12337,35 @@ svg.signal-radar {
 }
 
 .briefing-conf-ring-wrap {
-    display: grid;
-    grid-template-rows: 72px auto auto auto;
-    justify-items: center;
+    display: flex;
+    flex-direction: column;
     align-items: center;
-    row-gap: 0.28rem;
-    width: 100px;
+    gap: 0.5rem;
+    width: 112px;
     flex-shrink: 0;
 }
 
-.briefing-conf-ring {
-    grid-row: 1;
-    grid-column: 1;
+.briefing-conf-ring-core {
+    position: relative;
     width: 72px;
     height: 72px;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+}
+
+.briefing-conf-ring-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.14rem;
+    width: 100%;
+    text-align: center;
+}
+
+.briefing-conf-ring {
+    width: 100%;
+    height: 100%;
     transform: rotate(-90deg);
 }
 
@@ -11625,10 +12385,11 @@ svg.signal-radar {
 }
 
 .briefing-conf-ring-pct {
-    grid-row: 1;
-    grid-column: 1;
-    position: relative;
-    z-index: 1;
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-size: 0.92rem;
     font-weight: 800;
     font-variant-numeric: tabular-nums;
@@ -11640,32 +12401,24 @@ svg.signal-radar {
 
 .briefing-conf-ring-caption,
 .briefing-conf-range {
-    grid-column: 1;
     width: 100%;
-    max-width: 100px;
-    font-size: 0.58rem;
+    max-width: 112px;
+    font-size: 0.62rem;
     font-weight: 650;
-    line-height: 1.3;
+    line-height: 1.35;
     color: var(--text-secondary);
     text-align: center;
     text-wrap: balance;
 }
 
-.briefing-conf-ring-caption {
-    grid-row: 2;
-}
-
 .briefing-conf-range {
-    grid-row: 3;
-    font-size: 0.54rem;
+    font-size: 0.56rem;
     font-variant-numeric: tabular-nums;
     color: var(--text-tertiary);
 }
 
 .briefing-conf-ring-wrap .verdict-ai-delta {
-    grid-row: 4;
-    grid-column: 1;
-    margin: 0;
+    margin: 0.06rem 0 0;
 }
 
 .briefing-flag {
@@ -12560,7 +13313,10 @@ svg.signal-radar {
 /* Pill buttons reuse tip-trigger for popovers — override the 20×20 icon-only defaults */
 .verdict-scenario-pill.tip-trigger,
 .verdict-horizon-pill.tip-trigger,
-.verdict-anchor-pill.tip-trigger {
+.verdict-anchor-pill.tip-trigger,
+.hold-mode-seg.tip-trigger,
+.briefing-verdict-pill.tip-trigger,
+.manage-hold-mode-box.tip-trigger {
     width: auto;
     height: auto;
     min-height: 0;
@@ -12572,9 +13328,24 @@ svg.signal-radar {
 
 .verdict-scenario-pill.tip-trigger i,
 .verdict-horizon-pill.tip-trigger i,
-.verdict-anchor-pill.tip-trigger i {
+.verdict-anchor-pill.tip-trigger i,
+.hold-mode-seg.tip-trigger i,
+.briefing-verdict-pill.tip-trigger i,
+.manage-hold-mode-box.tip-trigger i {
     font-size: 0.72rem;
     flex-shrink: 0;
+}
+
+.briefing-verdict-pill.tip-trigger {
+    cursor: help;
+}
+
+.manage-hold-mode-box.tip-trigger {
+    width: 100%;
+    height: auto;
+    margin-left: 0;
+    border-radius: 10px;
+    justify-content: center;
 }
 
 .verdict-scenario-pill:hover {
@@ -15144,6 +15915,15 @@ svg.signal-radar {
 @keyframes markets-tape-scroll {
     from { transform: translateX(0); }
     to   { transform: translateX(-50%); }
+}
+
+/* ── Intelligence engine visibility (menu dropdown is source of truth) ── */
+[data-intelligence-engine="local"] [data-engine-claude-only] {
+    display: none !important;
+}
+
+[data-intelligence-engine="claude"] [data-engine-local-only] {
+    display: none !important;
 }
 
 /* ── Widget AI tip cards (per-card) ─────────────────────────────── */

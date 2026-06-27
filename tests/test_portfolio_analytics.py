@@ -1,7 +1,9 @@
 """Tests for portfolio analytics service."""
+# pylint: disable=protected-access
+
+from unittest.mock import patch
 
 import numpy as np
-from unittest.mock import patch
 
 from app.services import portfolio_analytics as pa
 
@@ -34,7 +36,7 @@ def test_compute_drawdown_series():
 def test_compute_drawdown_empty():
     result = pa.compute_drawdown([])
     assert result["has_data"] is False
-    assert result["series"] == []
+    assert not result["series"]
 
 
 def test_compute_contribution_day():
@@ -115,10 +117,26 @@ def test_compute_market_context_enriches(mock_quotes, mock_exposure, mock_corr):
     mock_corr.return_value = {"^GSPC": 0.82, "^N225": 0.15}
 
     world = [
-        {"ticker": "^GSPC", "name": "S&P 500", "region": "US", "flag": "🇺🇸", "price": 100, "day_change_pct": -0.1},
-        {"ticker": "^N225", "name": "Nikkei 225", "region": "Asia", "flag": "🇯🇵", "price": 200, "day_change_pct": -1.0},
+        {
+            "ticker": "^GSPC",
+            "name": "S&P 500",
+            "region": "US",
+            "flag": "🇺🇸",
+            "price": 100,
+            "day_change_pct": -0.1,
+        },
+        {
+            "ticker": "^N225",
+            "name": "Nikkei 225",
+            "region": "Asia",
+            "flag": "🇯🇵",
+            "price": 200,
+            "day_change_pct": -1.0,
+        },
     ]
-    holdings = [{"ticker": "VOO", "allocation_pct": 50, "current_value": 5000, "is_watchlist": False}]
+    holdings = [
+        {"ticker": "VOO", "allocation_pct": 50, "current_value": 5000, "is_watchlist": False}
+    ]
 
     pa._cache.clear()
     result = pa.compute_market_context(holdings, world)
@@ -168,4 +186,3 @@ def test_compute_conviction_gaps():
     result = pa.compute_conviction_gaps(holdings, signals)
     assert result["has_data"] is True
     assert result["gaps"][0]["ticker"] == "BIG"
-

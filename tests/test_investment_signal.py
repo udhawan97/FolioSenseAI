@@ -554,12 +554,21 @@ class TestGenerateVerdictQuips:
         mock_msg = MagicMock()
         mock_block = MagicMock()
         mock_block.type = "text"
-        mock_block.text = '{"NOW": {"q": "Quietly stacking gains like nobody is watching.", "n": 2, "cn": [0,0,0,0]}}'
+        mock_block.text = (
+            '{"NOW": {"q": "Quietly stacking gains like nobody is watching.", '
+            '"n": 2, "cn": [0,0,0,0]}}'
+        )
         mock_msg.content = [mock_block]
         with patch("app.services.ai_service.client") as mock_client:
             mock_client.messages.create.return_value = mock_msg
             result = generate_verdict_quips([
-                {"ticker": "NOW", "action": "add", "confidence": 72, "reason": "Analysts bullish", "mix": "An:s"}
+                {
+                    "ticker": "NOW",
+                    "action": "add",
+                    "confidence": 72,
+                    "reason": "Analysts bullish",
+                    "mix": "An:s",
+                }
             ])
         assert "NOW" in result
         assert isinstance(result["NOW"], str)
@@ -569,12 +578,21 @@ class TestGenerateVerdictQuips:
         mock_msg = MagicMock()
         mock_block = MagicMock()
         mock_block.type = "text"
-        mock_block.text = '```json\n{"VOO": {"q": "The index never blinked.", "n": 0, "cn": [0,0,0,0]}}\n```'
+        mock_block.text = (
+            '```json\n{"VOO": {"q": "The index never blinked.", '
+            '"n": 0, "cn": [0,0,0,0]}}\n```'
+        )
         mock_msg.content = [mock_block]
         with patch("app.services.ai_service.client") as mock_client:
             mock_client.messages.create.return_value = mock_msg
             result = generate_verdict_quips([
-                {"ticker": "VOO", "action": "hold", "confidence": 55, "reason": "Fair value zone", "mix": "Val:n"}
+                {
+                    "ticker": "VOO",
+                    "action": "hold",
+                    "confidence": 55,
+                    "reason": "Fair value zone",
+                    "mix": "Val:n",
+                }
             ])
         assert "VOO" in result
 
@@ -752,7 +770,6 @@ def test_exposure_context_penalizes_add():
 
 
 def test_earnings_cap_on_add():
-    from datetime import date, timedelta
     event = {
         "confidence_cap": 55,
         "tip_title": "Earnings",
@@ -762,4 +779,3 @@ def test_earnings_cap_on_add():
     sig = build_investment_signal(_stock_rec("buy"), event_context=event)
     if sig.action == "add":
         assert sig.confidence <= 55
-

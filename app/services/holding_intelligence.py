@@ -468,7 +468,9 @@ _STATIC: dict[str, dict] = {
 
 # ── Live enrichment via yfinance ──────────────────────────────────────────────
 
-def _try_yfinance_enrichment(ticker: str) -> tuple[list, list, list]:
+def _try_yfinance_enrichment(  # pylint: disable=too-many-branches
+    ticker: str,
+) -> tuple[list, list, list]:
     """
     Attempt to fetch sector weights, country weights, and top holdings from yfinance.
     Returns (sectors, countries, top_holdings) — any element may be empty.
@@ -492,7 +494,10 @@ def _try_yfinance_enrichment(ticker: str) -> tuple[list, list, list]:
             sec_total = sum(s.weight for s in sectors)
             if sec_total > 0 and abs(sec_total - 100.0) > 0.15:
                 factor = 100.0 / sec_total
-                sectors = [SectorWeight(name=s.name, weight=round(s.weight * factor, 1)) for s in sectors]
+                sectors = [
+                    SectorWeight(name=s.name, weight=round(s.weight * factor, 1))
+                    for s in sectors
+                ]
 
         cw = info.get("countryWeightings") or []
         for item in cw:
@@ -505,7 +510,10 @@ def _try_yfinance_enrichment(ticker: str) -> tuple[list, list, list]:
             ctry_total = sum(c.weight for c in countries)
             if ctry_total > 0 and abs(ctry_total - 100.0) > 0.15:
                 factor = 100.0 / ctry_total
-                countries = [CountryWeight(name=c.name, weight=round(c.weight * factor, 1)) for c in countries]
+                countries = [
+                    CountryWeight(name=c.name, weight=round(c.weight * factor, 1))
+                    for c in countries
+                ]
 
         for h in (info.get("holdings") or [])[:MAX_CONTRIBUTION_HOLDINGS]:
             if isinstance(h, dict):

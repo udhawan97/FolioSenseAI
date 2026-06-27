@@ -33,6 +33,30 @@ const AnalyticsCharts = (() => {
 
     let _moduleInsightsCache = { ai: null, local: null };
     let _moduleInsightsLoading = false;
+    let _portfolioExposureCache = null;
+    let _portfolioExposurePromise = null;
+
+    async function fetchPortfolioExposure({ refresh = false } = {}) {
+        if (!refresh && _portfolioExposureCache) return _portfolioExposureCache;
+        if (!refresh && typeof cachedPortfolioExposure !== "undefined" && cachedPortfolioExposure) {
+            _portfolioExposureCache = cachedPortfolioExposure;
+            return cachedPortfolioExposure;
+        }
+        if (!refresh && _portfolioExposurePromise) return _portfolioExposurePromise;
+        _portfolioExposurePromise = fetch("/api/ai/portfolio-exposure")
+            .then((res) => {
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return res.json();
+            })
+            .then((data) => {
+                _portfolioExposureCache = data;
+                return data;
+            })
+            .finally(() => {
+                _portfolioExposurePromise = null;
+            });
+        return _portfolioExposurePromise;
+    }
     const MODULE_LABELS = {
         performance: "Performance",
         risk: "Risk",
@@ -226,6 +250,11 @@ const AnalyticsCharts = (() => {
         }
     }
 
+    function analyticsSignalsUrl() {
+        const local = typeof isLocalIntelligenceMode === "function" && isLocalIntelligenceMode();
+        return `/api/ai/investment-signals/all${local ? "?force_local=true" : ""}`;
+    }
+
     function widgetInsightMode() {
         const claudeOffline = typeof _isClaudeApiLive !== "undefined"
             && (_isClaudeApiLive === false || _forcedLocalMode);
@@ -233,27 +262,48 @@ const AnalyticsCharts = (() => {
         return claudeOffline || local ? "local" : "ai";
     }
 
+    function aiWidgetInsightsMap() {
+        const payload = _moduleInsightsCache.ai;
+        if (!payload || payload.source !== "claude") return {};
+        return payload.widget_insights || {};
+    }
+
+    function renderWidgetInsight(el, value, useAi) {
+        const esc = typeof escapeHtml === "function" ? escapeHtml : s => s;
+        const iconClass = useAi ? "bi-stars" : "bi-cpu-fill";
+        const modeLabel = useAi ? "AI Tip" : "Local Intel";
+        const eyebrow =
+            `<span class="wi-eyebrow"><i class="bi ${iconClass}"></i>${modeLabel}</span>`;
+
+        if (typeof value === "object" && value !== null && value.insight) {
+            el.innerHTML =
+                eyebrow +
+                `<strong class="wi-headline">${esc(value.headline || "")}</strong>` +
+                `<span class="wi-text">${esc(value.insight)}</span>`;
+            return;
+        }
+
+        if (useAi) {
+            el.innerHTML = eyebrow + `<span class="wi-text">${esc(String(value))}</span>`;
+            return;
+        }
+
+        el.textContent = String(value);
+    }
+
     function applyWidgetInsights() {
         const mode = widgetInsightMode();
         const localWidgets = _moduleInsightsCache.local?.widget_insights || {};
-        const aiWidgets = _moduleInsightsCache.ai?.widget_insights || {};
-        if (!localWidgets && !aiWidgets) return;
+        const aiWidgets = mode === "ai" ? aiWidgetInsightsMap() : {};
+        if (!Object.keys(localWidgets).length && !Object.keys(aiWidgets).length) return;
 
-        const esc = typeof escapeHtml === "function" ? escapeHtml : s => s;
-        const useAi = mode === "ai" && Object.keys(aiWidgets).length > 0;
-        const iconClass = useAi ? "bi-stars" : "bi-cpu-fill";
-        const modeLabel = useAi ? "AI Tip" : "Local Intel";
+        const useAi = mode === "ai";
 
         document.querySelectorAll("[data-widget-insight]").forEach(el => {
             const key = el.dataset.widgetInsight;
             if (!key) return;
 
-            let value;
-            if (useAi) {
-                value = aiWidgets[key] ?? localWidgets[key] ?? "";
-            } else {
-                value = localWidgets[key] ?? "";
-            }
+            const value = useAi ? (aiWidgets[key] ?? "") : (localWidgets[key] ?? "");
 
             if (!value && value !== 0) {
                 el.textContent = "";
@@ -263,21 +313,16 @@ const AnalyticsCharts = (() => {
 
             el.hidden = false;
             el.dataset.insightMode = useAi ? "ai" : "local";
-
-            if (typeof value === "object" && value !== null && value.insight) {
-                el.innerHTML =
-                    `<span class="wi-eyebrow"><i class="bi ${iconClass}"></i>${modeLabel}</span>` +
-                    `<strong class="wi-headline">${esc(value.headline || "")}</strong>` +
-                    `<span class="wi-text">${esc(value.insight)}</span>`;
-            } else {
-                el.textContent = String(value);
-            }
+            renderWidgetInsight(el, value, useAi);
         });
     }
 
     async function loadWidgetInsights(forceRefresh = false) {
         if (_moduleInsightsCache.local && !forceRefresh) {
             applyWidgetInsights();
+            if (widgetInsightMode() === "ai") {
+                void loadAiWidgetInsights(false);
+            }
             return;
         }
         if (_moduleInsightsLoading && !forceRefresh) return;
@@ -288,6 +333,9 @@ const AnalyticsCharts = (() => {
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             _moduleInsightsCache.local = await res.json();
             applyWidgetInsights();
+            if (widgetInsightMode() === "ai") {
+                void loadAiWidgetInsights(false);
+            }
         } catch (err) {
             console.warn("Analytics widget insights fetch failed:", err);
         } finally {
@@ -301,15 +349,23 @@ const AnalyticsCharts = (() => {
             applyWidgetInsights();
             return;
         }
+        applyWidgetInsights();
         try {
             const params = new URLSearchParams({ mode: "ai" });
             if (forceRefresh) params.set("force_refresh", "true");
             const res = await fetch(`/api/ai/analytics-insights?${params}`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            _moduleInsightsCache.ai = await res.json();
+            const payload = await res.json();
+            if (payload?.source === "claude") {
+                _moduleInsightsCache.ai = payload;
+            } else {
+                _moduleInsightsCache.ai = null;
+            }
             applyWidgetInsights();
         } catch (err) {
             console.warn("Claude analytics tips fetch failed:", err);
+            _moduleInsightsCache.ai = null;
+            applyWidgetInsights();
         }
     }
 
@@ -453,7 +509,7 @@ const AnalyticsCharts = (() => {
         showEmpty("portfolio-outlook-empty", false);
 
         try {
-            const res = await fetch(`/api/ai/investment-signals/all${window._forcedLocalMode ? "?force_local=true" : ""}`);
+            const res = await fetch(analyticsSignalsUrl());
             if (!res.ok) throw new Error("signals unavailable");
             const data = await res.json();
             renderSignalBoard(data);
@@ -481,7 +537,7 @@ const AnalyticsCharts = (() => {
         try {
             const [riskRes, sigRes] = await Promise.all([
                 fetch("/api/portfolio/risk-metrics"),
-                fetch(`/api/ai/investment-signals/all${window._forcedLocalMode ? "?force_local=true" : ""}`),
+                fetch(analyticsSignalsUrl()),
             ]);
             const data = await riskRes.json();
             const sigData = sigRes.ok ? await sigRes.json() : {};
@@ -1014,8 +1070,7 @@ const AnalyticsCharts = (() => {
         showLoading("concentration-loading", true);
         showEmpty("concentration-empty", false);
         try {
-            const res = await fetch("/api/ai/portfolio-exposure");
-            const data = await res.json();
+            const data = await fetchPortfolioExposure();
             const hhi = data.concentration_hhi ?? 0;
             const sectors = data.sector_exposure || [];
 
@@ -2095,8 +2150,7 @@ const AnalyticsCharts = (() => {
         showLoading("treemap-loading", true);
         showEmpty("treemap-empty", false);
         try {
-            const res = await fetch("/api/ai/portfolio-exposure");
-            const data = await res.json();
+            const data = await fetchPortfolioExposure();
             const sectors = (data.sector_exposure || []).filter(s => s.weight_pct > 0);
 
             if (!sectors.length) {
@@ -2209,8 +2263,7 @@ const AnalyticsCharts = (() => {
         showLoading("geo-loading", true);
         showEmpty("geo-empty", false);
         try {
-            const res = await fetch("/api/ai/portfolio-exposure");
-            const data = await res.json();
+            const data = await fetchPortfolioExposure();
             const countries = (data.country_exposure || []).slice(0, 12);
 
             if (!countries.length) {
@@ -2736,12 +2789,20 @@ const AnalyticsCharts = (() => {
     }
 
     function onIntelligenceModeChanged() {
+        if (widgetInsightMode() === "ai") {
+            _moduleInsightsCache.ai = null;
+            applyWidgetInsights();
+            void loadWidgetInsights(false);
+            void loadAiWidgetInsights(false);
+            return;
+        }
         _moduleInsightsCache.ai = null;
         applyWidgetInsights();
-        loadWidgetInsights(true);
+        void loadWidgetInsights(true);
     }
 
     function onRefresh() {
+        _portfolioExposureCache = null;
         loadWidgetInsights(true);
         if (activePane === "performance" && rendered.has("performance")) loadPerformancePane();
         if (activePane === "risk" && rendered.has("risk")) loadRiskPane();
@@ -2757,7 +2818,10 @@ const AnalyticsCharts = (() => {
             rendered.add(activePane);
             loadPane(activePane);
         } else if (activePane === "performance") {
-            loadPerformancePane();
+            requestAnimationFrame(() => {
+                benchmarkChart?.resize();
+                benchmarkChart?.update("none");
+            });
         } else if (activePane === "markets") {
             refreshMarketsTape(_cachedMarkets);
         }

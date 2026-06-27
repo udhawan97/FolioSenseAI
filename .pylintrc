@@ -22,7 +22,9 @@ disable=
     # SQLAlchemy's `func.now` is dynamically generated; pylint can't see it's callable.
     not-callable,
     # Small service helpers intentionally keep local parsing logic close to each scorer.
-    duplicate-code
+    duplicate-code,
+    # Routers and services use lazy imports to break runtime cycles.
+    cyclic-import
 
 [FORMAT]
 max-line-length=100

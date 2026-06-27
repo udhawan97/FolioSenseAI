@@ -125,7 +125,10 @@ def _detect_duplicates(holdings: list[dict]) -> list[dict]:
         duplicates.append({
             "type": "broad_etf_overlap",
             "tickers": broad_etfs,
-            "message": f"Multiple broad US ETFs ({', '.join(broad_etfs)}) — look-through overlap is high",
+            "message": (
+                f"Multiple broad US ETFs ({', '.join(broad_etfs)}) "
+                "— look-through overlap is high"
+            ),
         })
 
     for sym, pct in sorted(underlying.items(), key=lambda x: -x[1]):

@@ -3,7 +3,7 @@ app/services/investment_signal.py
 
 Deterministic investment signal builder — no network calls of its own.
 Consumes an AnalystRec plus holding context to produce a structured verdict.
-"""
+"""  # pylint: disable=too-many-lines
 from __future__ import annotations
 
 import logging
@@ -67,7 +67,13 @@ def signal_to_dict(sig: InvestmentSignal) -> dict:
         "timing": sig.timing,
         "confidence_detail": sig.confidence_detail,
     }
-    for key in ("regime_context", "peer_relative", "events", "exposure_context", "calibration_footnote"):
+    for key in (
+        "regime_context",
+        "peer_relative",
+        "events",
+        "exposure_context",
+        "calibration_footnote",
+    ):
         val = getattr(sig, key, None)
         if val is not None:
             out[key] = val
@@ -414,7 +420,10 @@ def _normalize_scenario_probs(raw: dict | list | None) -> dict[str, int]:
 
     total = sum(probs.values()) or 1
     if total != 100:
-        scaled = {k: max(0, int(round(probs[k] * 100 / total))) for k in probs}
+        scaled = {
+            k: max(0, int(round(v * 100 / total)))
+            for k, v in probs.items()
+        }
         drift = 100 - sum(scaled.values())
         if drift:
             likely_key = max(scaled, key=scaled.get)
@@ -463,7 +472,6 @@ def _infer_scenario_forecast(
 
     probs = _normalize_scenario_probs(probs)
     likely = max(probs, key=probs.get)
-    likely_label = {"base": "Base", "bull": "Bull", "bear": "Bear"}[likely]
     note = {
         "base": "Signals look balanced — no strong push either way yet.",
         "bull": "Momentum and supporting inputs lean toward an upside path.",
@@ -699,7 +707,7 @@ def _weighted_score(components: list[dict]) -> int:
     return _clamp(round(weighted / total_weight))
 
 
-def _attach_confidence_detail(
+def _attach_confidence_detail(  # pylint: disable=too-many-branches
     sig: InvestmentSignal,
     *,
     rec: AnalystRec,

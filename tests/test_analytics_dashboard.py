@@ -8,11 +8,13 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_analytics_sub_tabs_present():
     html = (ROOT / "templates/index.html").read_text(encoding="utf-8")
     js = (ROOT / "static/js/analytics-charts.js").read_text(encoding="utf-8")
+    dash_js = (ROOT / "static/js/dashboard.js").read_text(encoding="utf-8")
     css = (ROOT / "static/css/style.css").read_text(encoding="utf-8")
 
     assert 'id="analytics-zone-tabs"' in html
-    assert 'id="analytics-insight-bar"' in html
-    assert 'id="analytics-module-insight"' in html
+    assert 'id="local-intel-guide"' in html
+    assert 'id="analytics-insight-bar"' not in html
+    assert 'id="analytics-module-insight"' not in html
     assert 'data-analytics-pane="performance"' in html
     assert 'data-analytics-pane="risk"' in html
     assert 'data-analytics-pane="exposure"' in html
@@ -31,9 +33,13 @@ def test_analytics_sub_tabs_present():
     assert "/api/portfolio/drawdown" in js
     assert "/api/portfolio/contribution" in js
     assert "/api/ai/analytics-insights" in js
-    assert "loadModuleInsights" in js
-    assert ".analytics-zone-tabs" in css
-    assert ".analytics-insight-bar" in css
+    assert "loadWidgetInsights" in js
+    assert "loadAiWidgetInsights" in js
+    assert "updateLocalIntelGuide" in dash_js
+    assert "openNavOverflowMenu" in dash_js
+    assert "setEngineScopedVisibility" in dash_js
+    assert "validateIntelligenceEngineUi" in dash_js
+    assert ".local-intel-guide" in css
     assert "prefers-reduced-motion" in css
 
 
@@ -89,6 +95,8 @@ def test_ai_tip_card_styles_present():
     assert "wi-text" in js
     assert "AI Tip" in js
     assert "Local Intel" in js
+    assert 'payload?.source === "claude"' in js
+    assert "aiWidgetInsightsMap" in js
     assert "value.insight" in js
 
 

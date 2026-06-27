@@ -1,4 +1,5 @@
 """Tests for portfolio growth projection service."""
+# pylint: disable=protected-access
 
 from unittest.mock import patch
 

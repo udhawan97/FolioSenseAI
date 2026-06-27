@@ -1,11 +1,10 @@
 """Tests for verdict calibration snapshots."""
-from datetime import datetime, timezone
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.models import Base, VerdictSnapshot
+from app.models import Base
 from app.services.verdict_calibration import (
     log_verdict_snapshot,
     calibration_summary,

@@ -93,6 +93,8 @@ const TEXT_SIZE_LABELS = {
 };
 const DASHBOARD_PET_KEY = "foliosense-dashboard-pet-visible";
 const PET_MODE_KEY = "foliosense-force-local-mode";
+const LOCAL_INTEL_GUIDE_DISMISS_KEY = "foliosense-local-guide-dismissed";
+const LOCAL_INTEL_GUIDE_TOAST_KEY = "foliosense-local-guide-toast";
 const PERFORMANCE_RANGE_KEY = "foliosense-performance-range";
 const HERO_PNL_RANGE_KEY = "foliosense-hero-pnl-range";
 
@@ -514,6 +516,7 @@ let cachedIntelligence = {};   // ticker → intelligence object (coverage data)
 let cachedExplanations = {};   // ticker → explanation object (move data)
 let intelligenceLoaded = false;
 let intelligenceLoading = false;
+let _aiSummariesLoading = false;
 let intelligenceRetryState = {}; // ticker → number of retry attempts
 let intelligenceRetryingTickers = new Set();
 let intelligenceExhaustedTickers = new Set();
@@ -522,6 +525,55 @@ let _forcedLocalMode = false;
 
 function isLocalIntelligenceMode() {
     return _isClaudeApiLive === false || _forcedLocalMode;
+}
+
+function getIntelligenceEngineMode() {
+    return isLocalIntelligenceMode() ? "local" : "claude";
+}
+
+function usesClaudeSignals(options = {}) {
+    if (options.claude === true) return !isLocalIntelligenceMode();
+    return !isLocalIntelligenceMode();
+}
+
+function intelligenceSignalsUrl(options = {}) {
+    return `/api/ai/investment-signals/all${usesClaudeSignals(options) ? "" : "?force_local=true"}`;
+}
+
+function setEngineScopedVisibility() {
+    const local = isLocalIntelligenceMode();
+    const claudeAvailable = _isClaudeApiLive !== false;
+    document.documentElement.dataset.intelligenceEngine = local ? "local" : "claude";
+
+    document.querySelectorAll("[data-engine-claude-only]").forEach(el => {
+        el.hidden = local || !claudeAvailable;
+    });
+    document.querySelectorAll("[data-engine-local-only]").forEach(el => {
+        el.hidden = !local || !claudeAvailable;
+    });
+}
+
+function validateIntelligenceEngineUi() {
+    const local = isLocalIntelligenceMode();
+    const violations = [];
+
+    document.querySelectorAll("[data-engine-claude-only]").forEach(el => {
+        if (local && !el.hidden) violations.push(el.id || el.className || "claude-only");
+    });
+    document.querySelectorAll("[data-engine-local-only]").forEach(el => {
+        if (!local && !el.hidden) violations.push(el.id || el.className || "local-only");
+    });
+
+    const engine = document.documentElement.dataset.intelligenceEngine;
+    const expected = local ? "local" : "claude";
+    if (engine !== expected) {
+        violations.push(`dataset.intelligenceEngine=${engine || "unset"} expected=${expected}`);
+    }
+
+    if (violations.length) {
+        console.warn("[engine-ui] visibility violations:", violations);
+    }
+    return violations.length === 0;
 }
 
 const BRAND_INTRO_COPY = {
@@ -719,17 +771,118 @@ function setAgentLine(text) {
     if (line) line.textContent = text;
 }
 
-function setAgentReadyState(ready, message = "Insights ready") {
-    const status = document.getElementById("ai-agent-status");
-    const card = document.getElementById("holdings-card");
+function _agentKickerLabel({ scanning = false, ready = false, claudeIdle = false } = {}) {
+    const local = isLocalIntelligenceMode();
+    if (scanning) return local ? "Local Intel" : "FolioSense";
+    if (ready) return "FolioSense";
+    if (claudeIdle) return "Claude";
+    return local ? "Local Intel" : "FolioSense";
+}
 
-    if (card) card.classList.toggle("has-ai-insights", ready);
+let _lastHubEngine = null;
+
+function updateHoldingsRefreshButton() {
+    const btn = document.getElementById("btn-holdings-refresh");
+    if (!btn) return;
+
+    const local = isLocalIntelligenceMode();
+    btn.dataset.engine = local ? "local" : "claude";
+    btn.dataset.tipTitle = local ? "Refresh holdings (Local)" : "Refresh holdings (Claude)";
+    btn.dataset.tipBody = local
+        ? "Reload prices and on-device intel for every row."
+        : "Reload prices, intel, and Claude verdicts for every row.";
+    btn.dataset.tipIcon = local ? "bi-cpu-fill" : "bi-stars";
+    btn.dataset.tipVariant = local ? "local" : "ai";
+    btn.setAttribute(
+        "aria-label",
+        local ? "Refresh holdings with local intelligence" : "Refresh holdings with Claude intelligence",
+    );
+}
+
+function updateHoldingsIntelHub({ scanning = false, ready = false, claudeAction = false } = {}) {
+    const hub = document.getElementById("holdings-intel-hub");
+    if (!hub) return;
+
+    const local = isLocalIntelligenceMode();
+    const engine = local ? "local" : "claude";
+    const claudeIdle = !local && !scanning && !ready;
+
+    if (_lastHubEngine && _lastHubEngine !== engine) {
+        hub.classList.add("is-engine-switching");
+        window.setTimeout(() => hub.classList.remove("is-engine-switching"), 420);
+    }
+    _lastHubEngine = engine;
+
+    hub.dataset.engine = engine;
+    hub.classList.toggle("is-engine-local", local);
+    hub.classList.toggle("is-engine-claude", !local);
+    hub.classList.toggle("is-claude-idle", claudeIdle);
+    hub.classList.toggle("is-claude-action", !!claudeAction);
+
+    hub.dataset.tipTitle = local ? "Holding Intel" : (claudeIdle ? "Claude Summaries" : "FolioSense");
+    hub.dataset.tipBody = local
+        ? "Run on-device intel for every holding — coverage, drivers, and move explainers (no Claude tokens)."
+        : (claudeIdle
+            ? "Generate Claude quips, verdict narratives, and analytics tips (uses API tokens)."
+            : "FolioSense is reading your holdings — expand any row for intel when ready.");
+    hub.dataset.tipIcon = local ? "bi-cpu-fill" : (claudeIdle ? "bi-stars" : "bi-table");
+    hub.dataset.tipVariant = local ? "local" : (claudeIdle ? "ai" : "");
+
+    const claudeLine = document.getElementById("ai-agent-line-claude");
+    if (claudeLine) claudeLine.setAttribute("aria-hidden", claudeIdle ? "false" : "true");
+
+    hub.disabled = intelligenceLoading || _aiSummariesLoading;
+    hub.setAttribute("aria-busy", scanning ? "true" : "false");
+    updateHoldingsRefreshButton();
+}
+
+function updateAgentStatus({ scanning = false, ready = false, message = "", claudeAction = false } = {}) {
+    const status = document.getElementById("holdings-intel-hub");
+    const card = document.getElementById("holdings-card");
     if (!status) return;
 
-    if (ready) setAgentLine(message);
-    status.hidden = !ready;
-    status.setAttribute("aria-hidden", ready ? "false" : "true");
-    status.classList.toggle("is-ready", ready);
+    status.hidden = false;
+    status.setAttribute("aria-hidden", "false");
+    status.classList.toggle("is-scanning", scanning);
+    status.classList.toggle("is-ready", ready && !scanning);
+    status.classList.toggle("is-idle", !scanning && !ready);
+
+    if (card) card.classList.toggle("has-ai-insights", ready && !scanning);
+
+    const claudeIdle = !isLocalIntelligenceMode() && !scanning && !ready;
+    const kicker = document.getElementById("ai-agent-kicker");
+    if (kicker) kicker.textContent = _agentKickerLabel({ scanning, ready, claudeIdle });
+
+    const fallback = ready ? "Insights ready" : "Watching holdings";
+    if (!claudeIdle) setAgentLine(message || fallback);
+
+    updateHoldingsIntelHub({ scanning, ready, claudeAction });
+}
+
+function onHoldingsIntelHubClick() {
+    if (intelligenceLoading || _aiSummariesLoading) return;
+    const hub = document.getElementById("holdings-intel-hub");
+    if (hub?.disabled) return;
+
+    if (isLocalIntelligenceMode()) {
+        loadHoldingIntelligence();
+        return;
+    }
+    if (!intelligenceLoaded) {
+        loadHoldingIntelligence();
+        return;
+    }
+    generateAiHoldingSummaries();
+}
+
+window.onHoldingsIntelHubClick = onHoldingsIntelHubClick;
+
+function setAgentReadyState(ready, message = "Insights ready") {
+    updateAgentStatus({
+        scanning: false,
+        ready,
+        message: message || (ready ? "Insights ready" : "Watching holdings"),
+    });
 }
 
 const SCAN_ROW_LABELS = ["Scanning", "Reading", "Analyzing", "Processing", "Checking", "Fetching", "Loading", "Parsing", "Resolving"];
@@ -754,7 +907,7 @@ function renderAiScanTickers() {
     }).join("");
 }
 
-function setAiChecking(active, message = "Reading positions", insightsReady = false) {
+function setAiChecking(active, message = "Reading positions", insightsReady = false, claudeAction = false) {
     const card = document.getElementById("holdings-card");
     const panel = document.getElementById("ai-scan-panel");
     const title = document.getElementById("ai-scan-title");
@@ -772,7 +925,12 @@ function setAiChecking(active, message = "Reading positions", insightsReady = fa
         card.classList.remove("is-ai-checking");
         dashboardPet?.classList.remove("is-texting");
         if (panel) panel.setAttribute("aria-hidden", "true");
-        setAgentReadyState(insightsReady, message);
+        updateAgentStatus({
+            scanning: false,
+            ready: insightsReady,
+            message: message || (insightsReady ? "Insights ready" : "Watching holdings"),
+            claudeAction: false,
+        });
         HoldingsBg.stop();
         return;
     }
@@ -781,7 +939,7 @@ function setAiChecking(active, message = "Reading positions", insightsReady = fa
     card.classList.add("is-ai-checking");
     dashboardPet?.classList.add("is-texting");
     if (title) title.textContent = isLocalIntelligenceMode() ? "Local checking holdings" : "AI checking holdings";
-    setAgentReadyState(false);
+    updateAgentStatus({ scanning: true, message, claudeAction });
     HoldingsBg.stop();
     if (panel) {
         panel.setAttribute("aria-hidden", "false");
@@ -825,11 +983,11 @@ function setAiChecking(active, message = "Reading positions", insightsReady = fa
 }
 
 
-let _portfolioValueInFlight = false;
+let _portfolioValuePromise = null;
 
 async function loadPortfolioValue() {
-    if (_portfolioValueInFlight) return;
-    _portfolioValueInFlight = true;
+    if (_portfolioValuePromise) return _portfolioValuePromise;
+    _portfolioValuePromise = (async () => {
     try {
         const res = await fetch("/api/portfolio/value");
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -875,6 +1033,7 @@ async function loadPortfolioValue() {
         latestPortfolioDailyChange = isFiniteNumber(data.total_daily_change)
             ? Number(data.total_daily_change)
             : null;
+        const prevTickers = (latestHoldings || []).map(h => h.ticker).sort().join(",");
         latestHoldings = data.holdings;
         updateHoldingsFilterCounts();
 
@@ -887,19 +1046,19 @@ async function loadPortfolioValue() {
             if (data.best_performer) {
                 const el = document.getElementById("best-performer");
                 el.dataset.ticker = data.best_performer.ticker;
-                el.innerHTML = `${data.best_performer.ticker} <span style="font-size:.85em;opacity:.8">${formatPct(data.best_performer.day_change_pct)}</span>`;
+                el.innerHTML = `${escapeHtml(data.best_performer.ticker)} <span style="font-size:.85em;opacity:.8">${formatPct(data.best_performer.day_change_pct)}</span>`;
             }
             if (data.worst_performer) {
                 const el = document.getElementById("worst-performer");
                 el.dataset.ticker = data.worst_performer.ticker;
-                el.innerHTML = `${data.worst_performer.ticker} <span style="font-size:.85em;opacity:.8">${formatPct(data.worst_performer.day_change_pct)}</span>`;
+                el.innerHTML = `${escapeHtml(data.worst_performer.ticker)} <span style="font-size:.85em;opacity:.8">${formatPct(data.worst_performer.day_change_pct)}</span>`;
             }
             if (data.holdings.length) {
                 const largest = data.holdings.reduce((a, b) =>
                     a.current_value > b.current_value ? a : b);
                 const el = document.getElementById("largest-holding");
                 el.dataset.ticker = largest.ticker;
-                el.innerHTML = `${largest.ticker} <span style="font-size:.85em;opacity:.8">${formatCompact(largest.current_value)}</span>`;
+                el.innerHTML = `${escapeHtml(largest.ticker)} <span style="font-size:.85em;opacity:.8">${formatCompact(largest.current_value)}</span>`;
             }
 
             // Show holdings immediately; sparklines fill in when trend data arrives.
@@ -914,9 +1073,12 @@ async function loadPortfolioValue() {
                     latestTrendData = {};
                 });
 
-            latestProjectionData = null;
-            projectionLoadPromise = null;
-            if (dashboardZone === "analytics") loadProjection();
+            const nextTickers = data.holdings.map(h => h.ticker).sort().join(",");
+            if (prevTickers !== nextTickers) {
+                latestProjectionData = null;
+                projectionLoadPromise = null;
+                if (dashboardZone === "analytics") ensureProjectionLoaded();
+            }
         } catch (renderErr) {
             console.warn("Portfolio render error (data is current):", renderErr);
         }
@@ -944,8 +1106,10 @@ async function loadPortfolioValue() {
             }
         }
     } finally {
-        _portfolioValueInFlight = false;
+        _portfolioValuePromise = null;
     }
+    })();
+    return _portfolioValuePromise;
 }
 
 
@@ -3445,6 +3609,14 @@ function renderContributionBreakdown(
     if (!breakdown || !breakdown.length) {
         if (coverageType && coverageType !== "equity" && ticker) {
             const tickerArg = inlineJsString(ticker);
+            const local = isLocalIntelligenceMode();
+            const emptyCopy = local
+                ? "Yahoo/yfinance didn’t answer with this fund’s constituents. Enable Claude AI in menu → Intelligence → Engine to seed holdings."
+                : "Yahoo/yfinance didn’t answer with this fund’s constituents. Claude can estimate AUM and top-holdings, then use live prices for the move math.";
+            const retryBtn = local ? "" : `
+                    <button class="contrib-retry-btn" data-engine-claude-only onclick="reloadContributionForTicker(${tickerArg})">
+                        <i class="bi bi-stars"></i> Ask Claude
+                    </button>`;
             return `
                 <div class="intel-label" style="margin-top:.6rem">
                     <i class="bi bi-distribute-vertical"></i> Holdings Contribution
@@ -3452,13 +3624,9 @@ function renderContributionBreakdown(
                 <div class="contrib-empty">
                     <i class="bi bi-hourglass-split contrib-empty-icon" style="opacity:.55"></i>
                     <span class="contrib-empty-text" style="font-size:.8rem;line-height:1.45">
-                        Yahoo/yfinance didn’t answer with this fund’s constituents.
-                        I can ask Claude for an estimated AUM and top-holdings seed,
-                        then use live prices for the move math.
+                        ${emptyCopy}
                     </span>
-                    <button class="contrib-retry-btn" onclick="reloadContributionForTicker(${tickerArg})">
-                        <i class="bi bi-stars"></i> Ask Claude
-                    </button>
+                    ${retryBtn}
                 </div>`;
         }
         return "";
@@ -4676,27 +4844,180 @@ function _drawPctSparkline(canvas, pctSeries = []) {
     ctx.setLineDash([]);
 }
 
-function _anchorTipAttrs() {
-    return `data-tip-title="Anchor hold"
-        data-tip-body="Mark holdings you plan to keep for the long run. FolioSense never suggests trimming an anchor — instead it flags good moments to add more when the price dips below its own trend. Set it here or in Manage Holdings."
-        data-tip-icon="bi-anchor"`;
-}
+const _HOLD_MODE_ORDER = ["auto", "trade", "core", "anchor"];
 
-function _renderHorizonPill(verdict, ticker) {
-    const hc = verdict?.hold_class || "auto";
-    if (hc === "anchor") return "";
-    const labels = { auto: "Auto", trade: "Trade", core: "Core", anchor: "Anchor" };
-    const label = labels[hc] || "Auto";
+const _HOLD_MODE_META = {
+    auto: {
+        label: "Auto",
+        icon: "bi-sliders2",
+        tipTitle: "Standard mode",
+        tipBody:
+            "FolioSense uses its normal mix of expert views, price, trend, and quality. "
+            + "A good default for most holdings — balanced between recent moves and long-term value.",
+    },
+    trade: {
+        label: "Trade",
+        icon: "bi-hourglass-split",
+        tipTitle: "Trade mode",
+        tipBody:
+            "For positions you might adjust over the next few weeks. Recent price trend counts more; "
+            + "long-term valuation a bit less. You may see more Add or Trim nudges when the chart moves.",
+    },
+    core: {
+        label: "Core",
+        icon: "bi-gem",
+        tipTitle: "Core mode",
+        tipBody:
+            "For slow, long-term builds you plan to keep for years. Quality and fair price matter most; "
+            + "day-to-day swings count less — fewer flip-flops on short-term noise.",
+    },
+    anchor: {
+        label: "Anchor",
+        icon: "bi-anchor",
+        tipTitle: "Anchor mode",
+        tipBody:
+            "Marks a holding you do not want to sell down. FolioSense will never suggest trimming it — "
+            + "only good moments to add more when price dips. Your weight in the portfolio still shows as usual.",
+    },
+};
+
+const _VERDICT_PILL_TIPS = {
+    add: {
+        title: "Add suggestion",
+        body:
+            "Signals look favorable for building this position — price, trend, and expert views lean positive. "
+            + "This is a read on today’s data, not a command to buy.",
+    },
+    hold: {
+        title: "Hold suggestion",
+        body:
+            "Nothing strong enough to add or trim right now. FolioSense’s default when the evidence is mixed "
+            + "or only mildly tilted one way.",
+    },
+    trim: {
+        title: "Trim suggestion",
+        body:
+            "Signals lean toward reducing exposure — rich price, fading trend, or crowded weight. "
+            + "Anchor mode overrides this and never suggests trimming.",
+    },
+    "needs-data": {
+        title: "Needs more data",
+        body: "Not enough live data to make a call yet. Expand the row after prices refresh or check coverage.",
+    },
+};
+
+function _renderHoldModeStrip(verdict, ticker) {
     const holding = latestHoldings.find(h => h.ticker === ticker);
     if (!holding?.id) return "";
-    return `<span class="verdict-anchor-sep" aria-hidden="true">|</span>
-        <button class="verdict-horizon-pill tip-trigger" type="button"
-            onclick="cycleHorizonHold(event, ${holding.id}, ${inlineJsString(ticker)})"
-            data-tip-title="Time horizon"
-            data-tip-body="Trade weights momentum and events higher. Core favors quality and valuation. Auto uses default weights. Anchor suppresses trim calls."
-            data-tip-icon="bi-hourglass-split">
-            <i class="bi bi-hourglass-split" aria-hidden="true"></i> ${escapeHtml(label)}
+    const active = verdict?.hold_class || holding.hold_class || "auto";
+    const holdingId = holding.id;
+    const tickerArg = inlineJsString(ticker);
+
+    const segments = _HOLD_MODE_ORDER.map((mode, index) => {
+        const meta = _HOLD_MODE_META[mode];
+        const isActive = active === mode;
+        const sep = index > 0 ? `<span class="hold-mode-sep" aria-hidden="true">|</span>` : "";
+        return `${sep}<button type="button"
+            class="hold-mode-seg tip-trigger${isActive ? " is-active" : ""}"
+            role="radio"
+            aria-checked="${isActive ? "true" : "false"}"
+            data-hold-mode="${mode}"
+            data-tip-title="${escapeHtml(meta.tipTitle)}"
+            data-tip-body="${escapeHtml(meta.tipBody)}"
+            data-tip-icon="${escapeHtml(meta.icon)}"
+            onclick="setHoldMode(event, ${holdingId}, ${tickerArg}, ${inlineJsString(mode)})">
+            <i class="bi ${escapeHtml(meta.icon)}" aria-hidden="true"></i> ${escapeHtml(meta.label)}
         </button>`;
+    }).join("");
+
+    return `<span class="verdict-anchor-sep" aria-hidden="true">|</span>
+        <div class="hold-mode-strip" role="radiogroup" aria-label="How FolioSense treats this holding">${segments}</div>`;
+}
+
+function _syncHoldModeStrip(ticker, holdClass) {
+    const mainRow = document.querySelector(`tr[data-ticker="${CSS.escape(ticker)}"]`);
+    const strip = mainRow?.nextElementSibling?.querySelector(".hold-mode-strip");
+    if (!strip) return;
+    strip.querySelectorAll(".hold-mode-seg").forEach(btn => {
+        const active = btn.dataset.holdMode === holdClass;
+        btn.classList.toggle("is-active", active);
+        btn.setAttribute("aria-checked", String(active));
+    });
+}
+
+function _manageHoldModeCardClass(mode) {
+    if (mode === "anchor") return "is-anchor";
+    if (mode === "trade") return "is-hold-mode-trade";
+    if (mode === "core") return "is-hold-mode-core";
+    return "";
+}
+
+function _renderManageHoldModeSection(h) {
+    const active = h.hold_class || "auto";
+    const holdingId = h.id;
+    const tickerArg = inlineJsString(h.ticker);
+    const activeMeta = _HOLD_MODE_META[active] || _HOLD_MODE_META.auto;
+
+    const boxes = _HOLD_MODE_ORDER.map(mode => {
+        const meta = _HOLD_MODE_META[mode];
+        const isActive = active === mode;
+        return `<button type="button"
+            class="manage-hold-mode-box tip-trigger${isActive ? " is-active" : ""}"
+            role="radio"
+            aria-checked="${isActive ? "true" : "false"}"
+            data-hold-mode="${mode}"
+            data-tip-title="${escapeHtml(meta.tipTitle)}"
+            data-tip-body="${escapeHtml(meta.tipBody)}"
+            data-tip-icon="${escapeHtml(meta.icon)}"
+            onclick="setHoldMode(event, ${holdingId}, ${tickerArg}, ${inlineJsString(mode)})">
+            <i class="bi ${escapeHtml(meta.icon)}" aria-hidden="true"></i>
+            <span class="manage-hold-mode-box-label">${escapeHtml(meta.label)}</span>
+        </button>`;
+    }).join("");
+
+    return `<div class="manage-hold-mode-section" data-hold-mode="${escapeHtml(active)}">
+        <span class="manage-hold-mode-heading">How FolioSense reads this holding</span>
+        <div class="manage-hold-mode-grid" role="radiogroup" aria-label="Holding mode for ${escapeHtml(h.ticker)}">
+            ${boxes}
+        </div>
+        <p class="manage-hold-mode-detail" id="hold-mode-detail-${holdingId}">
+            <strong>${escapeHtml(activeMeta.tipTitle)}.</strong> ${escapeHtml(activeMeta.tipBody)}
+        </p>
+    </div>`;
+}
+
+function _syncManageHoldModeCard(holdingId, holdClass) {
+    const card = document.getElementById(`manage-row-${holdingId}`);
+    if (!card) return;
+    const mode = _HOLD_MODE_META[holdClass] ? holdClass : "auto";
+    const meta = _HOLD_MODE_META[mode];
+
+    card.dataset.holdMode = mode;
+    card.classList.remove("is-anchor", "is-hold-mode-trade", "is-hold-mode-core");
+    const modeClass = _manageHoldModeCardClass(mode);
+    if (modeClass) card.classList.add(modeClass);
+
+    card.querySelectorAll(".manage-hold-mode-box").forEach(btn => {
+        const active = btn.dataset.holdMode === mode;
+        btn.classList.toggle("is-active", active);
+        btn.setAttribute("aria-checked", String(active));
+    });
+
+    const section = card.querySelector(".manage-hold-mode-section");
+    if (section) section.dataset.holdMode = mode;
+
+    const detail = card.querySelector(".manage-hold-mode-detail");
+    if (detail) {
+        if (detail._enterRaf) cancelAnimationFrame(detail._enterRaf);
+        detail.classList.remove("is-entering");
+        detail.innerHTML = `<strong>${escapeHtml(meta.tipTitle)}.</strong> ${escapeHtml(meta.tipBody)}`;
+        // Schedule in the next frame — browser commits the DOM change first,
+        // then the animation class triggers a fresh keyframe (no forced reflow).
+        detail._enterRaf = requestAnimationFrame(() => {
+            detail._enterRaf = null;
+            detail.classList.add("is-entering");
+        });
+    }
 }
 
 function _shouldShowBookExposure(ticker) {
@@ -5254,20 +5575,6 @@ function _injectDeepIntelSection(section, deepData) {
     host.appendChild(wrap);
 }
 
-function _renderAnchorPill(verdict, ticker) {
-    const isAnchor = verdict?.hold_class === "anchor";
-    const holding = latestHoldings.find(h => h.ticker === ticker);
-    if (!isAnchor && !holding?.id) return "";
-    const pressed = isAnchor ? "true" : "false";
-    return `<span class="verdict-anchor-sep" aria-hidden="true">|</span><button class="verdict-anchor-pill tip-trigger ${isAnchor ? "is-anchor" : ""}"
-            type="button"
-            aria-pressed="${pressed}"
-            onclick="toggleAnchorHold(event, ${holding?.id || "null"}, ${inlineJsString(ticker)})"
-            ${_anchorTipAttrs()}>
-            <i class="bi bi-anchor" aria-hidden="true"></i> Anchor
-        </button>`;
-}
-
 function _renderFlipTriggers(verdict) {
     const flips = verdict?.flip_triggers;
     if (!flips?.add_price || !flips?.trim_price) return "";
@@ -5558,16 +5865,20 @@ function _renderBriefingConfidenceRing(conf, verdict, variant = "ai") {
     const deltaHtml = variant === "ai" ? _renderAiDeltaBadge(verdict) : "";
 
     return `<div class="briefing-conf-ring-wrap" aria-label="${pct}% signal strength">
-        <svg class="briefing-conf-ring" viewBox="0 0 64 64" aria-hidden="true">
-            <circle class="briefing-conf-ring-track" cx="32" cy="32" r="${r}"></circle>
-            <circle class="briefing-conf-ring-fill" cx="32" cy="32" r="${r}"
-                stroke-dasharray="${c.toFixed(2)}"
-                stroke-dashoffset="${offset.toFixed(2)}"></circle>
-        </svg>
-        <span class="briefing-conf-ring-pct">${pct}%</span>
-        <span class="briefing-conf-ring-caption">${conviction ? escapeHtml(conviction) : "Signal strength"}</span>
-        ${rangeCopy}
-        ${deltaHtml}
+        <div class="briefing-conf-ring-core">
+            <svg class="briefing-conf-ring" viewBox="0 0 64 64" aria-hidden="true">
+                <circle class="briefing-conf-ring-track" cx="32" cy="32" r="${r}"></circle>
+                <circle class="briefing-conf-ring-fill" cx="32" cy="32" r="${r}"
+                    stroke-dasharray="${c.toFixed(2)}"
+                    stroke-dashoffset="${offset.toFixed(2)}"></circle>
+            </svg>
+            <span class="briefing-conf-ring-pct">${pct}%</span>
+        </div>
+        <div class="briefing-conf-ring-meta">
+            <span class="briefing-conf-ring-caption">${conviction ? escapeHtml(conviction) : "Signal strength"}</span>
+            ${rangeCopy}
+            ${deltaHtml}
+        </div>
     </div>`;
 }
 
@@ -5575,15 +5886,18 @@ function _renderBriefingHeroMeta(verdict, ticker) {
     const action = verdict.action || "hold";
     const label = verdict.label || "Hold";
     const icon = VERDICT_ICONS[action] || "bi-question-circle";
-    const anchorPill = _renderAnchorPill(verdict, ticker);
-    const horizonPill = _renderHorizonPill(verdict, ticker);
+    const modeStrip = _renderHoldModeStrip(verdict, ticker);
+    const verdictTip = _VERDICT_PILL_TIPS[action] || _VERDICT_PILL_TIPS.hold;
     return `<div class="briefing-hero-meta">
-        <span class="briefing-verdict-pill" data-action="${escapeHtml(action)}">
+        <span class="briefing-verdict-pill tip-trigger" data-action="${escapeHtml(action)}"
+            tabindex="0"
+            data-tip-title="${escapeHtml(verdictTip.title)}"
+            data-tip-body="${escapeHtml(verdictTip.body)}"
+            data-tip-icon="${escapeHtml(icon)}">
             <i class="bi ${escapeHtml(icon)}" aria-hidden="true"></i>
             ${escapeHtml(label)}
         </span>
-        ${anchorPill}
-        ${horizonPill}
+        ${modeStrip}
     </div>`;
 }
 
@@ -5984,9 +6298,6 @@ function applyIntelligenceModeUi() {
         el.textContent = _intelLoadingTitle();
     });
 
-    const hudClaudeRow = document.getElementById("hud-claude-row");
-    if (hudClaudeRow) hudClaudeRow.hidden = local;
-
     const claudeChip = document.querySelector(".hud-status-chip-claude");
     const claudeHeartbeat = document.getElementById("claude-heartbeat");
     if (claudeChip && claudeHeartbeat) {
@@ -6001,24 +6312,110 @@ function applyIntelligenceModeUi() {
         }
     }
 
-    updateHudPillSummary();
-
-    const claudeBtn = document.getElementById("btn-claude-summaries");
-    if (claudeBtn) {
-        const showClaude = !local && _isClaudeApiLive !== false;
-        claudeBtn.hidden = !showClaude;
+    const briefingIcon = document.querySelector("#briefing-card .briefing-card-icon");
+    if (briefingIcon) {
+        briefingIcon.className = local
+            ? "bi bi-cpu-fill briefing-card-icon"
+            : "bi bi-stars briefing-card-icon";
     }
 
-    document.querySelectorAll(".btn-holding-intel").forEach(btn => {
-        if (!btn.disabled) {
-            btn.innerHTML = _intelButtonHtml(false);
+    const briefingTip = document.querySelector("#briefing-card .tip-trigger");
+    if (briefingTip) {
+        briefingTip.dataset.tipBody = local
+            ? "Local mode: a free, deterministic digest of what moved and why — no AI tokens."
+            : "Claude narrates your portfolio in plain English. Switch engines in menu → Intelligence → Engine.";
+        briefingTip.dataset.tipIcon = local ? "bi-cpu-fill" : "bi-stars";
+        briefingTip.dataset.tipVariant = local ? "" : "ai";
+    }
+
+    updateHudPillSummary();
+    setEngineScopedVisibility();
+
+    if (local) {
+        if (_aiCostStatsInterval) {
+            clearInterval(_aiCostStatsInterval);
+            _aiCostStatsInterval = null;
         }
-        btn.dataset.tipVariant = "ai";
-        btn.dataset.tipIcon = "bi-stars";
-        btn.dataset.tipBody = local
-            ? "Show what each holding covers and why it moved — on-device signals, benchmarks, sectors, and drivers (no cloud)."
-            : "Show what each holding covers and why it moved — holding-specific benchmarks, sectors, countries, and drivers";
+    } else if (_isClaudeApiLive !== false) {
+        ensureAiCostStatsLoaded();
+    }
+
+    updateLocalIntelGuide();
+    validateIntelligenceEngineUi();
+
+    const holdingsCard = document.getElementById("holdings-card");
+    if (holdingsCard && !holdingsCard.classList.contains("is-ai-checking")) {
+        updateAgentStatus({
+            scanning: false,
+            ready: intelligenceLoaded,
+            message: intelligenceLoaded ? "Insights ready" : "Watching holdings",
+        });
+    } else {
+        updateHoldingsIntelHub();
+    }
+}
+
+function enableClaudeAiAndReload() {
+    if (_isClaudeApiLive === false) {
+        document.getElementById("brand-intro-trigger")?.click();
+        return;
+    }
+    try { localStorage.setItem(PET_MODE_KEY, "0"); } catch (_) {}
+    window.location.reload();
+}
+
+function updateLocalIntelGuide() {
+    const guide = document.getElementById("local-intel-guide");
+    if (!guide) return;
+
+    let dismissed = false;
+    try { dismissed = sessionStorage.getItem(LOCAL_INTEL_GUIDE_DISMISS_KEY) === "1"; } catch (_) {}
+
+    const show = isLocalIntelligenceMode()
+        && _isClaudeApiLive !== false
+        && !dismissed;
+    guide.hidden = !show;
+    guide.style.display = show ? "" : "none";
+}
+
+function maybeShowLocalIntelGuideToast() {
+    if (!isLocalIntelligenceMode() || _isClaudeApiLive === false) return;
+    try {
+        if (sessionStorage.getItem(LOCAL_INTEL_GUIDE_TOAST_KEY) === "1") return;
+        sessionStorage.setItem(LOCAL_INTEL_GUIDE_TOAST_KEY, "1");
+    } catch (_) {}
+    showToast(
+        "Local mode: disciplined and free. This banner is your guide — or menu → Intelligence → Engine → Claude AI.",
+        "info",
+    );
+}
+
+function initLocalIntelGuide() {
+    const guide = document.getElementById("local-intel-guide");
+    if (!guide) return;
+
+    document.getElementById("local-intel-guide-dismiss")?.addEventListener("click", () => {
+        try { sessionStorage.setItem(LOCAL_INTEL_GUIDE_DISMISS_KEY, "1"); } catch (_) {}
+        guide.hidden = true;
     });
+
+    document.getElementById("local-intel-guide-enable")?.addEventListener("click", () => {
+        enableClaudeAiAndReload();
+    });
+
+    document.getElementById("local-intel-guide-menu-btn")?.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof window.openNavOverflowMenu === "function") {
+            window.openNavOverflowMenu({ focusEngine: true });
+        } else {
+            const trigger = document.getElementById("nav-overflow-trigger");
+            trigger?.click();
+        }
+    });
+
+    updateLocalIntelGuide();
+    scheduleWhenIdle(maybeShowLocalIntelGuideToast, 1200);
 }
 
 async function onIntelligenceModeChanged(local, { notify = false } = {}) {
@@ -6028,26 +6425,21 @@ async function onIntelligenceModeChanged(local, { notify = false } = {}) {
         renderHoldings();
     }
 
-    if (local) {
-        const hasVerdicts = Object.keys(cachedVerdicts).length > 0;
-        if (hasVerdicts || intelligenceLoaded || intelligenceLoading) {
-            await refreshAiVerdicts({ force: true });
-            if (latestHoldings.length) renderHoldings();
-        }
+    const hasVerdicts = Object.keys(cachedVerdicts).length > 0;
+    if (hasVerdicts || intelligenceLoaded || intelligenceLoading) {
+        await refreshAiVerdicts({ force: true, claude: !local });
+        if (latestHoldings.length) renderHoldings();
     }
 
-    // Sync briefing card — defaults to local unless user picks AI on the card
-    loadPortfolioBriefing("local");
+    loadPortfolioBriefing(null, true);
     window.AnalyticsCharts?.onIntelligenceModeChanged?.();
 
     if (!notify) return;
     if (local) {
         showToast(
-            "Intelligence model is now local — calculations will run again. For more detailed and accurate analysis, enable Claude.",
+            "Local mode: sharp math, zero poetry. Menu → Intelligence → Engine → Claude AI when you want narratives.",
             "info",
         );
-    } else {
-        showToast("Claude AI enabled — recalculating verdicts with AI refinement.", "info");
     }
 }
 
@@ -6103,6 +6495,7 @@ function applyClaudeApiStatus(claudeLive) {
             _dashboardPetSpeak(offlineQuote, { reveal: false, persist: false });
         }
         applyIntelligenceModeUi();
+        window.AnalyticsCharts?.onIntelligenceModeChanged?.();
     } else if (claudeLive === true) {
         brand?.classList.add("claude-live");
         brand?.classList.remove("claude-offline");
@@ -6121,7 +6514,10 @@ function applyClaudeApiStatus(claudeLive) {
         }
 
         applyIntelligenceModeUi();
+        window.AnalyticsCharts?.onIntelligenceModeChanged?.();
     }
+
+    updateLocalIntelGuide();
 }
 
 function initDashboardPet() {
@@ -6281,10 +6677,19 @@ function initDashboardPet() {
     window.dashboardPetSpeak = speak;
 
     function applyForcedLocalMode(local, announce) {
+        const enablingClaude = !local && _forcedLocalMode;
+        if (enablingClaude && _isClaudeApiLive !== false) {
+            if (announce) {
+                showToast("Claude AI enabled — refreshing the dashboard.", "info");
+            }
+            enableClaudeAiAndReload();
+            return;
+        }
+
         _forcedLocalMode = local;
         try { localStorage.setItem(PET_MODE_KEY, local ? "1" : "0"); } catch (_) {}
         if (modeToggle) {
-            modeToggle.setAttribute("aria-pressed", String(!local));
+            modeToggle.setAttribute("aria-pressed", String(local));
             modeToggle.title = local
                 ? "Enable Claude AI — opt in to Claude narratives and summaries"
                 : "Use local intelligence only — no Claude API tokens";
@@ -6293,7 +6698,7 @@ function initDashboardPet() {
         void onIntelligenceModeChanged(local, { notify: announce });
         if (announce) {
             const msg = local
-                ? "Local mode — deterministic signals only. Enable Claude in the menu when you want narratives."
+                ? "Local mode — disciplined and free. This banner is your guide; menu → Engine → Claude AI when you want the poetry."
                 : "Claude enabled. Tap Claude Summaries on Holdings when you're ready to spend tokens.";
             speak(msg, { reveal: true, persist: false });
         } else {
@@ -6418,6 +6823,7 @@ function initBrandCostCallout() {
 let _aiCostStatsInterval = null;
 
 function ensureAiCostStatsLoaded() {
+    if (isLocalIntelligenceMode() || _isClaudeApiLive === false) return;
     if (_aiCostStatsInterval) return;
     loadAiCostStats();
     _aiCostStatsInterval = setInterval(loadAiCostStats, 60_000);
@@ -6447,7 +6853,22 @@ function initNavOverflow() {
         menu.setAttribute("aria-hidden", "true");
         trigger.setAttribute("aria-expanded", "false");
         closeCostDetail();
+        document.getElementById("pet-mode-toggle")
+            ?.closest(".nav-menu-row")
+            ?.classList.remove("local-intel-guide-highlight");
     };
+
+    window.openNavOverflowMenu = (options = {}) => {
+        open();
+        if (options.focusEngine) {
+            const row = document.getElementById("pet-mode-toggle")?.closest(".nav-menu-row");
+            row?.classList.add("local-intel-guide-highlight");
+            window.setTimeout(() => {
+                document.getElementById("pet-mode-toggle")?.focus({ preventScroll: true });
+            }, 0);
+        }
+    };
+    window.closeNavOverflowMenu = close;
 
     trigger.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -6562,6 +6983,56 @@ function refreshData() {
     refreshDashboardData({ animateButton: true });
 }
 
+let _holdingsRefreshInFlight = false;
+
+async function refreshHoldingsTable() {
+    if (_holdingsRefreshInFlight || intelligenceLoading || _aiSummariesLoading) return;
+
+    _holdingsRefreshInFlight = true;
+    const btn = document.getElementById("btn-holdings-refresh");
+    const hub = document.getElementById("holdings-intel-hub");
+    if (btn && !prefersReducedMotion()) {
+        void btn.offsetWidth;
+        btn.classList.add("is-refreshing");
+    }
+    if (btn) btn.disabled = true;
+    if (hub) hub.disabled = true;
+
+    const local = isLocalIntelligenceMode();
+
+    try {
+        await loadPortfolioValue();
+        renderHoldings();
+
+        if (local) {
+            cachedIntelligence = {};
+            cachedExplanations = {};
+            intelligenceLoaded = false;
+            intelligenceExhaustedTickers.clear();
+            await loadHoldingIntelligence();
+        } else {
+            await refreshAiVerdicts({ force: true, claude: true });
+            cachedIntelligence = {};
+            cachedExplanations = {};
+            intelligenceLoaded = false;
+            intelligenceExhaustedTickers.clear();
+            await loadHoldingIntelligence();
+            renderHoldings();
+            await window.AnalyticsCharts?.loadAiWidgetInsights?.(true);
+        }
+    } catch (err) {
+        console.warn("Holdings refresh failed:", err);
+        showToast("Holdings refresh failed", "danger");
+    } finally {
+        _holdingsRefreshInFlight = false;
+        btn?.classList.remove("is-refreshing");
+        if (btn) btn.disabled = false;
+        updateHoldingsIntelHub();
+    }
+}
+
+window.refreshHoldingsTable = refreshHoldingsTable;
+
 function refreshPortfolioMutationInBackground(options = {}) {
     Promise.resolve()
         .then(() => refreshDashboardData({
@@ -6626,7 +7097,7 @@ async function updateMarketStatus() {
 }
 
 const HUD_TOTAL = 300;
-const CLAUDE_HEARTBEAT_TOTAL = 30;
+const CLAUDE_HEARTBEAT_TOTAL = 120;
 let _hudCountdown = HUD_TOTAL;
 let _claudeHeartbeatCountdown = CLAUDE_HEARTBEAT_TOTAL;
 let _claudeHeartbeatInFlight = false;
@@ -6875,10 +7346,13 @@ let _briefingActiveMode = null;  // current mode shown in card
 let _briefingLoading = false;
 
 function _briefingDefaultMode() {
-    return "local";
+    return isLocalIntelligenceMode() ? "local" : "ai";
 }
 
 function _briefingSyncSegControl(mode, claudeOffline) {
+    const seg = document.getElementById("briefing-seg");
+    if (seg) seg.hidden = true;
+
     const aiBtn   = document.getElementById("briefing-seg-ai");
     const locBtn  = document.getElementById("briefing-seg-local");
     if (!aiBtn || !locBtn) return;
@@ -7119,11 +7593,11 @@ function _briefingRenderLocal(data) {
 async function loadPortfolioBriefing(mode, forceRefresh = false) {
     if (_briefingLoading && !forceRefresh) return;
 
-    const claudeOffline = _isClaudeApiLive === false || _forcedLocalMode;
+    const claudeOffline = _isClaudeApiLive === false;
     if (mode === null || mode === undefined) {
         mode = _briefingDefaultMode();
     }
-    if (claudeOffline) mode = "local";
+    if (isLocalIntelligenceMode() || claudeOffline) mode = "local";
 
     _briefingActiveMode = mode;
     _briefingSyncSegControl(mode, claudeOffline);
@@ -7167,11 +7641,14 @@ function initPortfolioBriefing() {
     const seg = document.getElementById("briefing-seg");
     if (!seg) return;
 
+    seg.hidden = true;
     seg.addEventListener("click", e => {
         const btn = e.target.closest(".briefing-seg-btn");
-        if (!btn || btn.disabled) return;
+        if (!btn || btn.disabled || seg.hidden) return;
         const newMode = btn.dataset.mode;
         if (newMode === _briefingActiveMode) return;
+        if (newMode === "ai" && isLocalIntelligenceMode()) return;
+        if (newMode === "local" && !isLocalIntelligenceMode()) return;
         loadPortfolioBriefing(newMode);
     });
 }
@@ -7192,6 +7669,9 @@ async function initDashboard() {
     initBrandCostCallout();
     initNavOverflow();
     initDashboardPet();
+    initLocalIntelGuide();
+    updateAgentStatus({ scanning: false, ready: false, message: "Watching holdings" });
+    updateHoldingsRefreshButton();
     initPerformanceTabs();
     initProjectionControls();
     initPortfolioManager();
@@ -7348,10 +7828,10 @@ function fallbackIntelligenceForTicker(ticker) {
 }
 
 function reloadContributionForTicker(ticker) {
-    // Reset retry state so the ticker is eligible for a fresh fetch,
-    // then trigger a single-ticker intelligence re-fetch. The existing
-    // fetchSingleIntelligenceWithRetry machinery updates cachedIntelligence
-    // and calls renderHoldings() on completion, which re-renders the panel.
+    if (isLocalIntelligenceMode()) {
+        showToast("Enable Claude AI in menu → Intelligence → Engine to seed ETF holdings.", "info");
+        return;
+    }
     delete intelligenceRetryState[ticker];
     intelligenceExhaustedTickers.delete(ticker);
     fetchSingleIntelligenceWithRetry(ticker, { aiHoldingsFallback: true });
@@ -7366,7 +7846,9 @@ async function fetchSingleIntelligenceWithRetry(ticker, options = {}) {
     try {
         await delay(INTELLIGENCE_RETRY_BASE_DELAY_MS * currentAttempt);
         const params = new URLSearchParams({ retry: String(Date.now()) });
-        if (options.aiHoldingsFallback) params.set("ai_holdings_fallback", "true");
+        if (options.aiHoldingsFallback && !isLocalIntelligenceMode()) {
+            params.set("ai_holdings_fallback", "true");
+        }
         const res = await fetch(`/api/ai/intelligence/${encodeURIComponent(ticker)}?${params}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const intel = await res.json();
@@ -7467,16 +7949,14 @@ async function loadTargetedHoldingIntelligence(ticker) {
     renderExpandedTicker(normalized);
 
     try {
-        const useProgressiveVerdicts = !_forcedLocalMode;
-        const intelP = fetch(`/api/ai/intelligence/${encodeURIComponent(normalized)}?ai_holdings_fallback=true&retry=${Date.now()}`);
+        const holdingsFallback = isLocalIntelligenceMode() ? "" : "&ai_holdings_fallback=true";
+        const intelP = fetch(`/api/ai/intelligence/${encodeURIComponent(normalized)}?retry=${Date.now()}${holdingsFallback}`);
         const moveP = fetch("/api/ai/move-explanations/all");
-        const verdictFastP = fetch(`/api/ai/investment-signal/${encodeURIComponent(normalized)}`);
-        const verdictFullP = useProgressiveVerdicts
-            ? fetch(`/api/ai/investment-signals/all`)
-            : null;
+        const verdictSuffix = isLocalIntelligenceMode() ? "?force_local=true" : "";
+        const verdictP = fetch(`/api/ai/investment-signal/${encodeURIComponent(normalized)}${verdictSuffix}`);
 
-        const [intelRes, moveRes, verdictPhaseRes] = await Promise.allSettled([
-            intelP, moveP, verdictFastP,
+        const [intelRes, moveRes, verdictRes] = await Promise.allSettled([
+            intelP, moveP, verdictP,
         ]);
 
         if (intelRes.status === "fulfilled" && intelRes.value.ok) {
@@ -7496,20 +7976,8 @@ async function loadTargetedHoldingIntelligence(ticker) {
             }
         }
 
-        if (verdictPhaseRes?.status === "fulfilled" && verdictPhaseRes.value.ok) {
-            cachedVerdicts[normalized] = await verdictPhaseRes.value.json();
-        }
-
-        if (useProgressiveVerdicts && verdictFullP) {
-            verdictFullP.then(async (verdictRes) => {
-                if (!verdictRes.ok) return;
-                const verdictData = await verdictRes.json();
-                if (verdictData.signals?.[normalized]) {
-                    cachedVerdicts[normalized] = verdictData.signals[normalized];
-                    applyClaudeApiStatus(verdictData.claude_live ?? null);
-                    renderExpandedTicker(normalized);
-                }
-            }).catch(err => console.warn(`Unable to upgrade verdict for ${normalized}:`, err));
+        if (verdictRes?.status === "fulfilled" && verdictRes.value.ok) {
+            cachedVerdicts[normalized] = await verdictRes.value.json();
         }
     } catch (err) {
         console.warn(`Unable to refresh intelligence for ${normalized}:`, err);
@@ -7537,7 +8005,7 @@ async function loadHoldingIntelligence(options = {}) {
     }
 
     const tbody = document.getElementById("holdings-table");
-    const btn = document.querySelector('[onclick="loadHoldingIntelligence()"]');
+    const hub = document.getElementById("holdings-intel-hub");
 
     const hasMoveExplanations = Object.keys(cachedExplanations).length > 0;
     if (intelligenceLoaded && hasMoveExplanations && intelligenceRetryingTickers.size === 0) {
@@ -7559,15 +8027,12 @@ async function loadHoldingIntelligence(options = {}) {
     intelligenceExhaustedTickers = new Set();
     setAiChecking(true, "Reading positions");
     injectSummaryRows(tbody);
-    if (btn) {
-        btn.innerHTML = _intelButtonHtml(true);
-        btn.disabled = true;
-    }
+    if (hub) hub.disabled = true;
 
     try {
         const intelP = fetch("/api/ai/intelligence/all/batch");
         const moveP = fetch("/api/ai/move-explanations/all");
-        const verdictP = fetch("/api/ai/investment-signals/all?force_local=true");
+        const verdictP = fetch(intelligenceSignalsUrl());
 
         const [intelRes, moveRes, verdictRes] = await Promise.all([intelP, moveP, verdictP]);
 
@@ -7597,10 +8062,7 @@ async function loadHoldingIntelligence(options = {}) {
         Array.from(tbody.querySelectorAll(".intel-move-section")).forEach(renderMoveExplainerFallback);
     } finally {
         if (intelligenceLoading) setAiChecking(false, "Watching holdings", false);
-        if (btn) {
-            btn.innerHTML = _intelButtonHtml(false);
-            btn.disabled = false;
-        }
+        updateHoldingsIntelHub();
     }
 }
 
@@ -7770,7 +8232,8 @@ function renderManageHoldingCard(h) {
     const tickerLabel = escapeHtml(h.ticker);
     const tickerArg = inlineJsString(h.ticker);
     const isWatchlist = !!h.is_watchlist;
-    const isAnchor = h.hold_class === "anchor";
+    const holdClass = h.hold_class || "auto";
+    const modeClass = _manageHoldModeCardClass(holdClass);
     const researchBadge = isWatchlist
         ? `<span class="manage-card-badge">${manageLucide("flask-conical", "manage-lucide manage-lucide--inline")}Research</span>`
         : "";
@@ -7779,8 +8242,8 @@ function renderManageHoldingCard(h) {
     const removeLabel = isWatchlist ? `Discard ${tickerLabel}` : `Remove ${tickerLabel}`;
 
     return `
-        <article class="manage-holding-card${isWatchlist ? " is-watchlist" : ""}${isAnchor ? " is-anchor" : ""}"
-                 id="manage-row-${h.id}" role="listitem" data-ticker="${tickerLabel}">
+        <article class="manage-holding-card${isWatchlist ? " is-watchlist" : ""}${modeClass ? ` ${modeClass}` : ""}"
+                 id="manage-row-${h.id}" role="listitem" data-ticker="${tickerLabel}" data-hold-mode="${escapeHtml(holdClass)}">
             <div class="manage-card-top">
                 <div class="manage-card-ticker">
                     <span class="manage-card-ticker-symbol">${tickerLabel}</span>
@@ -7809,15 +8272,7 @@ function renderManageHoldingCard(h) {
                 </label>
             </div>
             <div class="manage-card-footer">
-                <label class="manage-anchor-toggle" for="anchor-${h.id}">
-                    <input class="anchor-hold-check" type="checkbox" id="anchor-${h.id}" ${isAnchor ? "checked" : ""}
-                           aria-label="Anchor ${tickerLabel}"
-                           onchange="autoSaveAnchorHold(this, ${h.id}, ${tickerArg})">
-                    <span class="manage-anchor-copy">
-                        <span class="manage-anchor-label">${manageLucide("anchor", "manage-lucide manage-lucide--inline")} Anchor</span>
-                        <span class="manage-anchor-hint">Always keep this position in your portfolio mix</span>
-                    </span>
-                </label>
+                ${_renderManageHoldModeSection(h)}
             </div>
         </article>
     `;
@@ -7871,8 +8326,10 @@ async function loadManageHoldings({ preserveExisting = false } = {}) {
 
         if (empty) empty.hidden = true;
         list.hidden = false;
+        // Single DOM write for all cards, then a separate read pass for binds —
+        // avoids the write→read→flush cycle that was forcing a layout recalc per card.
+        list.innerHTML = manageHoldingsCache.map(h => renderManageHoldingCard(h)).join("");
         manageHoldingsCache.forEach(h => {
-            list.insertAdjacentHTML("beforeend", renderManageHoldingCard(h));
             bindManageHoldingInputs(document.getElementById(`manage-row-${h.id}`), h.id);
         });
         filterManageHoldings(document.getElementById("manage-holdings-search")?.value || "");
@@ -7898,7 +8355,9 @@ async function updateHolding(holdingId, options = {}) {
     const shares = Number(sharesRaw);
     const costRaw = costInput?.value?.trim() ?? "";
     const avgCost = costRaw ? Number(costRaw) : null;
-    const holdClass = document.getElementById(`anchor-${holdingId}`)?.checked ? "anchor" : "auto";
+    const holdClass = card?.dataset.holdMode
+        || card?.querySelector(".manage-hold-mode-box.is-active")?.dataset.holdMode
+        || "auto";
 
     if (!isWatchlist && (!Number.isFinite(shares) || shares <= 0)) {
         if (silent) setManageSaveStatus(holdingId, "error");
@@ -7944,9 +8403,12 @@ async function updateHolding(holdingId, options = {}) {
 
 async function refreshAiVerdicts(options = {}) {
     const force = options.force === true;
-    if (!force && !Object.keys(cachedVerdicts).length && !intelligenceLoaded && !intelligenceLoading) return;
+    const useClaude = options.claude === true && !_forcedLocalMode;
+    if (!force && !useClaude && !Object.keys(cachedVerdicts).length && !intelligenceLoaded && !intelligenceLoading) {
+        return;
+    }
     try {
-        const res = await fetch(`/api/ai/investment-signals/all${_forcedLocalMode ? "?force_local=true" : ""}`);
+        const res = await fetch(intelligenceSignalsUrl({ claude: useClaude }));
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         Object.entries(data.signals || {}).forEach(([ticker, sig]) => {
@@ -7966,6 +8428,81 @@ async function refreshAiVerdicts(options = {}) {
     }
 }
 
+async function generateAiHoldingSummaries() {
+    if (isLocalIntelligenceMode() || _isClaudeApiLive === false) return;
+    if (_aiSummariesLoading) return;
+
+    _aiSummariesLoading = true;
+    const hub = document.getElementById("holdings-intel-hub");
+    hub?.classList.add("is-loading");
+    if (hub) hub.disabled = true;
+    setAiChecking(true, "Claude narrating holdings", false, true);
+
+    try {
+        await refreshAiVerdicts({ force: true, claude: true });
+        if (latestHoldings.length) renderHoldings();
+        const tbody = document.getElementById("holdings-table");
+        if (tbody) {
+            _renderAllExpandedIntelRows(tbody);
+            _syncOpenSummaryHeights(tbody);
+        }
+        await window.AnalyticsCharts?.loadAiWidgetInsights?.(true);
+        showToast("Claude summaries ready", "success");
+    } catch (err) {
+        console.warn("Claude summaries failed:", err);
+        showToast("Claude summaries unavailable", "danger");
+    } finally {
+        _aiSummariesLoading = false;
+        hub?.classList.remove("is-loading");
+        setAiChecking(false, intelligenceLoaded ? "Insights ready" : "Watching holdings", intelligenceLoaded);
+        updateHoldingsIntelHub();
+    }
+}
+
+window.generateAiHoldingSummaries = generateAiHoldingSummaries;
+
+async function setHoldMode(event, holdingId, ticker, mode) {
+    event?.stopPropagation();
+    event?.preventDefault();
+    if (!holdingId) {
+        showToast("Open Manage Holdings to set a mode", "info");
+        return;
+    }
+    const nextClass = _HOLD_MODE_META[mode] ? mode : "auto";
+    const holding = latestHoldings.find(h => h.id === holdingId || h.ticker === ticker) || {};
+    const current = holding.hold_class || "auto";
+    if (current === nextClass) return;
+
+    try {
+        const res = await fetch(`/api/portfolio/holdings/${holdingId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ hold_class: nextClass }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        latestHoldings = latestHoldings.map(h => (
+            h.id === holdingId || h.ticker === ticker ? { ...h, hold_class: nextClass } : h
+        ));
+        if (cachedVerdicts[ticker]) {
+            cachedVerdicts[ticker] = { ...cachedVerdicts[ticker], hold_class: nextClass };
+        }
+
+        _syncHoldModeStrip(ticker, nextClass);
+        _syncManageHoldModeCard(holdingId, nextClass);
+
+        const label = _HOLD_MODE_META[nextClass]?.label || nextClass;
+        showToast(`${ticker}: ${label} mode`, "success");
+        refreshPortfolioMutationInBackground({ includeRecommendations: false });
+        refreshAiVerdicts();
+    } catch (err) {
+        console.warn("Unable to set hold mode:", err);
+        showToast("Mode update failed", "danger");
+    }
+}
+
+window.setHoldMode = setHoldMode;
+
 async function toggleAnchorHold(event, holdingId, ticker) {
     event?.stopPropagation();
     event?.preventDefault();
@@ -7975,127 +8512,7 @@ async function toggleAnchorHold(event, holdingId, ticker) {
     }
     const holding = latestHoldings.find(h => h.id === holdingId || h.ticker === ticker) || {};
     const nextClass = holding.hold_class === "anchor" ? "auto" : "anchor";
-
-    const confirmMsg = nextClass === "anchor"
-        ? `Anchor ${ticker}? FolioSense will never suggest trimming it — only flag good moments to add more.`
-        : `Remove anchor from ${ticker}? It will return to standard recommendations.`;
-    if (!confirm(confirmMsg)) return;
-
-    try {
-        const res = await fetch(`/api/portfolio/holdings/${holdingId}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ hold_class: nextClass }),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-        // Update in-memory state
-        latestHoldings = latestHoldings.map(h => (
-            h.id === holdingId || h.ticker === ticker ? { ...h, hold_class: nextClass } : h
-        ));
-        if (cachedVerdicts[ticker]) {
-            cachedVerdicts[ticker] = { ...cachedVerdicts[ticker], hold_class: nextClass };
-        }
-
-        // Surgically update the anchor pill — no full table re-render
-        const mainRow = document.querySelector(`tr[data-ticker="${CSS.escape(ticker)}"]`);
-        const verdictSection = mainRow?.nextElementSibling?.querySelector(".intel-verdict-section");
-        const pill = verdictSection?.querySelector(".verdict-anchor-pill");
-        if (pill) {
-            const isAnchor = nextClass === "anchor";
-            pill.classList.toggle("is-anchor", isAnchor);
-            pill.setAttribute("aria-pressed", String(isAnchor));
-        }
-
-        // Sync manage holdings checkbox if open
-        const check = document.getElementById(`anchor-${holdingId}`);
-        if (check) check.checked = nextClass === "anchor";
-
-        showToast(nextClass === "anchor" ? `${ticker} anchored` : `${ticker} unanchored`, "success");
-        refreshPortfolioMutationInBackground({ includeRecommendations: false });
-    } catch (err) {
-        console.warn("Unable to toggle anchor:", err);
-        showToast("Anchor update failed", "danger");
-    }
-}
-
-async function cycleHorizonHold(event, holdingId, ticker) {
-    event?.stopPropagation();
-    event?.preventDefault();
-    if (!holdingId) {
-        showToast("Open Manage Holdings to set horizon", "info");
-        return;
-    }
-    const holding = latestHoldings.find(h => h.id === holdingId || h.ticker === ticker) || {};
-    const order = ["auto", "trade", "core"];
-    const current = holding.hold_class === "anchor" ? "auto" : (holding.hold_class || "auto");
-    const idx = order.indexOf(current);
-    const nextClass = order[(idx + 1) % order.length];
-
-    try {
-        const res = await fetch(`/api/portfolio/holdings/${holdingId}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ hold_class: nextClass }),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        latestHoldings = latestHoldings.map(h => (
-            h.id === holdingId || h.ticker === ticker ? { ...h, hold_class: nextClass } : h
-        ));
-        showToast(`${ticker} horizon: ${nextClass}`, "success");
-        refreshAiVerdicts();
-    } catch (err) {
-        console.warn("Unable to cycle horizon:", err);
-        showToast("Horizon update failed", "danger");
-    }
-}
-
-
-async function autoSaveAnchorHold(checkbox, holdingId, ticker) {
-    const nextClass = checkbox.checked ? "anchor" : "auto";
-    const confirmMsg = nextClass === "anchor"
-        ? `Anchor ${ticker}? FolioSense will never suggest trimming it — only flag good moments to add more.`
-        : `Remove anchor from ${ticker}? It will return to standard recommendations.`;
-
-    if (!confirm(confirmMsg)) {
-        checkbox.checked = !checkbox.checked;
-        return;
-    }
-
-    try {
-        const res = await fetch(`/api/portfolio/holdings/${holdingId}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ hold_class: nextClass }),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-        // Update in-memory state
-        latestHoldings = latestHoldings.map(h => (
-            h.id === holdingId || h.ticker === ticker ? { ...h, hold_class: nextClass } : h
-        ));
-        if (cachedVerdicts[ticker]) {
-            cachedVerdicts[ticker] = { ...cachedVerdicts[ticker], hold_class: nextClass };
-        }
-
-        // Surgically update the anchor pill in the verdict section
-        const mainRow = document.querySelector(`tr[data-ticker="${CSS.escape(ticker)}"]`);
-        const verdictSection = mainRow?.nextElementSibling?.querySelector(".intel-verdict-section");
-        const pill = verdictSection?.querySelector(".verdict-anchor-pill");
-        if (pill) {
-            const isAnchor = nextClass === "anchor";
-            pill.classList.toggle("is-anchor", isAnchor);
-            pill.setAttribute("aria-pressed", String(isAnchor));
-        }
-
-        showToast(nextClass === "anchor" ? `${ticker} anchored` : `${ticker} unanchored`, "success");
-        document.getElementById(`manage-row-${holdingId}`)?.classList.toggle("is-anchor", nextClass === "anchor");
-        refreshPortfolioMutationInBackground({ includeRecommendations: false });
-    } catch (err) {
-        console.warn("Unable to auto-save anchor:", err);
-        showToast("Anchor update failed", "danger");
-        checkbox.checked = !checkbox.checked;
-    }
+    await setHoldMode(event, holdingId, ticker, nextClass);
 }
 
 

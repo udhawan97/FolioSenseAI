@@ -5,8 +5,8 @@ Cached daily; adjusts verdict component weights.
 from __future__ import annotations
 
 import logging
+import math
 from datetime import date, datetime, timezone
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ def _fetch_closes(ticker: str, period: str = "3mo") -> list[float]:
         hist = yf.Ticker(ticker).history(period=period, interval="1d")
         if hist is None or hist.empty:
             return []
-        return [float(c) for c in hist["Close"].tolist() if c == c]
+        return [float(c) for c in hist["Close"].tolist() if not math.isnan(c)]
     except Exception as exc:
         logger.debug("Regime fetch failed for %s: %s", ticker, type(exc).__name__)
         return []

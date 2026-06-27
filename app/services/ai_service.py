@@ -7,6 +7,7 @@ import json
 import logging
 import re
 import time
+from itertools import cycle
 from time import perf_counter
 
 import anthropic
@@ -19,7 +20,7 @@ client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
 MODEL = "claude-haiku-4-5-20251001"
 
 _HEARTBEAT_CACHE: tuple[float, dict] | None = None
-_HEARTBEAT_TTL = 30  # seconds — matches frontend poll interval
+_HEARTBEAT_TTL = 120  # seconds — matches frontend poll interval
 
 
 def _compact_json(payload: dict) -> str:
@@ -134,10 +135,13 @@ def _compact_verdict_input(s: dict) -> str:
 
 _VERDICT_SYSTEM = (
     "Refine verdict cards. JSON keyed by ticker. Each value:\n"
-    "q: witty ≤18w | n: int -12..12 overall nudge | cn: 4 ints [-6..6] Analyst,Valuation,Momentum,Quality\n"
-    "h: headline ≤8w | p: 1-2 neutral advisory sentences ≤40w (consider/may want — no buy/sell orders)\n"
+    "q: witty ≤18w | n: int -12..12 overall nudge | "
+    "cn: 4 ints [-6..6] Analyst,Valuation,Momentum,Quality\n"
+    "h: headline ≤8w | p: 1-2 neutral advisory sentences ≤40w "
+    "(consider/may want — no buy/sell orders)\n"
     "t: ≤2 tags | w: optional watch ≤20w | agrees: bool | tension: conflict phrase or \"\"\n"
-    "flip_if: optional {metric,direction} | likely: base|bull|bear | sc_p: [base,bull,bear] sum 100\n"
+    "flip_if: optional {metric,direction} | likely: base|bull|bear | "
+    "sc_p: [base,bull,bear] sum 100\n"
     "sc_w: ≤22w path note | ins: 2-3 bullets ≤12w | fc: 4 factor callouts ≤8w\n"
     "drv: key driver ≤15w | conv: high|moderate|low\n"
     "Rules: no invented numbers; n=0 cn=[0,0,0,0] unless tension or agrees=false; "
@@ -359,15 +363,12 @@ _BRIEFING_CANNED_QUOTES: list[str] = [
     "Your portfolio called — it said 'thanks for not panic-selling today.'",
     "The best investment decision is usually the one you didn't make at 3 a.m.",
 ]
-_BRIEFING_CANNED_IDX = 0
+_briefing_quote_cycle = cycle(_BRIEFING_CANNED_QUOTES)
 
 
 def next_briefing_canned_quote() -> str:
     """Return a rotating canned quote — no API required."""
-    global _BRIEFING_CANNED_IDX
-    q = _BRIEFING_CANNED_QUOTES[_BRIEFING_CANNED_IDX % len(_BRIEFING_CANNED_QUOTES)]
-    _BRIEFING_CANNED_IDX += 1
-    return q
+    return next(_briefing_quote_cycle)
 
 
 def generate_portfolio_briefing(snapshot: dict) -> dict:

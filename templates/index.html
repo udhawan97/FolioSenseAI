@@ -96,12 +96,12 @@
                             </div>
                         </div>
                         <div class="hud-popover-divider"></div>
-                        <div class="hud-popover-row" id="hud-claude-row">
+                        <div class="hud-popover-row" id="hud-claude-row" data-engine-claude-only>
                             <span class="hud-popover-row-icon"><i class="bi bi-stars"></i></span>
                             <div>
                                 <div class="hud-popover-row-label">Claude heartbeat</div>
                                 <div class="hud-popover-row-value" id="hud-pop-claude">Checking...</div>
-                                <div class="hud-popover-row-sub" id="hud-pop-claude-sub">Next heartbeat in 30s</div>
+                                <div class="hud-popover-row-sub" id="hud-pop-claude-sub">Next heartbeat in 2:00</div>
                                 <div class="hud-progress-track hud-claude-progress-track">
                                     <div class="hud-progress-fill hud-claude-progress-fill" id="hud-claude-progress"></div>
                                 </div>
@@ -170,6 +170,7 @@
                             </button>
                         </div>
                         <button class="nav-menu-row nav-menu-row--btn brand-cost-trigger" id="brand-cost-trigger" type="button"
+                                data-engine-claude-only
                                 aria-expanded="false" aria-controls="brand-cost-callout" title="View AI token cost">
                             <span class="nav-menu-icon" aria-hidden="true"><i class="bi bi-magic"></i></span>
                             <span class="nav-menu-label">AI cost</span>
@@ -178,7 +179,7 @@
                                 <span class="brand-cost-notif" id="brand-cost-notif" aria-hidden="true" aria-label="Cost updated"></span>
                             </span>
                         </button>
-                        <div class="brand-cost-callout" id="brand-cost-callout" role="tooltip" aria-hidden="true">
+                        <div class="brand-cost-callout" id="brand-cost-callout" role="tooltip" aria-hidden="true" data-engine-claude-only>
                             <span class="brand-cost-kicker">AI token cost</span>
                             <span class="brand-cost-value" id="brand-cost-value">Checking...</span>
                             <span class="brand-cost-meta" id="brand-cost-meta">Estimated from cached summaries</span>
@@ -230,6 +231,36 @@
                     <i class="bi bi-bar-chart-line-fill dzt-icon" aria-hidden="true"></i>
                     <span class="dzt-label">Analytics</span>
                 </button>
+            </div>
+        </div>
+
+        <div class="local-intel-guide" id="local-intel-guide" role="status" aria-live="polite" hidden data-engine-local-only>
+            <div class="local-intel-guide-inner">
+                <span class="local-intel-guide-icon" aria-hidden="true"><i class="bi bi-cpu-fill"></i></span>
+                <div class="local-intel-guide-copy">
+                    <strong class="local-intel-guide-title">Local Intelligence — sharp math, zero poetry</strong>
+                    <p class="local-intel-guide-text">
+                        Consider this your onboard briefing. FolioSense is running on-device right now:
+                        signals, charts, and Holding Intel stay fast, deterministic, and token-free.
+                        When you want Claude's voice — verdict quips, AI briefings, and
+                        <strong>Claude Summaries</strong> on Holdings — enable it in FolioSense:
+                        click <button type="button" class="local-intel-guide-link" id="local-intel-guide-menu-btn">menu</button>
+                        (<i class="bi bi-three-dots local-intel-guide-dots" aria-hidden="true"></i> top-right)
+                        → <strong>Intelligence → Engine</strong> → <strong>Claude AI</strong>.
+                        Or skip the tour and hit <strong>Enable Claude AI</strong> below — we'll refresh once
+                        and pick up exactly where you left off.
+                    </p>
+                </div>
+                <div class="local-intel-guide-actions">
+                    <button type="button" class="btn btn-sm local-intel-guide-enable" id="local-intel-guide-enable">
+                        <i class="bi bi-stars" aria-hidden="true"></i>
+                        Enable Claude AI
+                    </button>
+                    <button type="button" class="local-intel-guide-dismiss" id="local-intel-guide-dismiss"
+                            aria-label="Dismiss local intelligence notice">
+                        <i class="bi bi-x-lg" aria-hidden="true"></i>
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -335,13 +366,15 @@
                                 onclick="loadPortfolioBriefing(null, true)">
                             <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
                         </button>
-                        <div class="briefing-seg ms-auto" id="briefing-seg" role="group" aria-label="Briefing mode">
+                        <div class="briefing-seg ms-auto" id="briefing-seg" role="group" aria-label="Briefing mode" hidden>
                             <button class="briefing-seg-btn" data-mode="ai" type="button"
+                                    data-engine-claude-only
                                     aria-pressed="false" id="briefing-seg-ai">
                                 <i class="bi bi-stars" aria-hidden="true"></i>
                                 AI
                             </button>
                             <button class="briefing-seg-btn briefing-seg-btn--active" data-mode="local" type="button"
+                                    data-engine-local-only
                                     aria-pressed="true" id="briefing-seg-local">
                                 <i class="bi bi-cpu-fill" aria-hidden="true"></i>
                                 Local
@@ -1554,8 +1587,8 @@
 
         <!-- ── Holdings Table ──────────────────────────────────────────── -->
         <div class="card bg-dark border-secondary" id="holdings-card">
-            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <div class="d-flex align-items-center gap-2">
+            <div class="card-header holdings-card-header">
+                <div class="holdings-header-title d-flex align-items-center gap-2">
                     <i class="bi bi-table" style="color:var(--text-tertiary);font-size:.9rem"></i>
                     <h5 class="mb-0">Holdings</h5>
                     <button class="tip-trigger"
@@ -1566,7 +1599,7 @@
                         <i class="bi bi-info-circle"></i>
                     </button>
                 </div>
-                <!-- ── View filter: All / Portfolio / Research ── -->
+                <div class="holdings-card-toolbar">
                 <div class="holdings-view-tabs" id="holdings-view-tabs"
                      role="group" aria-label="Holdings filter" data-active-view="all">
                     <div class="hvt-indicator" aria-hidden="true"></div>
@@ -1590,44 +1623,45 @@
                     </button>
                 </div>
                 <div class="holdings-header-actions">
-                    <div class="ai-agent-status" id="ai-agent-status" aria-live="polite" aria-hidden="true" hidden>
-                        <span class="ai-agent-avatar" aria-hidden="true">
-                            <img src="/static/img/brand/folio-orbit-icon.svg" alt="">
-                        </span>
-                        <span class="ai-agent-copy">
-                            <span class="ai-agent-kicker">FolioSense</span>
-                            <span class="ai-agent-line" id="ai-agent-line">Watching holdings</span>
-                        </span>
-                    </div>
                     <div class="holdings-action-tray">
-                        <button class="btn btn-sm btn-holding-intel tip-trigger" onclick="loadHoldingIntelligence()"
+                        <button type="button"
+                                class="ai-agent-status holdings-intel-hub tip-trigger is-idle"
+                                id="holdings-intel-hub"
+                                aria-live="polite"
+                                onclick="onHoldingsIntelHubClick()"
                                 data-tip-title="Holding Intel"
                                 data-tip-body="Show what each holding covers and why it moved — on-device signals, benchmarks, sectors, and drivers (no Claude tokens)."
                                 data-tip-icon="bi-cpu-fill"
                                 data-tip-variant="local">
-                            <span class="btn-intel-frame">
-                                <span class="btn-intel-glyph">
-                                    <img class="btn-intel-logo btn-intel-icon" src="/static/img/brand/folio-orbit-icon.svg" alt="">
+                            <span class="ai-agent-avatar" aria-hidden="true">
+                                <span class="hub-icon hub-icon--folio">
+                                    <img src="/static/img/brand/folio-orbit-icon.svg" alt="">
                                 </span>
-                                <span class="btn-intel-text">
-                                    <span class="btn-intel-command">Holding Intel</span>
+                                <span class="hub-icon hub-icon--claude">
+                                    <i class="bi bi-stars" aria-hidden="true"></i>
                                 </span>
-                                <span class="btn-intel-badge">Local</span>
+                            </span>
+                            <span class="ai-agent-copy">
+                                <span class="ai-agent-kicker" id="ai-agent-kicker">FolioSense</span>
+                                <span class="hub-line-stack">
+                                    <span class="ai-agent-line hub-line hub-line--local" id="ai-agent-line">Watching holdings</span>
+                                    <span class="ai-agent-line hub-line hub-line--claude" id="ai-agent-line-claude" aria-hidden="true">Claude Summaries</span>
+                                </span>
                             </span>
                         </button>
-                        <button class="btn btn-sm btn-claude-summaries tip-trigger" id="btn-claude-summaries"
-                                type="button" onclick="generateAiHoldingSummaries()" hidden
-                                data-tip-title="Claude Summaries"
-                                data-tip-body="Generate Claude quips, verdict narratives, and analytics tips for your holdings. Uses API tokens — only runs when you click."
-                                data-tip-icon="bi-stars"
-                                data-tip-variant="ai">
-                            <i class="bi bi-stars" aria-hidden="true"></i>
-                            <span>Claude Summaries</span>
-                        </button>
-                        <button class="btn btn-sm btn-outline-success btn-refresh-data" onclick="refreshData()">
-                            <i class="bi bi-arrow-clockwise"></i><span>Refresh</span>
+                        <button type="button"
+                                class="btn btn-holdings-refresh tip-trigger"
+                                id="btn-holdings-refresh"
+                                onclick="refreshHoldingsTable()"
+                                data-tip-title="Refresh holdings"
+                                data-tip-body="Reload prices and local intel for every row."
+                                data-tip-icon="bi-cpu-fill"
+                                data-tip-variant="local"
+                                aria-label="Refresh holdings">
+                            <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
                         </button>
                     </div>
+                </div>
                 </div>
             </div>
             <div class="card-body p-0">
@@ -1751,8 +1785,8 @@
     <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@2.0.1/dist/chartjs-chart-matrix.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@3.0.0/dist/chartjs-chart-treemap.min.js"></script>
-    <script defer src="/static/js/analytics-charts.js?v=8"></script>
-    <script defer src="/static/js/dashboard.js?v=87"></script>
+    <script defer src="/static/js/analytics-charts.js?v=9"></script>
+    <script defer src="/static/js/dashboard.js?v=88"></script>
 
     <!-- Tip Popover (singleton) -->
     <div id="tip-popover" role="tooltip" aria-hidden="true"></div>
