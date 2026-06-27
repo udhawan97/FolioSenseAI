@@ -1,5 +1,5 @@
 """
-Timing signal helpers for Folio Sense verdicts.
+Timing signal helpers for FolioSense verdicts.
 
 The module is deterministic after price history is supplied. yfinance history
 fetches are batched, de-duped, and cached by ticker for the current calendar day.

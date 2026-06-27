@@ -711,11 +711,11 @@ async def get_all_intelligence(db: Session = Depends(get_db)):
 
 # ── Analyst Recommendation endpoints ─────────────────────────────────────────
 
-VERDICT_BRAND_KICKER = "Folio Sense \u00d7 Claude"
-VERDICT_BRAND_KICKER_LOCAL = "Folio Sense Intelligence"
-VERDICT_FEELS_PREFIX = "Folio Sense feels"
+VERDICT_BRAND_KICKER = "FolioSense \u00d7 Claude"
+VERDICT_BRAND_KICKER_LOCAL = "FolioSense Intelligence"
+VERDICT_FEELS_PREFIX = "FolioSense feels"
 _VERDICT_DISCLAIMER = (
-    "Folio Sense Intelligence \u2014 a signal read, not "
+    "FolioSense Intelligence \u2014 a signal read, not "
     "financial advice. Verify before you trade."
 )
 _AI_VERDICT_DISCLAIMER = _VERDICT_DISCLAIMER
@@ -857,21 +857,21 @@ def _portfolio_fallback_quip(dominant_action: str, concentration_band: str) -> s
     if concentration_band == "high":
         return (
             "Claude sees the book leaning concentrated; "
-            "Folio Sense is politely raising one eyebrow."
+            "FolioSense is politely raising one eyebrow."
         )
     if dominant_action == "add":
         return (
-            "Folio Sense sees more green lights than red flags, "
+            "FolioSense sees more green lights than red flags, "
             "with Claude keeping the caveats close."
         )
     if dominant_action == "trim":
         return (
             "Claude thinks the portfolio has had a run; "
-            "Folio Sense is checking the exits calmly."
+            "FolioSense is checking the exits calmly."
         )
     if dominant_action == "needs-data":
         return (
-            "Folio Sense wants more receipts before turning this portfolio read into a headline."
+            "FolioSense wants more receipts before turning this portfolio read into a headline."
         )
     return (
         "Claude calls the portfolio balanced enough to be interesting, "

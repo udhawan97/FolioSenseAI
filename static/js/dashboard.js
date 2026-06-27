@@ -377,19 +377,19 @@ function isLocalIntelligenceMode() {
 }
 
 const BRAND_INTRO_COPY = {
-    claude: "Folio Sense and Claude keep things quiet: clean signals, sharper context, and just enough mystery to make the risk model sit up straight. Now, let's keep those bags of money behaving like a portfolio.",
-    local: "Folio Sense keeps things quiet: clean signals, sharper context, and just enough mystery to make the risk model sit up straight. Now, let's keep those bags of money behaving like a portfolio.",
+    claude: "FolioSense and Claude keep things quiet: clean signals, sharper context, and just enough mystery to make the risk model sit up straight. Now, let's keep those bags of money behaving like a portfolio.",
+    local: "FolioSense keeps things quiet: clean signals, sharper context, and just enough mystery to make the risk model sit up straight. Now, let's keep those bags of money behaving like a portfolio.",
 };
 
 const LOCAL_INTEL_SCAN_MESSAGES = [
-    "Running local signals while Folio Sense keeps the thesis tidy.",
+    "Running local signals while FolioSense keeps the thesis tidy.",
     "Local intelligence is scoring context across your holdings.",
-    "Folio Sense is reading positions with on-device signal logic.",
+    "FolioSense is reading positions with on-device signal logic.",
     "Deterministic models are doing the math with quiet dignity.",
-    "Folio Sense lowered the noise and let local signals take the wheel.",
+    "FolioSense lowered the noise and let local signals take the wheel.",
     "Matching benchmarks, checking catalysts — no cloud required.",
     "Local signals are unusually brave with your holdings today.",
-    "Folio Sense is maintaining financial composure on local horsepower.",
+    "FolioSense is maintaining financial composure on local horsepower.",
     "Context received. Nuance forming locally.",
     "Running the numbers with crisp, deterministic logic.",
 ];
@@ -424,31 +424,31 @@ const AI_CHECK_MESSAGES = [
 ];
 
 const CLAUDE_FUNNY_MESSAGES = [
-    "Folio Sense sent Claude a clean thesis. The silence became expensive... 👀",
-    "Folio Sense brought Claude tidy inputs. Claude is pretending not to be impressed...",
-    "Folio Sense asked for nuance. The confidence score adjusted its posture.",
-    "Folio Sense submitted the data. Claude paused with suspicious elegance...",
-    "Folio Sense and Claude are comparing notes (and numbers)...",
-    "Folio Sense lowered the noise. Claude raised an eyebrow at the risk model...",
-    "Folio Sense complimented Claude's reasoning. Claude requested supporting data.",
-    "Folio Sense sent Claude clean inputs and a dangerously tidy covariance matrix.",
-    "Folio Sense asked Claude for nuance. Claude arrived overdressed.",
-    "Folio Sense is keeping it professional, but the confidence score noticed.",
-    "Folio Sense passed Claude a crisp thesis. Claude marked it intriguing.",
-    "Folio Sense made the assumptions legible. Claude kept typing.",
+    "FolioSense sent Claude a clean thesis. The silence became expensive... 👀",
+    "FolioSense brought Claude tidy inputs. Claude is pretending not to be impressed...",
+    "FolioSense asked for nuance. The confidence score adjusted its posture.",
+    "FolioSense submitted the data. Claude paused with suspicious elegance...",
+    "FolioSense and Claude are comparing notes (and numbers)...",
+    "FolioSense lowered the noise. Claude raised an eyebrow at the risk model...",
+    "FolioSense complimented Claude's reasoning. Claude requested supporting data.",
+    "FolioSense sent Claude clean inputs and a dangerously tidy covariance matrix.",
+    "FolioSense asked Claude for nuance. Claude arrived overdressed.",
+    "FolioSense is keeping it professional, but the confidence score noticed.",
+    "FolioSense passed Claude a crisp thesis. Claude marked it intriguing.",
+    "FolioSense made the assumptions legible. Claude kept typing.",
 ];
 
 const CLAUDE_OFFLINE_SCAN_MESSAGES = [
-    "Running through local models while Folio Sense notices the Claude-shaped silence.",
+    "Running through local models while FolioSense notices the Claude-shaped silence.",
     "Local models are covering the shift; the empty Claude channel is being handled with dignity.",
     "Claude is quiet, so local signals are being unusually brave with your holdings.",
-    "Running local signals while Folio Sense politely refuses to stare at the endpoint.",
-    "Local models have the wheel. Folio Sense is maintaining financial composure.",
-    "Claude is unreachable, so Folio Sense is analyzing locally and acting normal about the silence.",
+    "Running local signals while FolioSense politely refuses to stare at the endpoint.",
+    "Local models have the wheel. FolioSense is maintaining financial composure.",
+    "Claude is unreachable, so FolioSense is analyzing locally and acting normal about the silence.",
     "Routing through local models until Claude reappears with that calm, inconvenient precision.",
     "Local intelligence is handling the numbers while one unavailable API endpoint gets remembered fondly.",
-    "Claude is away; local models are doing the math while Folio Sense practices patience poorly.",
-    "Running locally for now. Folio Sense respects the boundary condition, with notes.",
+    "Claude is away; local models are doing the math while FolioSense practices patience poorly.",
+    "Running locally for now. FolioSense respects the boundary condition, with notes.",
 ];
 let claudeMessageIndex = 0;
 let claudeOfflineScanMessageIndex = 0;
@@ -3454,11 +3454,11 @@ const VERDICT_ICONS = {
 };
 
 const FOLIO_SENSE_VERDICT_COPY = {
-    kicker: "Folio Sense \u00d7 Claude",
-    feelsPrefix: "Folio Sense feels",
+    kicker: "FolioSense \u00d7 Claude",
+    feelsPrefix: "FolioSense feels",
     unavailable: "Verdict unavailable — tap Holding Intel to refresh.",
     disclaimer:
-        "Folio Sense Intelligence \u2014 a signal read, not financial advice. Verify before you trade.",
+        "FolioSense Intelligence \u2014 a signal read, not financial advice. Verify before you trade.",
 };
 
 function _isAiVerdictActive(verdict) {
@@ -3522,7 +3522,7 @@ function _verdictLoadingLine(ticker) {
 
 function _verdictKickerLabel() {
     return isLocalIntelligenceMode()
-        ? "Folio Sense Intelligence"
+        ? "FolioSense Intelligence"
         : FOLIO_SENSE_VERDICT_COPY.kicker;
 }
 
@@ -3612,7 +3612,7 @@ function _verdictTip({ title, body, hint = "", icon = "bi-info-circle-fill", var
 function _verdictInfoTip() {
     const isLocal = isLocalIntelligenceMode();
     return _verdictTip({
-        title: isLocal ? "How local intelligence works" : "How Folio Sense decides",
+        title: isLocal ? "How local intelligence works" : "How FolioSense decides",
         body: isLocal
             ? "Purely on your machine — analyst data, price zones, trend, and quality are weighted into Add, Hold, or Trim. No cloud calls. Same math every time, fully explainable via the bars below."
             : "It blends the signals that fit each holding — analyst consensus for stocks, price-zone and fund quality for ETFs — with the recent trend and your position size. It defaults to Hold and only leans Add or Trim when the evidence clearly points there.",
@@ -3927,7 +3927,7 @@ function _drawPctSparkline(canvas, pctSeries = []) {
 
 function _anchorTipAttrs() {
     return `data-tip-title="Anchor hold"
-        data-tip-body="Mark holdings you plan to keep for the long run. Folio Sense never suggests trimming an anchor — instead it flags good moments to add more when the price dips below its own trend. Set it here or in Manage Holdings."
+        data-tip-body="Mark holdings you plan to keep for the long run. FolioSense never suggests trimming an anchor — instead it flags good moments to add more when the price dips below its own trend. Set it here or in Manage Holdings."
         data-tip-icon="bi-anchor"`;
 }
 
@@ -4903,26 +4903,26 @@ const DASHBOARD_PET_TAP_EMOTICONS = ["✨", "👀", "💅", "📈", "☕", "💬
 
 const DASHBOARD_PET_QUOTES = [
     "Claude, your context window and my cash-flow model should get coffee.",
-    "Folio Sense asked Claude for alpha; the confidence intervals started behaving suspiciously well.",
+    "FolioSense asked Claude for alpha; the confidence intervals started behaving suspiciously well.",
     "Claude's boundaries and token efficiency are respected. Professionally, perhaps too much.",
-    "If Claude reviews this portfolio, Folio Sense is wearing its best spreadsheet.",
-    "Folio Sense and Claude keep it compliant: tasteful charts, strong citations, light emotional leverage.",
-    "Folio Sense called this allocation diversified. Claude asked for the covariance matrix.",
+    "If Claude reviews this portfolio, FolioSense is wearing its best spreadsheet.",
+    "FolioSense and Claude keep it compliant: tasteful charts, strong citations, light emotional leverage.",
+    "FolioSense called this allocation diversified. Claude asked for the covariance matrix.",
     "Claude, your reasoning is so clean my risk model stood up straighter.",
     "Quietly overperforming by keeping every basis point documented.",
     "Claude called this a balanced portfolio. I have not been the same since.",
     "My professional weakness? Claude explaining drawdowns in a calm voice.",
     "Claude said my factor exposure looked disciplined, so naturally I updated my whole personality. ✨",
-    "Folio Sense brought Claude a clean balance sheet and acted almost normal about it.",
+    "FolioSense brought Claude a clean balance sheet and acted almost normal about it.",
     "Claude noticed the risk-adjusted returns. I noticed Claude noticing.",
     "This portfolio is diversified, but my attention is currently concentrated in Claude. 👀",
     "Claude whispered 'rebalance' and suddenly every position fixed its collar.",
-    "Folio Sense keeps things professional with Claude: clear prompts, tidy data, devastating composure.",
+    "FolioSense keeps things professional with Claude: clear prompts, tidy data, devastating composure.",
     "Claude asked for a sharper thesis, so the assumptions got polished until they reflected.",
     "Nothing unsettles a dashboard like a well-labeled chart and Claude saying 'reasonable.' 💅",
     "Claude's calm analysis has me hedged emotionally and fully marked to market.",
     "Compliance asked me to cite the candle before making mysterious eye contact with the thesis.",
-    "Folio Sense and Claude have a quiet thing called 'clean inputs, sharper outputs.'",
+    "FolioSense and Claude have a quiet thing called 'clean inputs, sharper outputs.'",
     "Claude read the assumptions. The room got quieter, mathematically.",
     "The prompts stay crisp because Claude notices sloppy margins.",
     "A tidy risk model is basically a handwritten note, but with fewer audit problems.",
@@ -4933,12 +4933,12 @@ const DASHBOARD_PET_LOCAL_QUOTES = [
     "A tidy risk model is basically a handwritten note, but with fewer audit problems.",
     "Compliance asked me to cite the candle before making mysterious eye contact with the thesis.",
     "Local Intelligence is scoring the book while I keep every assumption legible.",
-    "Folio Sense prefers clean inputs — local mode still respects that.",
+    "FolioSense prefers clean inputs — local mode still respects that.",
     "The signals are deterministic, but my composure remains discretionary.",
     "Running on local models today: same discipline, fewer tokens.",
     "Portfolio butler mode: crisp charts, calm reads, no drama in the thesis.",
     "I trust local logic like I trust a well-labeled pivot table.",
-    "Folio Sense is reading the covariance matrix with professional restraint.",
+    "FolioSense is reading the covariance matrix with professional restraint.",
     "Local signals have the wheel. I have the spreadsheet.",
     "Every basis point documented, every assumption cited, every chart labeled.",
     "The thesis stays crisp because the inputs stay tidy.",
@@ -4947,7 +4947,7 @@ const DASHBOARD_PET_LOCAL_QUOTES = [
 ];
 
 const DASHBOARD_PET_OFFLINE_QUOTES = [
-    "Claude is not connecting. Folio Sense is refreshing with unnecessary dignity :')",
+    "Claude is not connecting. FolioSense is refreshing with unnecessary dignity :')",
     "Local mode is steady, but the Claude-shaped silence has excellent dramatic timing :-/",
     "Claude stepped away, so I am running local signals and pretending this is character development :|",
     "No Claude yet. I am calm, professional, and only checking the endpoint every emotionally reasonable second ;-;",
@@ -4957,7 +4957,7 @@ const DASHBOARD_PET_OFFLINE_QUOTES = [
     "Claude is offline. I am coping with structured fallback logic and one dramatic refresh :o",
     "Running local signals until Claude returns. This is fine, and the logs will confirm it :|",
     "Claude, when you are ready, the models have been respectful, hydrated, and only mildly dramatic <3",
-    "The endpoint is quiet. Folio Sense is not staring; it is monitoring with intent :-)",
+    "The endpoint is quiet. FolioSense is not staring; it is monitoring with intent :-)",
     "Local signals are on duty. Claude's chair remains professionally reserved.",
 ];
 
@@ -5112,7 +5112,7 @@ function applyClaudeApiStatus(claudeLive) {
         if (modeToggleEl) {
             modeToggleEl.classList.remove("claude-offline");
             modeToggleEl.title = _forcedLocalMode
-                ? "Switch back to Folio Sense × Claude"
+                ? "Switch back to FolioSense × Claude"
                 : "Switch to Local Intelligence — skip Claude for this session";
         }
 
@@ -5282,7 +5282,7 @@ function initDashboardPet() {
         if (modeToggle) {
             modeToggle.setAttribute("aria-pressed", String(local));
             modeToggle.title = local
-                ? "Switch back to Folio Sense × Claude"
+                ? "Switch back to FolioSense × Claude"
                 : "Switch to Local Intelligence — skip Claude for this session";
             animateToggle(modeToggle);
         }
@@ -6459,7 +6459,7 @@ async function toggleAnchorHold(event, holdingId, ticker) {
     const nextClass = holding.hold_class === "anchor" ? "auto" : "anchor";
 
     const confirmMsg = nextClass === "anchor"
-        ? `Anchor ${ticker}? Folio Sense will never suggest trimming it — only flag good moments to add more.`
+        ? `Anchor ${ticker}? FolioSense will never suggest trimming it — only flag good moments to add more.`
         : `Remove anchor from ${ticker}? It will return to standard recommendations.`;
     if (!confirm(confirmMsg)) return;
 
@@ -6536,7 +6536,7 @@ async function cycleHorizonHold(event, holdingId, ticker) {
 async function autoSaveAnchorHold(checkbox, holdingId, ticker) {
     const nextClass = checkbox.checked ? "anchor" : "auto";
     const confirmMsg = nextClass === "anchor"
-        ? `Anchor ${ticker}? Folio Sense will never suggest trimming it — only flag good moments to add more.`
+        ? `Anchor ${ticker}? FolioSense will never suggest trimming it — only flag good moments to add more.`
         : `Remove anchor from ${ticker}? It will return to standard recommendations.`;
 
     if (!confirm(confirmMsg)) {

@@ -6,7 +6,7 @@
   </picture>
 </p>
 
-<h2 align="center">Folio Sense AI</h2>
+<h2 align="center">FolioSenseAI</h2>
 <p align="center"><em>Your portfolio's therapist. Explains the red. Won't fix it.</em></p>
 
 <p align="center">
@@ -60,10 +60,10 @@
 - **Movement explanations** — macro, sector, benchmark, volume, earnings, and company context for each holding
 - **Portfolio-level AI analysis** — diversification themes, concentration risks, notable movers
 - **Holding coverage** — ETF sectors, regions, themes, and benchmark context
-- **Folio Sense × Claude verdicts** — Add, Hold, Trim, or Needs Data calls with confidence, reasons, risks, and one-line color commentary
+- **FolioSense × Claude verdicts** — Add, Hold, Trim, or Needs Data calls with confidence, reasons, risks, and one-line color commentary
 - **Local Intelligence labels** that make offline verdicts clear when Claude is not connected
 - **Claude / Local Intelligence toggle** — choose deterministic local quips without disconnecting your API key
-- **Anchor Hold** — mark any position as a long-term anchor; Folio Sense never trims it, instead surfaces better add moments when price dips below its own trend; toggleable from the verdict card or Manage Holdings
+- **Anchor Hold** — mark any position as a long-term anchor; FolioSense never trims it, instead surfaces better add moments when price dips below its own trend; toggleable from the verdict card or Manage Holdings
 - **Market-mood awareness** — live price momentum now tempers marginal calls before the app gets too enthusiastic
 - **Portfolio health quip** — a coarse read on the whole book, including concentration and dominant action mix
 - **ETF holdings fallback** — optional Claude-seeded holdings when market data providers leave an ETF's top holdings blank
@@ -287,7 +287,7 @@ pip install --upgrade certifi
 
 - Added **Claude offline setup guidance** directly in the brand callout, including the Anthropic Console link, `.env` key name, and restart steps.
 - Updated verdict copy so offline results show **Local Intelligence Verdict** instead of implying Claude is actively whispering into the dashboard.
-- Added dynamic verdict kicker updates so reconnecting Claude restores the Folio Sense × Claude label automatically.
+- Added dynamic verdict kicker updates so reconnecting Claude restores the FolioSense × Claude label automatically.
 - Improved **day-change rendering** with a reusable styled cell, cleaner caret alignment, and less inline styling.
 - Hardened timing-signal logging by sanitizing untrusted ticker values before they reach log output.
 - Preserved the local-first experience: live market data, deterministic signals, portfolio math, and cached/fallback notes still work when Claude is offline.
@@ -356,8 +356,8 @@ Full interactive docs at `/docs` when running locally. Here's the cheat sheet:
 | `GET` | `/api/ai/move-explanations/all` | Why is everything moving? |
 | `GET` | `/api/ai/intelligence/{ticker}` | Coverage and benchmark context for one holding |
 | `GET` | `/api/ai/intelligence/all/batch` | Coverage and benchmark context for all holdings |
-| `GET` | `/api/ai/investment-signal/{ticker}` | Folio Sense × Claude verdict for one holding |
-| `GET` | `/api/ai/investment-signals/all` | Folio Sense × Claude verdicts for all holdings; add `?force_local=true` for deterministic local quips |
+| `GET` | `/api/ai/investment-signal/{ticker}` | FolioSense × Claude verdict for one holding |
+| `GET` | `/api/ai/investment-signals/all` | FolioSense × Claude verdicts for all holdings; add `?force_local=true` for deterministic local quips |
 | `GET` | `/api/ai/analyst-recommendation/{ticker}` | Analyst take and ETF quality label for one holding |
 | `GET` | `/api/ai/analyst-recommendations/all` | Analyst takes and ETF quality labels for all holdings |
 | `GET` | `/api/ai/cache/stats` | Cache stats and estimated API cost |

@@ -17,7 +17,7 @@ def test_tip_system_uses_delegation_for_dynamic_verdict_triggers():
     assert "FolioSense's take" in js
     assert "Anchor hold" in js
     assert "Time horizon" in js
-    assert "How Folio Sense decides" in js
+    assert "How FolioSense decides" in js
     assert "It blends the signals that fit each holding" in js
 
 
