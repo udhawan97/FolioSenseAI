@@ -13,6 +13,7 @@ from app.services.portfolio_analytics import (
     compute_correlation_matrix,
     compute_drawdown,
     compute_contribution,
+    compute_market_context,
 )
 
 # All routes in this file are grouped under the /api/portfolio prefix
@@ -622,3 +623,14 @@ async def get_portfolio_contribution(
     _get_portfolio_or_404(portfolio_id, db)
     result, _total, _daily, _cost = _compute_portfolio(portfolio_id, db)
     return compute_contribution(result, period=period)
+
+
+@router.get("/market-context")
+async def get_portfolio_market_context(portfolio_id: int = 1, db: Session = Depends(get_db)):
+    """World indices enriched with portfolio correlation and geographic alignment."""
+    from app.routers.stocks import get_world_markets  # lazy — avoid circular import at load
+
+    _get_portfolio_or_404(portfolio_id, db)
+    result, _total, _daily, _cost = _compute_portfolio(portfolio_id, db)
+    world_payload = await get_world_markets()
+    return compute_market_context(result, world_payload.get("markets", []))

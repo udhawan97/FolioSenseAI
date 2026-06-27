@@ -14,7 +14,9 @@ from typing import Any
 
 import numpy as np
 
-from app.services.portfolio_projection import BENCHMARK_TICKER, TRADING_DAYS
+from app.services.portfolio_projection import BENCHMARK_TICKER, TRADING_DAYS, _portfolio_daily_returns
+from app.services.portfolio_exposure import build_portfolio_exposure
+from app.services.stock_service import get_all_quotes, get_historical_prices
 from app.services.timing_signal import get_batched_history_closes
 
 _CACHE_TTL_SEC = 300
@@ -234,6 +236,87 @@ def compute_drawdown(history: list[dict]) -> dict[str, Any]:
     }
 
 
+_CONTRIBUTION_TOP_EACH_SIDE = 5
+
+
+def _contribution_row(
+    h: dict,
+    *,
+    contrib: float,
+    change_pct: float,
+) -> dict[str, Any]:
+    allocation = float(h.get("allocation_pct") or 0)
+    return {
+        "ticker": h["ticker"],
+        "name": h.get("name") or h["ticker"],
+        "contribution": contrib,
+        "change_pct": round(change_pct, 2),
+        "contribution_pp": round(allocation * change_pct / 100.0, 4),
+        "allocation_pct": allocation,
+        "current_value": round(float(h.get("current_value") or 0), 2),
+    }
+
+
+def _finalize_contribution_payload(
+    contributions: list[dict[str, Any]],
+    *,
+    period: str,
+    portfolio_value: float,
+) -> dict[str, Any]:
+    total = round(sum(c["contribution"] for c in contributions), 2)
+    if total:
+        for c in contributions:
+            c["contribution_pct"] = round(c["contribution"] / total * 100, 1)
+    else:
+        for c in contributions:
+            c["contribution_pct"] = 0.0
+
+    gainers = sorted(
+        [c for c in contributions if c["contribution"] > 0],
+        key=lambda x: x["contribution"],
+        reverse=True,
+    )
+    losers = sorted(
+        [c for c in contributions if c["contribution"] < 0],
+        key=lambda x: x["contribution"],
+    )
+    top_gainers = gainers[:_CONTRIBUTION_TOP_EACH_SIDE]
+    top_losers = losers[:_CONTRIBUTION_TOP_EACH_SIDE]
+    shown = {c["ticker"] for c in top_gainers + top_losers}
+    rest = [c for c in contributions if c["ticker"] not in shown]
+    others_contrib = round(sum(c["contribution"] for c in rest), 2)
+
+    others: dict[str, Any] | None = None
+    if rest and others_contrib != 0:
+        others = {
+            "ticker": "Other",
+            "name": f"{len(rest)} other holding{'s' if len(rest) != 1 else ''}",
+            "contribution": others_contrib,
+            "contribution_pct": round(others_contrib / total * 100, 1) if total else 0.0,
+            "change_pct": None,
+            "contribution_pp": round(sum(c["contribution_pp"] for c in rest), 4),
+            "allocation_pct": round(sum(c["allocation_pct"] for c in rest), 1),
+            "current_value": round(sum(c["current_value"] for c in rest), 2),
+            "count": len(rest),
+        }
+
+    portfolio_change_pct = (
+        round(total / portfolio_value * 100, 2) if portfolio_value > 0 else 0.0
+    )
+    return {
+        "period": period,
+        "total_contribution": total,
+        "portfolio_value": round(portfolio_value, 2),
+        "portfolio_change_pct": portfolio_change_pct,
+        "holdings_count": len(contributions),
+        "top_gainers": top_gainers,
+        "top_losers": top_losers,
+        "others": others,
+        "holdings": sorted(contributions, key=lambda x: abs(x["contribution"]), reverse=True),
+        "has_data": bool(contributions),
+    }
+
+
 def compute_contribution(
     holdings: list[dict],
     period: str = "day",
@@ -247,57 +330,231 @@ def compute_contribution(
         h for h in holdings
         if not h.get("is_watchlist") and float(h.get("shares") or 0) > 0
     ]
+    portfolio_value = sum(float(h.get("current_value") or 0) for h in active)
     tickers = [h["ticker"] for h in active]
 
     if period == "day":
         contributions = []
-        total = 0.0
         for h in active:
             shares = float(h.get("shares") or 0)
             day_chg = float(h.get("day_change") or 0)
+            change_pct = float(h.get("day_change_pct") or 0)
             contrib = round(shares * day_chg, 2)
-            contributions.append({
-                "ticker": h["ticker"],
-                "contribution": contrib,
-                "allocation_pct": float(h.get("allocation_pct") or 0),
-            })
-            total += contrib
-        contributions.sort(key=lambda x: abs(x["contribution"]), reverse=True)
-        return {
-            "period": period,
-            "total_contribution": round(total, 2),
-            "holdings": contributions,
-            "has_data": bool(contributions),
-        }
+            contributions.append(_contribution_row(h, contrib=contrib, change_pct=change_pct))
+        return _finalize_contribution_payload(
+            contributions, period=period, portfolio_value=portfolio_value
+        )
 
     lookback = {"week": 7, "month": 30}[period]
     history = get_batched_history_closes(tickers, period="1mo")
     contributions = []
-    total = 0.0
 
     for h in active:
         ticker = h["ticker"]
         shares = float(h.get("shares") or 0)
         closes = history.get(ticker, [])
-        if len(closes) < 2:
-            contrib = 0.0
-        else:
+        contrib = 0.0
+        change_pct = 0.0
+        if len(closes) >= 2:
             tail = closes[-min(lookback + 1, len(closes)):]
-            if len(tail) < 2:
-                contrib = 0.0
-            else:
+            if len(tail) >= 2 and tail[0] > 0:
                 contrib = round(shares * (tail[-1] - tail[0]), 2)
-        contributions.append({
-            "ticker": ticker,
-            "contribution": contrib,
-            "allocation_pct": float(h.get("allocation_pct") or 0),
-        })
-        total += contrib
+                change_pct = (tail[-1] - tail[0]) / tail[0] * 100.0
+        contributions.append(_contribution_row(h, contrib=contrib, change_pct=change_pct))
 
-    contributions.sort(key=lambda x: abs(x["contribution"]), reverse=True)
-    return {
-        "period": period,
-        "total_contribution": round(total, 2),
-        "holdings": contributions,
-        "has_data": bool(contributions),
+    return _finalize_contribution_payload(
+        contributions, period=period, portfolio_value=portfolio_value
+    )
+
+
+_INDEX_GEO_KEYS: dict[str, list[str]] = {
+    "^GSPC": ["united states"],
+    "^IXIC": ["united states"],
+    "^DJI": ["united states"],
+    "^FTSE": ["united kingdom", "uk"],
+    "^GDAXI": ["germany"],
+    "^FCHI": ["france"],
+    "^N225": ["japan"],
+    "^HSI": ["hong kong", "china"],
+    "^NSEI": ["india"],
+    "^AXJO": ["australia"],
+}
+
+
+def _price_series(ticker: str) -> list[tuple[str, float]]:
+    rows = get_historical_prices(ticker, "1y")
+    return [(r["date"], float(r["close"])) for r in rows if r.get("close", 0) > 0]
+
+
+def _geo_weight(country_exposure: list[dict], keywords: list[str]) -> float:
+    for entry in country_exposure:
+        name = str(entry.get("name") or "").lower()
+        if any(kw in name for kw in keywords):
+            return float(entry.get("weight_pct") or 0)
+    return 0.0
+
+
+def _correlation_label(value: float) -> str:
+    if value >= 0.7:
+        return "High"
+    if value >= 0.4:
+        return "Moderate"
+    if value < 0:
+        return "Inverse"
+    if value < 0.15:
+        return "Weak"
+    return "Low"
+
+
+def _market_insight(correlation: float, geo_weight: float, name: str) -> str:
+    if geo_weight >= 25 and correlation >= 0.45:
+        return f"~{geo_weight:.0f}% look-through exposure — tends to move with your book"
+    if correlation >= 0.65:
+        return "Moves closely with your portfolio day to day"
+    if correlation >= 0.35:
+        return "Some overlap with your daily moves"
+    if correlation < -0.1:
+        return "Often offsets your book — diversification ballast"
+    return "Limited day-to-day link to your holdings"
+
+
+def _portfolio_index_correlations(
+    holdings: list[dict],
+    index_tickers: list[str],
+) -> dict[str, float]:
+    active = [
+        h for h in holdings
+        if not h.get("is_watchlist") and float(h.get("current_value") or 0) > 0
+    ]
+    if not active:
+        return {}
+
+    weighted = [(h["ticker"], float(h["current_value"])) for h in active]
+    series_map: dict[str, list[tuple[str, float]]] = {}
+    for ticker, _ in weighted:
+        series_map[ticker] = _price_series(ticker)
+    for idx in index_tickers:
+        if idx not in series_map:
+            series_map[idx] = _price_series(idx)
+
+    port_rets = _portfolio_daily_returns([
+        (ticker, weight, series_map.get(ticker, []))
+        for ticker, weight in weighted
+    ])
+    if port_rets.size < 5:
+        return {}
+
+    out: dict[str, float] = {}
+    for idx in index_tickers:
+        series = series_map.get(idx, [])
+        if len(series) < 2:
+            out[idx] = 0.0
+            continue
+        idx_rets = _log_returns([c for _d, c in series])
+        n = min(port_rets.size, idx_rets.size)
+        if n < 5:
+            out[idx] = 0.0
+            continue
+        corr = float(np.corrcoef(port_rets[-n:], idx_rets[-n:])[0, 1])
+        out[idx] = round(corr if np.isfinite(corr) else 0.0, 3)
+    return out
+
+
+def compute_market_context(
+    holdings: list[dict],
+    world_markets: list[dict],
+) -> dict[str, Any]:
+    """
+    Enrich world indices with portfolio correlation and geographic alignment.
+    """
+    cache_key = f"mktctx:{_tickers_key([h['ticker'] for h in holdings if not h.get('is_watchlist')])}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        quote_map = {m["ticker"]: m for m in world_markets}
+        markets = []
+        for row in cached.get("markets", []):
+            live = quote_map.get(row["ticker"], {})
+            markets.append({
+                **row,
+                "price": live.get("price", row.get("price")),
+                "day_change": live.get("day_change", row.get("day_change")),
+                "day_change_pct": live.get("day_change_pct", row.get("day_change_pct")),
+            })
+        return {**cached, "markets": markets}
+
+    active = [h for h in holdings if not h.get("is_watchlist") and float(h.get("allocation_pct") or 0) > 0]
+    if not active:
+        return _cache_set(cache_key, {
+            "has_data": False,
+            "markets": world_markets,
+            "summary": None,
+            "best_match": None,
+        })
+
+    quotes = get_all_quotes([h["ticker"] for h in active])
+    exposure = build_portfolio_exposure(
+        [
+            {
+                "ticker": h["ticker"],
+                "allocation_pct": h.get("allocation_pct"),
+                "is_watchlist": h.get("is_watchlist"),
+            }
+            for h in active
+        ],
+        quotes={q["ticker"]: q for q in quotes},
+    )
+    country_exposure = exposure.get("country_exposure") or []
+
+    index_tickers = [m["ticker"] for m in world_markets]
+    correlations = _portfolio_index_correlations(holdings, index_tickers)
+
+    enriched: list[dict] = []
+    for market in world_markets:
+        ticker = market["ticker"]
+        corr = correlations.get(ticker, 0.0)
+        geo = _geo_weight(country_exposure, _INDEX_GEO_KEYS.get(ticker, []))
+        enriched.append({
+            **market,
+            "correlation": corr,
+            "correlation_label": _correlation_label(corr),
+            "geo_weight_pct": round(geo, 1),
+            "insight": _market_insight(corr, geo, market.get("name", ticker)),
+        })
+
+    enriched.sort(key=lambda m: m.get("correlation", 0), reverse=True)
+    best = enriched[0] if enriched else None
+
+    us_weight = _geo_weight(country_exposure, ["united states"])
+    summary_parts: list[str] = []
+    if best and best.get("correlation", 0) > 0.2:
+        summary_parts.append(
+            f"Your portfolio is most in sync with {best['name']} "
+            f"({best['correlation'] * 100:.0f}% correlated over the past year)."
+        )
+    if us_weight >= 30:
+        summary_parts.append(
+            f"~{us_weight:.0f}% of your look-through exposure is US-linked — "
+            "watch the US row when global markets move."
+        )
+    if not summary_parts:
+        summary_parts.append(
+            "Compare how each global index moves relative to your holdings — "
+            "higher correlation means a bigger ripple effect on your book."
+        )
+
+    payload = {
+        "has_data": True,
+        "markets": enriched,
+        "summary": " ".join(summary_parts),
+        "best_match": (
+            {
+                "ticker": best["ticker"],
+                "name": best["name"],
+                "correlation": best["correlation"],
+            }
+            if best
+            else None
+        ),
+        "us_exposure_pct": round(us_weight, 1),
     }
+    return _cache_set(cache_key, payload)

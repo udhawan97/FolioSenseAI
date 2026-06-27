@@ -11,19 +11,29 @@ def test_analytics_sub_tabs_present():
     css = (ROOT / "static/css/style.css").read_text(encoding="utf-8")
 
     assert 'id="analytics-zone-tabs"' in html
+    assert 'id="analytics-insight-bar"' in html
+    assert 'id="analytics-module-insight"' in html
     assert 'data-analytics-pane="performance"' in html
     assert 'data-analytics-pane="risk"' in html
     assert 'data-analytics-pane="exposure"' in html
     assert 'data-analytics-pane="signals"' in html
     assert 'data-analytics-pane="markets"' in html
+    assert 'id="geo-exposure-list"' in html
+    assert "geoCountryFlag" in js
+    assert ".geo-bar-flag" in css
+    assert ".portfolio-contrib-row" in css
     assert 'id="risk-reward-chart"' in html
-    assert 'id="markets-tape-track"' in html
+    assert 'id="markets-portfolio-grid"' in html
+    assert "/api/portfolio/market-context" in js
     assert "AnalyticsCharts" in js
     assert "/api/portfolio/risk-metrics" in js
     assert "/api/portfolio/correlation" in js
     assert "/api/portfolio/drawdown" in js
     assert "/api/portfolio/contribution" in js
+    assert "/api/ai/analytics-insights" in js
+    assert "loadModuleInsights" in js
     assert ".analytics-zone-tabs" in css
+    assert ".analytics-insight-bar" in css
     assert "prefers-reduced-motion" in css
 
 
@@ -33,3 +43,4 @@ def test_portfolio_analytics_endpoints_registered():
     assert '"/correlation"' in router
     assert '"/drawdown"' in router
     assert '"/contribution"' in router
+    assert '"/market-context"' in router

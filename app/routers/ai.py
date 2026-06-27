@@ -18,6 +18,7 @@ from app.services.ai_service import (
     claude_api_heartbeat,
     generate_etf_profile_seed,
     generate_portfolio_briefing,
+    generate_analytics_insights,
     generate_stock_summary,
     next_briefing_canned_quote,
 )
@@ -1646,3 +1647,84 @@ async def get_portfolio_summary(
     except Exception as exc:
         logger.warning("AI briefing failed; exception_type=%s", type(exc).__name__)
         return _briefing_fallback(snapshot)
+
+
+_ANALYTICS_INSIGHTS_CACHE_TYPE = "analytics_insights"
+
+
+@router.get("/analytics-insights")
+async def get_analytics_insights(
+    mode: str = "ai",
+    force_refresh: bool = False,
+    db: Session = Depends(get_db),
+):
+    """
+    Per-tab analytics insight bar.
+    mode=local — static digest of what each tab means + deterministic one-liners.
+    mode=ai    — Claude sentence per tab, cached 24 h (ticker=BOOK).
+    """
+    from app.services.analytics_insights import (
+        build_analytics_fallback,
+        build_analytics_snapshot,
+        build_local_analytics_insights,
+    )
+
+    if mode not in ("ai", "local"):
+        mode = "ai"
+
+    if mode == "local":
+        try:
+            snapshot = build_analytics_snapshot(db)
+            return build_local_analytics_insights(snapshot)
+        except Exception as exc:
+            logger.error("Local analytics insights failed; exception_type=%s", type(exc).__name__)
+            raise HTTPException(status_code=500, detail="Analytics insights temporarily unavailable.")
+
+    if not force_refresh:
+        cached = (
+            db.query(AISummary)
+            .filter(
+                AISummary.ticker == _PORTFOLIO_CACHE_TICKER,
+                AISummary.summary_type == _ANALYTICS_INSIGHTS_CACHE_TYPE,
+            )
+            .order_by(AISummary.generated_at.desc())
+            .first()
+        )
+        if cached and _cache_is_fresh(cached):
+            try:
+                stored = json.loads(getattr(cached, "summary_text", None) or "{}")
+                stored["from_cache"] = True
+                return stored
+            except Exception:
+                pass
+
+    try:
+        snapshot = build_analytics_snapshot(db)
+    except Exception as exc:
+        logger.error("Analytics snapshot failed; exception_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Analytics insights temporarily unavailable.")
+
+    try:
+        parsed = generate_analytics_insights(snapshot)
+        payload: dict = {
+            "mode": "ai",
+            "source": "claude",
+            **parsed,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        try:
+            db.add(AISummary(
+                ticker=_PORTFOLIO_CACHE_TICKER,
+                summary_type=_ANALYTICS_INSIGHTS_CACHE_TYPE,
+                summary_text=json.dumps(payload),
+                price_when_generated=None,
+                model_used=MODEL,
+            ))
+            db.commit()
+        except Exception as exc:
+            logger.debug("Failed to cache analytics insights; exception_type=%s", type(exc).__name__)
+        return payload
+
+    except Exception as exc:
+        logger.warning("AI analytics insights failed; exception_type=%s", type(exc).__name__)
+        return build_analytics_fallback(snapshot)

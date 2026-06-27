@@ -129,7 +129,8 @@ def generate_verdict_ai_bundles(signals: list[dict]) -> dict[str, dict]:
         "  cn: array of 4 integers [-6..6] nudging [Analyst, Valuation, Momentum, Quality]\n"
         "  h: headline ≤8 plain words for the card\n"
         "  p: 1–2 plain-English sentences (≤40 words) for a non-finance reader — "
-        "what to do and why, no jargon\n"
+        "neutral advisory tone only (prefer \"consider\", \"may want to\", \"worth watching\"; "
+        "never direct orders like \"sell now\" or \"buy\"); explain the read, not commands\n"
         "  t: up to 2 short tags (e.g. steady, core, watch)\n"
         "  w: optional watch note ≤20 words (plain English)\n"
         "  agrees: boolean — true if you agree with local action/confidence\n"
@@ -418,6 +419,52 @@ def generate_portfolio_briefing(snapshot: dict) -> dict:
     quote = str(data.get("quote") or "").strip() or next_briefing_canned_quote()
 
     return {"health": health, "drivers": drivers, "adjustments": adjustments, "quote": quote}
+
+
+_ANALYTICS_INSIGHTS_SYSTEM = (
+    "You are FolioSense's analytics narrator. You receive a compact JSON snapshot of the user's "
+    "portfolio across five dashboard tabs. Write ONE crisp sentence per tab in the second person "
+    '("your portfolio"). Return ONLY valid JSON (no markdown) with exactly these keys:\n'
+    '- "performance": insight about total return, today\'s move, or history.\n'
+    '- "risk": insight about volatility, concentration, correlation, or drawdown.\n'
+    '- "exposure": insight about sector/country look-through weights.\n'
+    '- "signals": insight about verdict tone and confidence across holdings.\n'
+    '- "markets": insight about which global index aligns with their book.\n'
+    "Rules: max 28 words per sentence; use ONLY numbers from the snapshot; no buy/sell advice; "
+    "plain English a non-expert understands."
+)
+
+
+def generate_analytics_insights(snapshot: dict) -> dict:
+    """One Haiku call: one sentence per analytics sub-tab."""
+    message = client.messages.create(
+        model=MODEL,
+        max_tokens=320,
+        system=_ANALYTICS_INSIGHTS_SYSTEM,
+        messages=[{"role": "user", "content": json.dumps(snapshot)}],
+    )
+    text_block = next((b for b in message.content if b.type == "text"), None)
+    raw = (text_block.text.strip() if text_block else "")
+    logger.info(
+        "Generated analytics insights: %s+%s tokens",
+        message.usage.input_tokens,
+        message.usage.output_tokens,
+    )
+
+    cleaned = re.sub(r"^```[a-z]*\s*|\s*```$", "", raw, flags=re.DOTALL).strip()
+    data = json.loads(cleaned)
+    if not isinstance(data, dict):
+        raise ValueError("Analytics insights response is not a JSON object")
+
+    keys = ("performance", "risk", "exposure", "signals", "markets")
+    insights = {
+        k: str(data.get(k) or "").strip()
+        for k in keys
+    }
+    if not any(insights.values()):
+        raise ValueError("Analytics insights response empty")
+
+    return {"insights": insights}
 
 
 def generate_stock_summary(stock_data: dict) -> str:

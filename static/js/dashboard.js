@@ -85,6 +85,12 @@ const _REGIME_CHIP_CLASS = {
 let _trendObserver = null;
 const THEME_KEY = "foliosense-theme";
 const TEXT_SIZE_KEY = "foliosense-text-size";
+const TEXT_SIZES = ["compact", "standard", "comfortable"];
+const TEXT_SIZE_LABELS = {
+    compact: "smallest",
+    standard: "normal",
+    comfortable: "large",
+};
 const DASHBOARD_PET_KEY = "foliosense-dashboard-pet-visible";
 const PET_MODE_KEY = "foliosense-force-local-mode";
 const PERFORMANCE_RANGE_KEY = "foliosense-performance-range";
@@ -100,8 +106,15 @@ const PERFORMANCE_RANGES = {
 const currentTheme = () =>
     document.documentElement.dataset.bsTheme === "light" ? "light" : "dark";
 
-const currentTextSize = () =>
-    document.documentElement.dataset.textSize === "comfortable" ? "comfortable" : "standard";
+const currentTextSize = () => {
+    const size = document.documentElement.dataset.textSize;
+    return TEXT_SIZES.includes(size) ? size : "standard";
+};
+
+const nextTextSize = (size) => {
+    const index = TEXT_SIZES.indexOf(size);
+    return TEXT_SIZES[(index + 1) % TEXT_SIZES.length];
+};
 
 const cssVar = (name) =>
     getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -213,14 +226,16 @@ function updateChartChrome(chart) {
 }
 
 function applyTextSize(size, persist = false) {
-    const resolved = size === "comfortable" ? "comfortable" : "standard";
+    const resolved = TEXT_SIZES.includes(size) ? size : "standard";
     document.documentElement.dataset.textSize = resolved;
     const toggle = document.getElementById("text-size-toggle");
     if (toggle) {
-        const comfortable = resolved === "comfortable";
-        toggle.setAttribute("aria-pressed", String(comfortable));
-        toggle.setAttribute("aria-label", `Switch to ${comfortable ? "standard" : "comfortable"} text size`);
-        toggle.title = `Switch to ${comfortable ? "standard" : "comfortable"} text size`;
+        const next = nextTextSize(resolved);
+        const currentLabel = TEXT_SIZE_LABELS[resolved];
+        const nextLabel = TEXT_SIZE_LABELS[next];
+        toggle.setAttribute("aria-pressed", resolved !== "standard" ? "true" : "false");
+        toggle.setAttribute("aria-label", `Text size: ${currentLabel}. Switch to ${nextLabel} text size`);
+        toggle.title = `Text size: ${currentLabel}. Click for ${nextLabel}`;
     }
     if (persist) animateToggle(toggle);
     if (persist) {
@@ -237,8 +252,7 @@ function initTextSizeToggle() {
     const toggle = document.getElementById("text-size-toggle");
     if (!toggle) return;
     toggle.addEventListener("click", () => {
-        const next = currentTextSize() === "comfortable" ? "standard" : "comfortable";
-        applyTextSize(next, true);
+        applyTextSize(nextTextSize(currentTextSize()), true);
     });
 }
 
@@ -1590,6 +1604,7 @@ function setDashboardZone(zone, opts = {}) {
         ensureProjectionLoaded();
         window.AnalyticsCharts?.onAnalyticsZoneEnter?.();
     }
+    syncHoldingExpandFab();
 }
 
 function initDashboardZones() {
@@ -2074,35 +2089,35 @@ function updateProjectionSummary(data) {
         if (el) el.textContent = text;
     };
 
-    setWhy("proj-why-avg",   `${mu}% 3-yr avg return, no vol adjustment`);
-    setWhy("proj-why-best",  `+1\u03c3 upside \u2014 ${mu}% + ${sig}% vol = ${(+mu + +sig).toFixed(1)}% ann.`);
-    setWhy("proj-why-worst", `\u22121\u03c3 downside \u2014 ${mu}% \u2212 ${sig}% vol = ${(+mu - +sig).toFixed(1)}% ann.`);
-    setWhy("proj-why-spy",   `SPY 3-yr avg ${spR}% \u2014 ${+mu >= +spR ? "you lead" : "index leads"} by ${Math.abs(+mu - +spR).toFixed(1)}%`);
+    setWhy("proj-why-avg",   `Historical pace: ${mu}% per year`);
+    setWhy("proj-why-best",  `If markets run hot: ~${(+mu + +sig).toFixed(1)}%/yr`);
+    setWhy("proj-why-worst", `If markets cool off: ~${(+mu - +sig).toFixed(1)}%/yr`);
+    setWhy("proj-why-spy",   `S&P benchmark ${spR}% — you ${+mu >= +spR ? "lead" : "trail"} by ${Math.abs(+mu - +spR).toFixed(1)}%`);
 
-    const tipHint = "~68% of outcomes fall within the best\u2013worst range";
+    const tipHint = "Roughly 2 in 3 outcomes fall between best and worst";
     const cards = [
         {
-            id:    "proj-stat-avg",
+            id:    "proj-tip-avg",
             title: "Average scenario",
-            body:  why.avg  || `Your portfolio\u2019s 3-year annualised return is ${mu}%. The average path applies this rate with no volatility adjustment \u2014 steady-state compound growth assuming history repeats.`,
+            body:  why.avg  || `Projects your portfolio at its recent ${mu}% average yearly return — steady growth if history repeats.`,
             hint:  tipHint,
         },
         {
-            id:    "proj-stat-best",
-            title: "Best case (+1\u03c3)",
-            body:  why.best || `Returns run one standard deviation above average: ${mu}% + ${sig}% vol = ${(+mu + +sig).toFixed(1)}% annualised. This happens roughly 16% of the time.`,
+            id:    "proj-tip-best",
+            title: "Best case",
+            body:  why.best || `A stronger-than-usual year (~${(+mu + +sig).toFixed(1)}% return). Happens occasionally when markets run hot.`,
             hint:  tipHint,
         },
         {
-            id:    "proj-stat-worst",
-            title: "Worst case (\u22121\u03c3)",
-            body:  why.worst || `Returns run one standard deviation below average: ${mu}% \u2212 ${sig}% vol = ${(+mu - +sig).toFixed(1)}% annualised. Also ~16% probable \u2014 a rough year, but within normal range.`,
+            id:    "proj-tip-worst",
+            title: "Worst case",
+            body:  why.worst || `A weaker-than-usual year (~${(+mu - +sig).toFixed(1)}% return). A rough patch, but still within a normal range.`,
             hint:  tipHint,
         },
         {
-            id:    "proj-stat-spy",
+            id:    "proj-tip-spy",
             title: "S\u0026P 500 benchmark",
-            body:  why.sp500 || `SPY 3-year average return: ${spR}% at ${(sm.annual_vol_pct ?? 0).toFixed(1)}% volatility. ${+mu >= +spR ? "Your portfolio leads" : "The index leads"} by ${Math.abs(+mu - +spR).toFixed(1)}% annually.`,
+            body:  why.sp500 || `The broad US market averaged ${spR}% per year. ${+mu >= +spR ? "Your portfolio leads" : "The index leads"} by ${Math.abs(+mu - +spR).toFixed(1)}%.`,
             hint:  "Used as the market benchmark across all horizons",
         },
     ];
@@ -2114,7 +2129,6 @@ function updateProjectionSummary(data) {
         el.dataset.tipBody  = body;
         el.dataset.tipHint  = hint;
         el.dataset.tipIcon  = "bi-info-circle";
-        el.classList.add("tip-trigger");
     });
 }
 
@@ -2316,6 +2330,7 @@ function repaintAllTrendSparklines() {
 
 function repaintOpenVerdictSparklines() {
     document.querySelectorAll(".intel-verdict-section").forEach(section => {
+        if (section.dataset.lazyChartsReady !== "1") return;
         const expandRow = section.closest(".summary-expand-row");
         const mainRow = expandRow?.previousElementSibling;
         const ticker = mainRow?.dataset?.ticker;
@@ -2696,15 +2711,30 @@ function toggleSummaryRow(mainRow) {
     const isOpen = body.classList.contains("open");
     animateSummaryBody(body, !isOpen);
     mainRow.classList.toggle("summary-open", !isOpen);
+    syncHoldingExpandFab();
     if (!isOpen) {
         mainRow.classList.remove("has-intel-ready");
         holdingPetReaction(mainRow);
         const ticker = mainRow.dataset.ticker;
         if (ticker) {
-            setTimeout(() => {
+            _lastExpandedHoldingTicker = ticker;
+            const needsIntel = !cachedVerdicts[ticker] || !holdingIntelSettled(ticker);
+            if (needsIntel && !intelligenceRetryingTickers.has(ticker)) {
+                loadTargetedHoldingIntelligence(ticker);
+            } else {
+                renderExpandedTicker(ticker);
+            }
+            requestAnimationFrame(() => {
                 const coverage = expandRow.querySelector(".intel-coverage-section");
                 if (coverage) requestDeepIntel(ticker, coverage);
-            }, 400);
+                const verdictSection = expandRow.querySelector(".intel-verdict-section");
+                if (verdictSection) _retryVerdictLazyCharts(verdictSection);
+            });
+            body.addEventListener("transitionend", (e) => {
+                if (e.propertyName !== "max-height") return;
+                const verdictSection = expandRow.querySelector(".intel-verdict-section");
+                if (verdictSection) _retryVerdictLazyCharts(verdictSection);
+            }, { once: true });
         }
     }
 }
@@ -3849,8 +3879,6 @@ function _sanitizeVerdict(verdict) {
     };
 }
 
-const _verdictSettled = new Set();  // tickers whose die has already settled
-
 function _verdictLoadingLine(ticker) {
     const seed = String(ticker || "").split("").reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
     if (isLocalIntelligenceMode()) {
@@ -3919,10 +3947,10 @@ const SYNTH_TAG_GLOSSARY = {
 };
 
 const SYNTH_ACTION_PLAIN = {
-    add: "Leaning toward buying more when the price looks right.",
-    hold: "No strong reason to buy or sell right now — patience is fine.",
+    add: "Worth considering a small add when the price looks right.",
+    hold: "No strong reason to buy or sell right now — waiting is reasonable.",
     trim: "Consider reducing your position — risks may outweigh the reward.",
-    "needs-data": "Not enough reliable data yet to make a confident call.",
+    "needs-data": "Not enough reliable data yet to form a confident view.",
 };
 
 function _holdingForTicker(ticker) {
@@ -4006,7 +4034,7 @@ function _renderLocalSynthesisPanel(verdict, ticker = "") {
         ${tags ? `<div class="synth-tags">${tags}</div>` : ""}
         ${note && note !== plain ? `<p class="synth-note"><span class="synth-note-label">Detail</span> ${escapeHtml(note)}</p>` : ""}
         <p class="synth-radar-caption">Balance of expert views, price, trend, and quality</p>
-        ${_renderSignalRadar(verdict, "local")}
+        ${_renderSignalRadarSlot("local")}
     </div>`;
 }
 
@@ -4089,11 +4117,17 @@ function _renderAiSynthesisPanel(verdict, ticker = "") {
         ${tagHtml ? `<div class="synth-tags">${tagHtml}</div>` : ""}
         ${note && note !== plain ? `<p class="synth-note"><span class="synth-note-label">Supporting detail</span> ${escapeHtml(note)}</p>` : ""}
         <p class="synth-radar-caption">Balance of expert views, price, trend, and quality</p>
-        ${_renderSignalRadar(verdict, "ai")}
+        ${_renderSignalRadarSlot("ai")}
     </div>`;
 }
 
-function _renderSignalRadar(verdict, variant = "ai") {
+function _renderSignalRadarSlot(variant = "ai") {
+    return `<div class="signal-radar-slot is-pending is-${variant}" data-radar-variant="${escapeHtml(variant)}" aria-hidden="true">
+        <div class="signal-radar-placeholder" aria-hidden="true"></div>
+    </div>`;
+}
+
+function _renderSignalRadarMarkup(verdict, variant = "ai") {
     const components = verdict?.confidence_detail?.components;
     if (!Array.isArray(components) || components.length < 4) return "";
     const scores = components.slice(0, 4).map(c => Math.min(100, Math.max(0, Number(c.score) || 0)));
@@ -4126,13 +4160,13 @@ function _renderSignalRadar(verdict, variant = "ai") {
     const textAnchors = ["middle", "start", "middle", "end"];
     const labelNodes = angles.map((deg, i) => {
         const rad = (deg * Math.PI) / 180;
-        const lx = cx + (maxR + 10) * Math.cos(rad);
-        const ly = cy + (maxR + 10) * Math.sin(rad);
+        const lx = cx + (maxR + 8) * Math.cos(rad);
+        const ly = cy + (maxR + 8) * Math.sin(rad);
         return `<text class="ai-radar-label" x="${lx}" y="${ly}" text-anchor="${textAnchors[i]}" dominant-baseline="middle">${labels[i]}</text>`;
     }).join("");
 
     return `<div class="signal-radar-wrap is-${variant}">
-        <svg class="signal-radar" viewBox="-14 -10 128 120" role="img" aria-label="Signal balance radar">
+        <svg class="signal-radar" viewBox="-32 -14 164 128" role="img" aria-label="Signal balance radar">
             ${rings}
             ${spokes}
             <polygon class="signal-radar-fill" points="${poly}"></polygon>
@@ -4143,7 +4177,136 @@ function _renderSignalRadar(verdict, variant = "ai") {
 }
 
 function _renderAiRadarArtifact(verdict) {
-    return _renderSignalRadar(verdict, "ai");
+    return _renderSignalRadarMarkup(verdict, "ai");
+}
+
+let _verdictLazyObserver = null;
+let _lastExpandedHoldingTicker = null;
+
+function ensureVerdictLazyObserver() {
+    if (_verdictLazyObserver || typeof IntersectionObserver === "undefined") return;
+    _verdictLazyObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (!entry.isIntersecting) return;
+            const section = entry.target.closest(".intel-verdict-section");
+            if (section) _hydrateVerdictLazyCharts(section);
+        });
+    }, { root: null, rootMargin: "0px 0px 80px 0px", threshold: 0.08 });
+}
+
+function _bindVerdictLazyCharts(section, verdict, ticker) {
+    if (!section || !verdict) return;
+    section._lazyVerdict = verdict;
+    section._lazyTicker = ticker;
+    delete section.dataset.lazyChartsReady;
+    ensureVerdictLazyObserver();
+    const sentinel = section.querySelector(".verdict-lazy-sentinel");
+    if (!sentinel || !_verdictLazyObserver) return;
+    _verdictLazyObserver.unobserve(sentinel);
+    _verdictLazyObserver.observe(sentinel);
+}
+
+function _retryVerdictLazyCharts(section) {
+    if (!section || section.dataset.lazyChartsReady === "1") return;
+    const sentinel = section.querySelector(".verdict-lazy-sentinel");
+    if (!sentinel || !_verdictLazyObserver) return;
+    _verdictLazyObserver.unobserve(sentinel);
+    _verdictLazyObserver.observe(sentinel);
+}
+
+function _hydrateVerdictLazyCharts(section) {
+    if (!section || section.dataset.lazyChartsReady === "1") return;
+    const verdict = section._lazyVerdict;
+    const ticker = section._lazyTicker;
+    if (!verdict) return;
+
+    section.dataset.lazyChartsReady = "1";
+    const sentinel = section.querySelector(".verdict-lazy-sentinel");
+    if (sentinel && _verdictLazyObserver) _verdictLazyObserver.unobserve(sentinel);
+
+    section.querySelectorAll(".signal-radar-slot.is-pending").forEach(slot => {
+        const variant = slot.dataset.radarVariant || "ai";
+        const markup = _renderSignalRadarMarkup(verdict, variant);
+        if (!markup) {
+            slot.remove();
+            return;
+        }
+        const temp = document.createElement("div");
+        temp.innerHTML = markup;
+        const wrap = temp.firstElementChild;
+        if (wrap) slot.replaceWith(wrap);
+    });
+
+    _paintVerdictSparkline(section, verdict, ticker);
+}
+
+function _renderVerdictLazySentinel() {
+    return `<div class="verdict-lazy-sentinel" aria-hidden="true"></div>`;
+}
+
+function initHoldingExpandFab() {
+    if (document.getElementById("holding-expand-fab")) return;
+    const fab = document.createElement("button");
+    fab.id = "holding-expand-fab";
+    fab.type = "button";
+    fab.className = "holding-expand-fab";
+    fab.setAttribute("aria-hidden", "true");
+    fab.innerHTML = `<i class="bi bi-chevron-up" aria-hidden="true"></i><span class="holding-expand-fab-label"></span>`;
+    fab.addEventListener("click", () => {
+        const openRows = [...document.querySelectorAll("#holdings-table tr[data-ticker].summary-open")];
+        if (openRows.length) {
+            openRows.forEach(row => toggleSummaryRow(row));
+            return;
+        }
+        const ticker = _lastExpandedHoldingTicker;
+        if (!ticker) return;
+        const row = document.querySelector(`#holdings-table tr[data-ticker="${CSS.escape(ticker)}"]`);
+        if (row && !row.classList.contains("summary-open")) {
+            toggleSummaryRow(row);
+            row.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "nearest" });
+        }
+    });
+    document.body.appendChild(fab);
+}
+
+function syncHoldingExpandFab() {
+    const fab = document.getElementById("holding-expand-fab");
+    if (!fab) return;
+    const openRows = [...document.querySelectorAll("#holdings-table tr[data-ticker].summary-open")];
+    const icon = fab.querySelector("i");
+    const labelEl = fab.querySelector(".holding-expand-fab-label");
+
+    if (dashboardZone !== "holdings") {
+        fab.classList.remove("is-visible", "is-open-mode");
+        fab.setAttribute("aria-hidden", "true");
+        return;
+    }
+
+    if (openRows.length) {
+        const label = openRows.length === 1
+            ? `Collapse ${openRows[0].dataset.ticker || "holding"}`
+            : `Collapse ${openRows.length} holdings`;
+        if (icon) icon.className = "bi bi-chevron-up";
+        labelEl.textContent = label;
+        fab.setAttribute("aria-label", label);
+        fab.classList.add("is-visible", "is-open-mode");
+        fab.setAttribute("aria-hidden", "false");
+        return;
+    }
+
+    if (_lastExpandedHoldingTicker) {
+        const label = `Open ${_lastExpandedHoldingTicker}`;
+        if (icon) icon.className = "bi bi-chevron-down";
+        labelEl.textContent = label;
+        fab.setAttribute("aria-label", label);
+        fab.classList.add("is-visible");
+        fab.classList.remove("is-open-mode");
+        fab.setAttribute("aria-hidden", "false");
+        return;
+    }
+
+    fab.classList.remove("is-visible", "is-open-mode");
+    fab.setAttribute("aria-hidden", "true");
 }
 
 function _renderAiOrbital(conf) {
@@ -5120,7 +5283,7 @@ function renderAiVerdictShimmer(section, ticker) {
             </div>
             <div class="shimmer-line" style="width:100%;height:28px;border-radius:8px;margin-bottom:.35rem"></div>
             <div style="display:flex;align-items:center;gap:.7rem">
-                <div class="verdict-die is-tumbling" aria-hidden="true">
+                <div class="verdict-die is-settled" aria-hidden="true">
                     <img src="/static/img/brand/folio-orbit-icon.svg" alt="">
                 </div>
                 <div style="flex:1;display:grid;gap:.3rem">
@@ -5151,7 +5314,7 @@ function _animateConfidence(el, target, reducedMotion) {
     requestAnimationFrame(tick);
 }
 
-function renderAiVerdict(section, verdict, ticker) {
+function renderAiVerdict(section, verdict, ticker, options = {}) {
     if (!verdict) {
         section.innerHTML = `
             <div class="intel-label"><i class="bi ${_verdictIntelIcon()}"></i> <span class="verdict-kicker-label">${escapeHtml(_verdictKickerLabel())}</span></div>
@@ -5170,9 +5333,8 @@ function renderAiVerdict(section, verdict, ticker) {
     const risks     = verdict.risks   || [];
     const disc      = _verdictDisclaimer(verdict);
     const icon      = VERDICT_ICONS[action] || "bi-question-circle";
-    const alreadySettled = _verdictSettled.has(ticker);
     const reducedMotion  = prefersReducedMotion();
-    const shouldReveal = !alreadySettled && !reducedMotion;
+    const shouldReveal = options.animate === true && !reducedMotion;
     const brandCopy = _verdictBrand(verdict);
     const anchorPill = _renderAnchorPill(verdict, ticker);
     const horizonPill = _renderHorizonPill(verdict, ticker);
@@ -5279,12 +5441,13 @@ function renderAiVerdict(section, verdict, ticker) {
                 <span class="fact-tag">${escapeHtml(disc)}</span>
             </div>` : ""}
             ${_renderCalibrationFootnote(verdict)}
-        </div>`;
+        </div>
+        ${_renderVerdictLazySentinel()}`;
 
     const confEl = section.querySelector(".verdict-conf-pct");
     const meterFill = section.querySelector(".verdict-meter-fill");
 
-    // Die settle animation (one-shot per ticker)
+    // Optional reveal animation (off by default — expand shows final state immediately)
     if (shouldReveal) {
         const die = section.querySelector(".verdict-die");
         window.requestAnimationFrame(() => {
@@ -5295,19 +5458,16 @@ function renderAiVerdict(section, verdict, ticker) {
                 die.classList.remove("is-tumbling");
                 die.classList.add("is-settled");
                 if (confEl) _animateConfidence(confEl, conf, false);
-                _verdictSettled.add(ticker);
-            }, 280);
+            }, 140);
         }
         setTimeout(() => {
             section.querySelector(".intel-verdict")?.classList.remove("is-revealing");
-            _paintVerdictSparkline(section, verdict, ticker);
-        }, 730);
+        }, 320);
     } else {
         if (meterFill) meterFill.style.width = `${conf}%`;
-        if (confEl) _animateConfidence(confEl, conf, true);
-        _verdictSettled.add(ticker);
+        if (confEl) confEl.textContent = `${conf}%`;
     }
-    _paintVerdictSparkline(section, verdict, ticker);
+    _bindVerdictLazyCharts(section, verdict, ticker);
 }
 
 let _lastAiCostUsd = null;
@@ -5458,6 +5618,7 @@ async function onIntelligenceModeChanged(local, { notify = false } = {}) {
 
     // Sync briefing card to new global mode
     loadPortfolioBriefing();
+    window.AnalyticsCharts?.onIntelligenceModeChanged?.();
 
     if (!notify) return;
     if (local) {
@@ -6263,7 +6424,7 @@ document.addEventListener("keydown", (e) => {
         return;
     }
     if (e.key === "s" || e.key === "S") {
-        applyTextSize(currentTextSize() === "comfortable" ? "standard" : "comfortable", true);
+        applyTextSize(nextTextSize(currentTextSize()), true);
         return;
     }
     if (e.key === "m" || e.key === "M") {
@@ -6320,13 +6481,45 @@ function _briefingShowSkeleton(show) {
     const sk = document.getElementById("briefing-skeleton");
     const ct = document.getElementById("briefing-content");
     if (sk) sk.style.display = show ? "" : "none";
-    if (ct) ct.style.display = show ? "none" : "";
+    if (ct) {
+        if (show) {
+            ct.style.opacity = "0";
+            ct.style.display = "none";
+        } else {
+            ct.style.display = "";
+            requestAnimationFrame(() => { ct.style.opacity = "1"; });
+        }
+    }
 }
 
 function _briefingBoldTickers(rawText) {
     // Escape first, then bold any 2–5 uppercase-letter word that looks like a ticker
     return escapeHtml(String(rawText || ""))
         .replace(/\b([A-Z]{2,5})\b/g, '<strong class="briefing-inline-ticker">$1</strong>');
+}
+
+function _briefingAnimateIn(wrap) {
+    if (!wrap || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    wrap.classList.add("briefing-enter");
+    let delay = 0;
+
+    wrap.querySelectorAll(".briefing-section").forEach(section => {
+        section.style.setProperty("--briefing-delay", String(delay));
+        const health = section.querySelector(".briefing-health-text");
+        if (health) health.style.setProperty("--briefing-delay", String(delay));
+
+        let itemDelay = delay + 50;
+        section.querySelectorAll(".briefing-bullet-item").forEach(item => {
+            item.style.setProperty("--briefing-delay", String(itemDelay));
+            itemDelay += 38;
+        });
+
+        delay += section.querySelector(".briefing-bullet-list") ? 58 : 48;
+    });
+
+    const quote = wrap.querySelector(".briefing-quote-chip");
+    if (quote) quote.style.setProperty("--briefing-delay", String(delay));
 }
 
 function _briefingRenderAi(data) {
@@ -6384,6 +6577,7 @@ function _briefingRenderAi(data) {
                 ${sourceNote}
             </div>
         </div>`;
+    _briefingAnimateIn(content.querySelector(".briefing-ai-wrap"));
 }
 
 function _briefingFirstSentence(text) {
@@ -6438,6 +6632,7 @@ function _briefingRenderLocal(data) {
                 <ul class="briefing-bullet-list">${movers || "<li class='briefing-empty'>No holdings data.</li>"}</ul>
             </div>
         </div>`;
+    _briefingAnimateIn(content.querySelector(".briefing-local-wrap"));
 }
 
 async function loadPortfolioBriefing(mode, forceRefresh = false) {
@@ -6527,6 +6722,7 @@ async function initDashboard() {
     initHudPopover();
     startClaudeHeartbeat();
     initTips();
+    initHoldingExpandFab();
     initKeyboardHelp();
 }
 
@@ -6780,10 +6976,16 @@ async function loadTargetedHoldingIntelligence(ticker) {
     renderExpandedTicker(normalized);
 
     try {
-        const [intelRes, moveRes, verdictRes] = await Promise.allSettled([
-            fetch(`/api/ai/intelligence/${encodeURIComponent(normalized)}?ai_holdings_fallback=true&retry=${Date.now()}`),
-            fetch("/api/ai/move-explanations/all"),
-            fetch(`/api/ai/investment-signal/${encodeURIComponent(normalized)}`),
+        const useProgressiveVerdicts = !_forcedLocalMode;
+        const intelP = fetch(`/api/ai/intelligence/${encodeURIComponent(normalized)}?ai_holdings_fallback=true&retry=${Date.now()}`);
+        const moveP = fetch("/api/ai/move-explanations/all");
+        const verdictFastP = fetch(`/api/ai/investment-signal/${encodeURIComponent(normalized)}`);
+        const verdictFullP = useProgressiveVerdicts
+            ? fetch(`/api/ai/investment-signals/all`)
+            : null;
+
+        const [intelRes, moveRes, verdictPhaseRes] = await Promise.allSettled([
+            intelP, moveP, verdictFastP,
         ]);
 
         if (intelRes.status === "fulfilled" && intelRes.value.ok) {
@@ -6803,8 +7005,20 @@ async function loadTargetedHoldingIntelligence(ticker) {
             }
         }
 
-        if (verdictRes.status === "fulfilled" && verdictRes.value.ok) {
-            cachedVerdicts[normalized] = await verdictRes.value.json();
+        if (verdictPhaseRes?.status === "fulfilled" && verdictPhaseRes.value.ok) {
+            cachedVerdicts[normalized] = await verdictPhaseRes.value.json();
+        }
+
+        if (useProgressiveVerdicts && verdictFullP) {
+            verdictFullP.then(async (verdictRes) => {
+                if (!verdictRes.ok) return;
+                const verdictData = await verdictRes.json();
+                if (verdictData.signals?.[normalized]) {
+                    cachedVerdicts[normalized] = verdictData.signals[normalized];
+                    applyClaudeApiStatus(verdictData.claude_live ?? null);
+                    renderExpandedTicker(normalized);
+                }
+            }).catch(err => console.warn(`Unable to upgrade verdict for ${normalized}:`, err));
         }
     } catch (err) {
         console.warn(`Unable to refresh intelligence for ${normalized}:`, err);
@@ -6844,6 +7058,7 @@ async function loadHoldingIntelligence(options = {}) {
             r.classList.toggle("summary-open", !anyOpen);
             if (!anyOpen) r.classList.remove("has-intel-ready");
         });
+        syncHoldingExpandFab();
         return;
     }
 
