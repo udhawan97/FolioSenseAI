@@ -58,6 +58,11 @@ _AI_INSIGHTS = {
     "markets": "Your holdings track the S&P 500 more closely than other regions.",
 }
 
+_AI_WIDGET_INSIGHTS = {
+    "benchmark-tracker": "You are beating the S&P 500 over the past year.",
+    "beta-dial": "Beta near 1.0 means your book moves with the market.",
+}
+
 
 def test_local_insights_include_digest_and_one_liners():
     payload = build_local_analytics_insights(_FAKE_SNAPSHOT)
@@ -67,6 +72,8 @@ def test_local_insights_include_digest_and_one_liners():
     assert "risk" in payload["insights"]
     assert "+12.5%" in payload["insights"]["performance"]
     assert payload["insights"]["exposure"].startswith("Largest look-through")
+    assert "widget_insights" in payload
+    assert "benchmark-tracker" in payload["widget_insights"] or "total-return" in payload["widget_insights"]
 
 
 def test_analytics_insights_local_endpoint():
@@ -88,7 +95,7 @@ def test_analytics_insights_ai_endpoint_uses_claude():
 
     with patch("app.services.analytics_insights.build_analytics_snapshot", return_value=_FAKE_SNAPSHOT), patch(
         "app.routers.ai.generate_analytics_insights",
-        return_value={"insights": _AI_INSIGHTS},
+        return_value={"insights": _AI_INSIGHTS, "widget_insights": _AI_WIDGET_INSIGHTS},
     ):
         result = asyncio.run(get_analytics_insights(mode="ai", force_refresh=True, db=db))
 

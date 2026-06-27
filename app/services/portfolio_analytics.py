@@ -264,9 +264,14 @@ def _finalize_contribution_payload(
     portfolio_value: float,
 ) -> dict[str, Any]:
     total = round(sum(c["contribution"] for c in contributions), 2)
-    if total:
+
+    # Normalize contribution_pct by the *gross* (absolute) total so individual
+    # values stay within [-100, +100].  Dividing by the net total causes values
+    # to blow past 100 % whenever gainers and losers partially cancel out.
+    abs_total = sum(abs(c["contribution"]) for c in contributions)
+    if abs_total > 0:
         for c in contributions:
-            c["contribution_pct"] = round(c["contribution"] / total * 100, 1)
+            c["contribution_pct"] = round(c["contribution"] / abs_total * 100, 1)
     else:
         for c in contributions:
             c["contribution_pct"] = 0.0
@@ -292,7 +297,7 @@ def _finalize_contribution_payload(
             "ticker": "Other",
             "name": f"{len(rest)} other holding{'s' if len(rest) != 1 else ''}",
             "contribution": others_contrib,
-            "contribution_pct": round(others_contrib / total * 100, 1) if total else 0.0,
+            "contribution_pct": round(others_contrib / abs_total * 100, 1) if abs_total else 0.0,
             "change_pct": None,
             "contribution_pp": round(sum(c["contribution_pp"] for c in rest), 4),
             "allocation_pct": round(sum(c["allocation_pct"] for c in rest), 1),
@@ -558,3 +563,460 @@ def compute_market_context(
         "us_exposure_pct": round(us_weight, 1),
     }
     return _cache_set(cache_key, payload)
+
+
+# ── Extended analytics: benchmark, calendar, beta, tilt, signals, markets ──
+
+
+_SPY_SECTOR_BENCHMARK: list[dict[str, Any]] = [
+    {"name": "Technology", "weight_pct": 31.5},
+    {"name": "Financials", "weight_pct": 13.1},
+    {"name": "Healthcare", "weight_pct": 11.6},
+    {"name": "Consumer Disc.", "weight_pct": 10.2},
+    {"name": "Industrials", "weight_pct": 8.5},
+    {"name": "Other", "weight_pct": 25.1},
+]
+
+_BENCHMARK_RANGES: dict[str, int | None] = {
+    "1m": 30,
+    "3m": 90,
+    "1y": 365,
+    "max": None,
+}
+
+
+def _history_return_pct(rows: list[dict], lookback_days: int | None) -> float | None:
+    if len(rows) < 2:
+        return None
+    if lookback_days is not None and len(rows) > lookback_days + 1:
+        rows = rows[-(lookback_days + 1):]
+    start = float(rows[0]["total_value"])
+    end = float(rows[-1]["total_value"])
+    if start <= 0:
+        return None
+    return round((end - start) / start * 100, 2)
+
+
+def _spy_return_pct(lookback_days: int | None) -> float | None:
+    period = "1y" if lookback_days and lookback_days <= 365 else "3y"
+    rows = get_historical_prices(BENCHMARK_TICKER, period)
+    closes = [float(r["close"]) for r in rows if r.get("close", 0) > 0]
+    if len(closes) < 2:
+        return None
+    if lookback_days is not None and len(closes) > lookback_days + 1:
+        closes = closes[-(lookback_days + 1):]
+    start, end = closes[0], closes[-1]
+    if start <= 0:
+        return None
+    return round((end - start) / start * 100, 2)
+
+
+def compute_benchmark_comparison(
+    holdings: list[dict],
+    history: list[dict],
+) -> dict[str, Any]:
+    """Portfolio vs S&P 500 returns by range with aligned chart series."""
+    rows = [r for r in (history or []) if r.get("date") and r.get("total_value") is not None]
+    active = [h for h in holdings if not h.get("is_watchlist") and float(h.get("current_value") or 0) > 0]
+
+    if len(rows) < 2 or not active:
+        return {
+            "has_data": False,
+            "ranges": {},
+            "series": [],
+            "active_range": "1y",
+        }
+
+    spy_rows = get_historical_prices(BENCHMARK_TICKER, "3y")
+    spy_by_date = {r["date"]: float(r["close"]) for r in spy_rows if r.get("close", 0) > 0}
+    if not spy_by_date:
+        return {"has_data": False, "ranges": {}, "series": [], "active_range": "1y"}
+
+    port_start = float(rows[0]["total_value"])
+    if port_start <= 0:
+        return {"has_data": False, "ranges": {}, "series": [], "active_range": "1y"}
+
+    series: list[dict] = []
+    spy_anchor = spy_by_date.get(rows[0]["date"])
+    if not spy_anchor:
+        spy_anchor = next(iter(spy_by_date.values()), None)
+    spy_anchor = float(spy_anchor or 1)
+
+    for row in rows:
+        d = row["date"]
+        spy_close = spy_by_date.get(d)
+        if not spy_close:
+            continue
+        port_val = float(row["total_value"])
+        series.append({
+            "date": d,
+            "portfolio_pct": round((port_val - port_start) / port_start * 100, 2),
+            "benchmark_pct": round((float(spy_close) - spy_anchor) / spy_anchor * 100, 2),
+        })
+
+    ranges: dict[str, dict] = {}
+    for key, days in _BENCHMARK_RANGES.items():
+        port_ret = _history_return_pct(rows, days)
+        spy_ret = _spy_return_pct(days)
+        if port_ret is None or spy_ret is None:
+            continue
+        ranges[key] = {
+            "portfolio_pct": port_ret,
+            "benchmark_pct": spy_ret,
+            "alpha_pct": round(port_ret - spy_ret, 2),
+        }
+
+    return {
+        "has_data": bool(series and ranges),
+        "ranges": ranges,
+        "series": series,
+        "active_range": "1y" if "1y" in ranges else next(iter(ranges), "max"),
+        "benchmark_label": "S&P 500",
+    }
+
+
+def compute_return_calendar(history: list[dict]) -> dict[str, Any]:
+    """Monthly portfolio return tiles from snapshot history."""
+    rows = [r for r in (history or []) if r.get("date") and r.get("total_value") is not None]
+    if len(rows) < 2:
+        return {"has_data": False, "months": []}
+
+    by_month: dict[str, list[dict]] = {}
+    for row in rows:
+        d = str(row["date"])[:7]
+        by_month.setdefault(d, []).append(row)
+
+    months: list[dict] = []
+    for ym in sorted(by_month):
+        bucket = by_month[ym]
+        if not bucket:
+            continue
+        start_val = float(bucket[0]["total_value"])
+        end_val = float(bucket[-1]["total_value"])
+        if start_val <= 0:
+            continue
+        ret = round((end_val - start_val) / start_val * 100, 2)
+        year_s, month_s = ym.split("-")
+        months.append({
+            "year": int(year_s),
+            "month": int(month_s),
+            "label": ym,
+            "return_pct": ret,
+        })
+
+    return {"has_data": len(months) >= 2, "months": months[-24:]}
+
+
+def _portfolio_and_spy_daily_returns(holdings: list[dict]) -> tuple[np.ndarray, np.ndarray]:
+    active = [
+        h for h in holdings
+        if not h.get("is_watchlist") and float(h.get("current_value") or 0) > 0
+    ]
+    if not active:
+        return np.array([]), np.array([])
+
+    weighted = []
+    for h in active:
+        series = _price_series(h["ticker"])
+        weighted.append((h["ticker"], float(h.get("current_value") or 0), series))
+
+    port_rets = _portfolio_daily_returns(weighted)
+    spy_series = _price_series(BENCHMARK_TICKER)
+    spy_rets = _log_returns([c for _d, c in spy_series])
+    n = min(port_rets.size, spy_rets.size)
+    if n < 10:
+        return np.array([]), np.array([])
+    return port_rets[-n:], spy_rets[-n:]
+
+
+def compute_portfolio_beta(holdings: list[dict]) -> dict[str, Any]:
+    """Portfolio beta vs S&P 500 from aligned daily log-returns."""
+    tickers = [h["ticker"] for h in holdings if not h.get("is_watchlist")]
+    cache_key = f"beta:{_tickers_key(tickers)}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    port_rets, spy_rets = _portfolio_and_spy_daily_returns(holdings)
+    if port_rets.size < 10:
+        payload = {"has_data": False, "beta": None, "label": None}
+        return _cache_set(cache_key, payload)
+
+    spy_var = float(np.var(spy_rets, ddof=1))
+    if spy_var <= 0:
+        payload = {"has_data": False, "beta": None, "label": None}
+        return _cache_set(cache_key, payload)
+
+    beta = float(np.cov(port_rets, spy_rets)[0, 1] / spy_var)
+    beta = round(beta, 2)
+    if beta < 0.75:
+        label = "Defensive"
+    elif beta < 1.1:
+        label = "Market pace"
+    else:
+        label = "Aggressive"
+
+    return _cache_set(cache_key, {
+        "has_data": True,
+        "beta": beta,
+        "label": label,
+        "benchmark_label": "S&P 500",
+    })
+
+
+def compute_rolling_volatility(holdings: list[dict], *, window: int = 30) -> dict[str, Any]:
+    """Trailing annualized volatility series for the portfolio."""
+    tickers = [h["ticker"] for h in holdings if not h.get("is_watchlist")]
+    cache_key = f"rollvol:{_tickers_key(tickers)}:{window}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    active = [
+        h for h in holdings
+        if not h.get("is_watchlist") and float(h.get("current_value") or 0) > 0
+    ]
+    if not active:
+        return _cache_set(cache_key, {"has_data": False, "series": [], "current_vol_pct": None})
+
+    weighted = [
+        (h["ticker"], float(h.get("current_value") or 0), _price_series(h["ticker"]))
+        for h in active
+    ]
+    port_rets = _portfolio_daily_returns(weighted)
+    if port_rets.size < window + 5:
+        return _cache_set(cache_key, {"has_data": False, "series": [], "current_vol_pct": None})
+
+    series: list[dict] = []
+    today = date.today()
+    for i in range(window, port_rets.size):
+        chunk = port_rets[i - window:i]
+        vol = float(np.std(chunk, ddof=1)) * math.sqrt(TRADING_DAYS) * 100
+        offset = port_rets.size - i
+        pt_date = (today - timedelta(days=offset)).isoformat()
+        series.append({"date": pt_date, "vol_pct": round(vol, 2)})
+
+    current = series[-1]["vol_pct"] if series else None
+    return _cache_set(cache_key, {
+        "has_data": bool(series),
+        "series": series[-120:],
+        "current_vol_pct": current,
+        "window_days": window,
+    })
+
+
+def compute_sector_tilt(holdings: list[dict]) -> dict[str, Any]:
+    """Sector overweight / underweight vs S&P 500 look-through benchmark."""
+    active = [
+        h for h in holdings
+        if not h.get("is_watchlist") and float(h.get("allocation_pct") or 0) > 0
+    ]
+    if not active:
+        return {"has_data": False, "sectors": []}
+
+    quotes = get_all_quotes([h["ticker"] for h in active])
+    exposure = build_portfolio_exposure(
+        [
+            {"ticker": h["ticker"], "allocation_pct": h.get("allocation_pct"), "is_watchlist": False}
+            for h in active
+        ],
+        quotes={q["ticker"]: q for q in quotes},
+    )
+    port_sectors = {s["name"]: float(s["weight_pct"]) for s in (exposure.get("sector_exposure") or [])}
+    bench_map = {s["name"]: float(s["weight_pct"]) for s in _SPY_SECTOR_BENCHMARK}
+
+    all_names = sorted(set(port_sectors) | set(bench_map), key=lambda n: port_sectors.get(n, 0), reverse=True)
+    sectors: list[dict] = []
+    for name in all_names[:11]:
+        port_w = port_sectors.get(name, 0.0)
+        bench_w = bench_map.get(name, 0.0)
+        tilt = round(port_w - bench_w, 1)
+        sectors.append({
+            "name": name,
+            "portfolio_pct": round(port_w, 1),
+            "benchmark_pct": round(bench_w, 1),
+            "tilt_pct": tilt,
+        })
+
+    return {
+        "has_data": bool(sectors),
+        "sectors": sectors,
+        "benchmark_label": "S&P 500",
+    }
+
+
+def compute_conviction_gaps(
+    holdings: list[dict],
+    signals: dict[str, dict],
+) -> dict[str, Any]:
+    """Positions where verdict tone conflicts with position size."""
+    gaps: list[dict] = []
+    total_holdings = 0
+    flagged_alloc = 0.0
+
+    for h in holdings:
+        if h.get("is_watchlist"):
+            continue
+        ticker = h["ticker"]
+        alloc = float(h.get("allocation_pct") or 0)
+        if alloc <= 0:
+            continue
+        total_holdings += 1
+        sig = signals.get(ticker) or {}
+        action = str(sig.get("action") or "hold").lower()
+        conf = int(sig.get("confidence") or 50)
+
+        gap_type = None
+        severity = 0.0
+        # Meaningful position being told to trim/sell
+        if action in ("trim", "sell") and alloc >= 7:
+            gap_type = "large_trim"
+            severity = alloc * (conf / 100)
+        # Buy/add signal but position is still small — room to act
+        elif action in ("buy", "add") and alloc <= 8 and conf >= 60:
+            gap_type = "small_add"
+            severity = conf * (10 - alloc)
+        # Sizable position sitting on a hold signal — no strong upside case
+        elif action in ("hold", "wait") and alloc >= 12:
+            gap_type = "heavy_hold"
+            severity = alloc
+        # Any meaningful position where AI confidence is low — uncertain signal
+        elif alloc >= 5 and conf < 55:
+            gap_type = "uncertain_hold"
+            severity = alloc * ((55 - conf) / 55)
+
+        if gap_type:
+            gaps.append({
+                "ticker": ticker,
+                "allocation_pct": round(alloc, 1),
+                "action": action,
+                "confidence": conf,
+                "gap_type": gap_type,
+                "severity": round(severity, 1),
+            })
+            flagged_alloc += alloc
+
+    gaps.sort(key=lambda g: g["severity"], reverse=True)
+    top_gaps = gaps[:8]
+    return {
+        "has_data": bool(top_gaps),
+        "gaps": top_gaps,
+        "summary": {
+            "flagged": len(top_gaps),
+            "total": total_holdings,
+            "flagged_alloc_pct": round(flagged_alloc, 1),
+        },
+    }
+
+
+def compute_confidence_spectrum(
+    holdings: list[dict],
+    signals: dict[str, dict],
+) -> dict[str, Any]:
+    """Allocation-weighted confidence distribution across holdings."""
+    buckets = {"low": 0.0, "mid": 0.0, "high": 0.0, "very_high": 0.0}
+    details: list[dict] = []
+    total = 0.0
+
+    for h in holdings:
+        if h.get("is_watchlist"):
+            continue
+        ticker = h["ticker"]
+        alloc = float(h.get("allocation_pct") or 0)
+        if alloc <= 0:
+            continue
+        sig = signals.get(ticker) or {}
+        conf = int(sig.get("confidence") or 50)
+        total += alloc
+        if conf < 60:
+            buckets["low"] += alloc
+        elif conf < 70:
+            buckets["mid"] += alloc
+        elif conf < 85:
+            buckets["high"] += alloc
+        else:
+            buckets["very_high"] += alloc
+        details.append({"ticker": ticker, "confidence": conf, "allocation_pct": round(alloc, 1)})
+
+    if total <= 0:
+        return {"has_data": False, "buckets": [], "holdings": []}
+
+    raw_rows = [
+        {"band": "40–59%", "key": "low", "weight_pct": round(buckets["low"] / total * 100, 1)},
+        {"band": "60–69%", "key": "mid", "weight_pct": round(buckets["mid"] / total * 100, 1)},
+        {"band": "70–84%", "key": "high", "weight_pct": round(buckets["high"] / total * 100, 1)},
+        {"band": "85%+", "key": "very_high", "weight_pct": round(buckets["very_high"] / total * 100, 1)},
+    ]
+    # Rounding each bucket independently can leave the sum at 99.9 or 100.1.
+    # Adjust the largest bucket by the residual so all four always sum to 100.
+    raw_sum = sum(r["weight_pct"] for r in raw_rows)
+    residual = round(100.0 - raw_sum, 1)
+    if residual and raw_rows:
+        largest = max(raw_rows, key=lambda r: r["weight_pct"])
+        largest["weight_pct"] = round(largest["weight_pct"] + residual, 1)
+    bucket_rows = raw_rows
+    dominant = max(bucket_rows, key=lambda b: b["weight_pct"])
+    return {
+        "has_data": True,
+        "buckets": bucket_rows,
+        "dominant_band": dominant["band"],
+        "avg_confidence": round(
+            sum(d["confidence"] * d["allocation_pct"] for d in details) / total
+        ) if details else 0,
+        "holdings": details,
+    }
+
+
+def compute_market_sensitivity(
+    holdings: list[dict],
+    world_markets: list[dict],
+) -> dict[str, Any]:
+    """Estimated portfolio move per 1% index shock."""
+    ctx = compute_market_context(holdings, world_markets)
+    if not ctx.get("has_data"):
+        return {"has_data": False, "indices": []}
+
+    port_rets, _spy_rets = _portfolio_and_spy_daily_returns(holdings)
+    port_vol = (
+        float(np.std(port_rets, ddof=1)) * math.sqrt(TRADING_DAYS) * 100
+        if port_rets.size > 5 else 15.0
+    )
+
+    indices: list[dict] = []
+    for m in ctx.get("markets") or []:
+        corr = float(m.get("correlation") or 0)
+        impact = round(corr * port_vol / 100, 2)
+        indices.append({
+            "ticker": m.get("ticker"),
+            "name": m.get("name"),
+            "flag": m.get("flag"),
+            "correlation": corr,
+            "impact_per_1pct": impact,
+            "geo_weight_pct": m.get("geo_weight_pct"),
+        })
+
+    indices.sort(key=lambda x: abs(x["impact_per_1pct"]), reverse=True)
+    return {"has_data": bool(indices), "indices": indices[:10], "portfolio_vol_pct": round(port_vol, 1)}
+
+
+def compute_macro_alignment(
+    holdings: list[dict],
+    world_markets: list[dict],
+) -> dict[str, Any]:
+    """Scatter points: index correlation vs geographic look-through exposure."""
+    ctx = compute_market_context(holdings, world_markets)
+    if not ctx.get("has_data"):
+        return {"has_data": False, "points": []}
+
+    points = []
+    for m in ctx.get("markets") or []:
+        points.append({
+            "ticker": m.get("ticker"),
+            "name": m.get("name"),
+            "flag": m.get("flag"),
+            "correlation": float(m.get("correlation") or 0),
+            "geo_weight_pct": float(m.get("geo_weight_pct") or 0),
+            "day_change_pct": float(m.get("day_change_pct") or 0),
+        })
+
+    return {"has_data": bool(points), "points": points}

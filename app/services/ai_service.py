@@ -423,23 +423,30 @@ def generate_portfolio_briefing(snapshot: dict) -> dict:
 
 _ANALYTICS_INSIGHTS_SYSTEM = (
     "You are FolioSense's analytics narrator. You receive a compact JSON snapshot of the user's "
-    "portfolio across five dashboard tabs. Write ONE crisp sentence per tab in the second person "
-    '("your portfolio"). Return ONLY valid JSON (no markdown) with exactly these keys:\n'
-    '- "performance": insight about total return, today\'s move, or history.\n'
-    '- "risk": insight about volatility, concentration, correlation, or drawdown.\n'
-    '- "exposure": insight about sector/country look-through weights.\n'
-    '- "signals": insight about verdict tone and confidence across holdings.\n'
-    '- "markets": insight about which global index aligns with their book.\n'
-    "Rules: max 28 words per sentence; use ONLY numbers from the snapshot; no buy/sell advice; "
-    "plain English a non-expert understands."
+    "portfolio across five dashboard tabs plus a widgets object with pre-computed facts.\n"
+    "Return ONLY valid JSON (no markdown) with exactly these keys:\n"
+    '1. "insights": object with keys performance, risk, exposure, signals, markets — '
+    "ONE crisp second-person sentence each (max 28 words).\n"
+    '2. "widget_insights": object with one entry per widget key.\n'
+    "For these KEY widgets, return an OBJECT with two string fields:\n"
+    '  "headline": a short educational label (5-8 words, e.g. "Beta measures your market sensitivity")\n'
+    '  "insight": ONE personalised sentence explaining WHY this specific value is what it is, '
+    "using the actual numbers from the snapshot (max 28 words, no buy/sell advice, plain English).\n"
+    "KEY widgets: beta-dial, drawdown, correlation, risk-reward, concentration, "
+    "benchmark-tracker, rolling-vol, conviction-gap, sector-treemap, contribution.\n"
+    "For ALL OTHER widgets return a plain string (max 22 words):\n"
+    "total-return, pnl-history, projection, return-calendar, geo-exposure, allocation-table, "
+    "sector-tilt, signal-board, verdict-mix, confidence-spectrum, "
+    "markets-tape, markets-grid, macro-alignment.\n"
+    "Use ONLY numbers from the snapshot. Never give financial advice."
 )
 
 
 def generate_analytics_insights(snapshot: dict) -> dict:
-    """One Haiku call: one sentence per analytics sub-tab."""
+    """One Haiku call: tab + per-widget sentences."""
     message = client.messages.create(
         model=MODEL,
-        max_tokens=320,
+        max_tokens=1800,
         system=_ANALYTICS_INSIGHTS_SYSTEM,
         messages=[{"role": "user", "content": json.dumps(snapshot)}],
     )
@@ -456,15 +463,27 @@ def generate_analytics_insights(snapshot: dict) -> dict:
     if not isinstance(data, dict):
         raise ValueError("Analytics insights response is not a JSON object")
 
-    keys = ("performance", "risk", "exposure", "signals", "markets")
+    tab_keys = ("performance", "risk", "exposure", "signals", "markets")
+    insights_raw = data.get("insights") if isinstance(data.get("insights"), dict) else data
     insights = {
-        k: str(data.get(k) or "").strip()
-        for k in keys
+        k: str(insights_raw.get(k) or data.get(k) or "").strip()
+        for k in tab_keys
     }
     if not any(insights.values()):
         raise ValueError("Analytics insights response empty")
 
-    return {"insights": insights}
+    widget_raw = data.get("widget_insights") or {}
+    widget_insights: dict = {}
+    for k, v in widget_raw.items():
+        if isinstance(v, dict):
+            headline = str(v.get("headline") or "").strip()
+            insight = str(v.get("insight") or "").strip()
+            if insight:
+                widget_insights[k] = {"headline": headline, "insight": insight}
+        elif isinstance(v, str) and v.strip():
+            widget_insights[k] = v.strip()
+
+    return {"insights": insights, "widget_insights": widget_insights}
 
 
 def generate_stock_summary(stock_data: dict) -> str:

@@ -487,6 +487,12 @@ def _try_yfinance_enrichment(ticker: str) -> tuple[list, list, list]:
                     sectors.append(SectorWeight(name=label, weight=round(float(weight) * 100, 1)))
         if sectors:
             sectors.sort(key=lambda x: x.weight, reverse=True)
+            # yfinance fractional weights can have floating-point drift after ×100.
+            # Normalise so the sector list always sums to exactly 100 %.
+            sec_total = sum(s.weight for s in sectors)
+            if sec_total > 0 and abs(sec_total - 100.0) > 0.15:
+                factor = 100.0 / sec_total
+                sectors = [SectorWeight(name=s.name, weight=round(s.weight * factor, 1)) for s in sectors]
 
         cw = info.get("countryWeightings") or []
         for item in cw:
@@ -495,6 +501,11 @@ def _try_yfinance_enrichment(ticker: str) -> tuple[list, list, list]:
                     countries.append(CountryWeight(name=name, weight=round(float(weight) * 100, 1)))
         if countries:
             countries.sort(key=lambda x: x.weight, reverse=True)
+            # Same normalisation for country weights.
+            ctry_total = sum(c.weight for c in countries)
+            if ctry_total > 0 and abs(ctry_total - 100.0) > 0.15:
+                factor = 100.0 / ctry_total
+                countries = [CountryWeight(name=c.name, weight=round(c.weight * factor, 1)) for c in countries]
 
         for h in (info.get("holdings") or [])[:MAX_CONTRIBUTION_HOLDINGS]:
             if isinstance(h, dict):

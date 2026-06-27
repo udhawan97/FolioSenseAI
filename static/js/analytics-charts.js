@@ -9,12 +9,21 @@ const AnalyticsCharts = (() => {
     let contributionPeriod = "day";
 
     let riskRewardChart = null;
+    let benchmarkChart = null;
+    let rollingVolChart = null;
+    let macroAlignmentChart = null;
+    let benchmarkRange = "1y";
     let _correlationData = null;
     let _correlationState = { cells: [], hover: null };
     let _correlationHoverKey = null;
     let _correlationEventsBound = false;
     let drawdownChart = null;
     let treemapChart = null;
+    let _lastHhi = 0;
+    let _lastBeta = 1;
+    let _gaugeReady = false;
+    let _betaGaugeReady = false;
+    let _benchmarkData = null;
 
     let _tapeRaf = null;
     let _tapePaused = false;
@@ -257,6 +266,51 @@ const AnalyticsCharts = (() => {
         } else {
             textEl.textContent = cached.insights?.[pane] || "";
         }
+        applyWidgetInsights();
+    }
+
+    function applyWidgetInsights() {
+        const mode = insightMode();
+        const cached = _moduleInsightsCache[mode];
+        const localWidgets = _moduleInsightsCache.local?.widget_insights || {};
+        const aiWidgets = _moduleInsightsCache.ai?.widget_insights || {};
+        if (!cached && !localWidgets) return;
+
+        const esc = typeof escapeHtml === "function" ? escapeHtml : s => s;
+        const iconClass = mode === "ai" ? "bi-stars" : "bi-cpu-fill";
+        const modeLabel = mode === "ai" ? "AI Tip" : "Local Intel";
+
+        document.querySelectorAll("[data-widget-insight]").forEach(el => {
+            const key = el.dataset.widgetInsight;
+            if (!key) return;
+
+            let value;
+            if (mode === "ai") {
+                value = aiWidgets[key] ?? localWidgets[key] ?? "";
+            } else {
+                value = (cached?.widget_insights ?? localWidgets)[key] ?? "";
+            }
+
+            if (!value && value !== 0) {
+                el.textContent = "";
+                el.hidden = true;
+                return;
+            }
+
+            el.hidden = false;
+            el.dataset.insightMode = mode;
+
+            if (typeof value === "object" && value !== null && value.insight) {
+                // Rich tip card: eyebrow + headline + personalized insight
+                el.innerHTML =
+                    `<span class="wi-eyebrow"><i class="bi ${iconClass}"></i>${modeLabel}</span>` +
+                    `<strong class="wi-headline">${esc(value.headline || "")}</strong>` +
+                    `<span class="wi-text">${esc(value.insight)}</span>`;
+            } else {
+                // Plain one-liner for non-key widgets
+                el.textContent = String(value);
+            }
+        });
     }
 
     async function loadModuleInsights(forceRefresh = false) {
@@ -319,6 +373,8 @@ const AnalyticsCharts = (() => {
             loadPane(pane);
         } else if (pane === "markets") {
             refreshMarketsTape(_cachedMarkets);
+        } else if (pane === "performance") {
+            loadPerformancePane();
         }
         renderModuleInsight(activePane);
         requestAnimationFrame(resizeCharts);
@@ -345,10 +401,25 @@ const AnalyticsCharts = (() => {
                 loadContributionChart();
             });
         });
+
+        const benchGroup = $("benchmark-range-tabs");
+        benchGroup?.querySelectorAll("[data-range]").forEach(btn => {
+            btn.addEventListener("click", () => {
+                benchmarkRange = btn.dataset.range || "1y";
+                benchGroup.dataset.activeRange = benchmarkRange;
+                benchGroup.querySelectorAll(".benchmark-range-btn").forEach(b => {
+                    const on = b.dataset.range === benchmarkRange;
+                    b.classList.toggle("is-active", on);
+                    b.setAttribute("aria-pressed", String(on));
+                });
+                if (_benchmarkData) renderBenchmarkChart(_benchmarkData);
+            });
+        });
     }
 
     function loadPane(pane) {
         switch (pane) {
+            case "performance": return loadPerformancePane();
             case "risk": return loadRiskPane();
             case "exposure": return loadExposurePane();
             case "signals": return loadSignalsPane();
@@ -357,22 +428,36 @@ const AnalyticsCharts = (() => {
         }
     }
 
+    async function loadPerformancePane() {
+        await Promise.all([loadBenchmarkChart(), loadReturnCalendar()]);
+    }
+
     async function loadRiskPane() {
         await Promise.all([
             loadRiskRewardChart(),
             loadCorrelationChart(),
             loadConcentrationGauge(),
             loadDrawdownChart(),
+            loadBetaGauge(),
+            loadRollingVolChart(),
         ]);
     }
 
     async function loadExposurePane() {
-        await Promise.all([loadSectorTreemap(), loadGeoExposure()]);
+        await Promise.all([
+            loadSectorTreemap(),
+            loadGeoExposure(),
+            loadSectorTilt(),
+        ]);
     }
 
     async function loadSignalsPane() {
         await loadContributionChart();
-        await loadSignalsBundle();
+        await Promise.all([
+            loadSignalsBundle(),
+            loadConvictionGaps(),
+            loadConfidenceSpectrum(),
+        ]);
     }
 
     function normSignalBucket(action) {
@@ -419,7 +504,10 @@ const AnalyticsCharts = (() => {
     }
 
     async function loadMarketsPane() {
-        await refreshMarketsFromApi();
+        await Promise.all([
+            refreshMarketsFromApi(),
+            loadMacroAlignment(),
+        ]);
     }
 
     async function loadRiskRewardChart() {
@@ -586,8 +674,8 @@ const AnalyticsCharts = (() => {
             return Math.ceil(fontSize + 8);
         }
 
-        const rad = 45 * (Math.PI / 180);
-        return Math.ceil(maxTextW * Math.sin(rad) + maxTextW * Math.sin(rad) * 0.4 + fontSize + 16);
+        // Visual height of text rotated -45° = (textWidth + lineHeight) / √2, plus a small buffer.
+        return Math.ceil((maxTextW + fontSize) / Math.SQRT2 + 6);
     }
 
     function computeCorrelationLayout(frameWrap, tickers, scale) {
@@ -709,6 +797,30 @@ const AnalyticsCharts = (() => {
         canvas.addEventListener("mouseleave", onCorrelationLeave);
     }
 
+    function positionCorrelationTip(tip, clientX, clientY) {
+        if (!tip) return;
+
+        const pad = 8;
+        const gap = 10;
+        tip.hidden = false;
+
+        const tipW = tip.offsetWidth;
+        const tipH = tip.offsetHeight;
+        const halfW = tipW / 2;
+
+        // Clamp within viewport
+        const left = Math.max(pad + halfW, Math.min(clientX, window.innerWidth - pad - halfW));
+
+        if (clientY - tipH - gap < pad) {
+            tip.style.transform = `translate(-50%, ${gap}px)`;
+        } else {
+            tip.style.transform = `translate(-50%, calc(-100% - ${gap}px))`;
+        }
+
+        tip.style.left = `${left}px`;
+        tip.style.top = `${clientY}px`;
+    }
+
     function onCorrelationLeave() {
         _correlationHoverKey = null;
         _correlationState.hover = null;
@@ -747,13 +859,7 @@ const AnalyticsCharts = (() => {
         const rowTicker = _correlationData.tickers[hit.row];
         const colTicker = _correlationData.tickers[hit.col];
         tip.textContent = `${rowTicker} × ${colTicker}: ${(hit.v * 100).toFixed(0)}% — ${corrPlainLabel(hit.v)}`;
-        tip.hidden = false;
-
-        const shell = canvas.parentElement?.getBoundingClientRect();
-        if (shell) {
-            tip.style.left = `${event.clientX - shell.left}px`;
-            tip.style.top = `${event.clientY - shell.top}px`;
-        }
+        positionCorrelationTip(tip, event.clientX, event.clientY);
         canvas.style.cursor = "pointer";
     }
 
@@ -876,6 +982,43 @@ const AnalyticsCharts = (() => {
         }
     }
 
+    function drawGaugeNeedle(ctx, cx, cy, r, angle) {
+        const tipR = r + 1;
+        const baseR = r - 18;
+        const tipX = cx + tipR * Math.cos(angle);
+        const tipY = cy + tipR * Math.sin(angle);
+        const baseX = cx + baseR * Math.cos(angle);
+        const baseY = cy + baseR * Math.sin(angle);
+        const perp = angle + Math.PI / 2;
+        const halfW = 5.5;
+        const leftX = baseX + halfW * Math.cos(perp);
+        const leftY = baseY + halfW * Math.sin(perp);
+        const rightX = baseX - halfW * Math.cos(perp);
+        const rightY = baseY - halfW * Math.sin(perp);
+        const needleColor = token("--text-primary", "#f5f5f7");
+
+        ctx.save();
+        ctx.shadowColor = "rgba(0,0,0,0.45)";
+        ctx.shadowBlur = 6;
+        ctx.fillStyle = needleColor;
+        ctx.beginPath();
+        ctx.moveTo(tipX, tipY);
+        ctx.lineTo(leftX, leftY);
+        ctx.lineTo(rightX, rightY);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 4.5, 0, Math.PI * 2);
+        ctx.fillStyle = needleColor;
+        ctx.fill();
+        ctx.strokeStyle = token("--hairline", "rgba(255,255,255,0.18)");
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.restore();
+    }
+
     function drawConcentrationGauge(hhi) {
         const canvas = $("concentration-gauge");
         if (!canvas) return;
@@ -896,28 +1039,23 @@ const AnalyticsCharts = (() => {
         const start = Math.PI;
         const end = 0;
         const val = Math.max(0, Math.min(1, hhi));
+        const needleAngle = start + (end - start) * val;
 
         ctx.clearRect(0, 0, W, H);
 
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, start, end);
-        ctx.strokeStyle = token("--hairline", "rgba(255,255,255,0.1)");
-        ctx.lineWidth = 14;
-        ctx.lineCap = "round";
-        ctx.stroke();
-
-        const needleAngle = start + (end - start) * val;
         const grad = ctx.createLinearGradient(cx - r, cy, cx + r, cy);
         grad.addColorStop(0, token("--accent-green", "#30d158"));
         grad.addColorStop(0.5, token("--accent-yellow", "#ffd60a"));
         grad.addColorStop(1, token("--accent-red", "#ff453a"));
 
         ctx.beginPath();
-        ctx.arc(cx, cy, r, start, needleAngle);
+        ctx.arc(cx, cy, r, start, end);
         ctx.strokeStyle = grad;
         ctx.lineWidth = 14;
         ctx.lineCap = "round";
         ctx.stroke();
+
+        drawGaugeNeedle(ctx, cx, cy, r, needleAngle);
 
         const label = val < 0.25 ? "Well spread"
             : val < 0.5 ? "Moderate"
@@ -1014,6 +1152,908 @@ const AnalyticsCharts = (() => {
             showEmpty("drawdown-empty", true);
         } finally {
             showLoading("drawdown-loading", false);
+        }
+    }
+
+    const MONTH_LABELS = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
+
+    function filterBenchmarkSeries(series, rangeKey) {
+        if (!series?.length) return [];
+        const days = { "1m": 30, "3m": 90, "1y": 365, max: null }[rangeKey];
+        if (!days || series.length <= days) return series;
+        return series.slice(-days);
+    }
+
+    function updateBenchmarkStats(data, rangeKey) {
+        const row = $("benchmark-stat-row");
+        const stats = data.ranges?.[rangeKey];
+        if (!row || !stats) {
+            row?.setAttribute("hidden", "");
+            return;
+        }
+        row.hidden = false;
+        const fmt = v => `${v >= 0 ? "+" : ""}${Number(v).toFixed(1)}%`;
+        const portEl = $("benchmark-port-pct");
+        const spyEl = $("benchmark-spy-pct");
+        const alphaEl = $("benchmark-alpha-pct");
+        if (portEl) {
+            portEl.textContent = fmt(stats.portfolio_pct);
+            portEl.className = `benchmark-stat-value ${stats.portfolio_pct >= 0 ? "text-success" : "text-danger"}`;
+        }
+        if (spyEl) spyEl.textContent = fmt(stats.benchmark_pct);
+        if (alphaEl) {
+            alphaEl.textContent = fmt(stats.alpha_pct);
+            alphaEl.className = `benchmark-stat-value ${stats.alpha_pct >= 0 ? "text-success" : "text-danger"}`;
+        }
+    }
+
+    function renderBenchmarkChart(data) {
+        const ctx = $("benchmark-chart")?.getContext("2d");
+        if (!ctx || !data?.series?.length) return;
+
+        const filtered = filterBenchmarkSeries(data.series, benchmarkRange);
+        const theme = chartTheme();
+        const scale = uiScale();
+        const labels = filtered.map(s => s.date);
+        const portColor = token("--accent-cyan", "#64d2ff");
+        const spyColor = token("--text-tertiary", "#8e8e93");
+
+        benchmarkChart?.destroy();
+        benchmarkChart = new Chart(ctx, {
+            type: "line",
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: "Portfolio",
+                        data: filtered.map(s => s.portfolio_pct),
+                        borderColor: portColor,
+                        backgroundColor: portColor + "22",
+                        fill: false,
+                        tension: 0.25,
+                        pointRadius: 0,
+                        borderWidth: 2,
+                    },
+                    {
+                        label: "S&P 500",
+                        data: filtered.map(s => s.benchmark_pct),
+                        borderColor: spyColor,
+                        borderDash: [5, 4],
+                        fill: false,
+                        tension: 0.25,
+                        pointRadius: 0,
+                        borderWidth: 1.5,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        labels: { color: theme.tick, boxWidth: 10, font: { size: 10 * scale } },
+                    },
+                    tooltip: {
+                        ...tooltipOptions(),
+                        callbacks: {
+                            label(item) {
+                                const v = item.parsed?.y ?? item.raw;
+                                return `${item.dataset.label}: ${Number(v).toFixed(1)}%`;
+                            },
+                        },
+                    },
+                },
+                scales: {
+                    x: {
+                        ticks: { color: theme.tick, maxTicksLimit: 6, font: { size: 9 * scale } },
+                        grid: { color: theme.grid },
+                    },
+                    y: {
+                        ticks: {
+                            color: theme.tick,
+                            font: { size: 10 * scale },
+                            callback: v => `${Number(v).toFixed(0)}%`,
+                        },
+                        grid: { color: theme.grid },
+                    },
+                },
+            },
+        });
+        updateBenchmarkStats(data, benchmarkRange);
+    }
+
+    async function loadBenchmarkChart() {
+        showLoading("benchmark-loading", true);
+        showEmpty("benchmark-empty", false);
+        try {
+            const res = await fetch("/api/portfolio/benchmark-comparison");
+            const data = await res.json();
+            if (!data.has_data) {
+                showEmpty("benchmark-empty", true);
+                benchmarkChart?.destroy();
+                benchmarkChart = null;
+                _benchmarkData = null;
+                return;
+            }
+            _benchmarkData = data;
+            if (!data.ranges?.[benchmarkRange]) {
+                benchmarkRange = data.active_range || Object.keys(data.ranges || {})[0] || "1y";
+                const tabs = $("benchmark-range-tabs");
+                if (tabs) {
+                    tabs.dataset.activeRange = benchmarkRange;
+                    tabs.querySelectorAll(".benchmark-range-btn").forEach(b => {
+                        const on = b.dataset.range === benchmarkRange;
+                        b.classList.toggle("is-active", on);
+                        b.setAttribute("aria-pressed", String(on));
+                    });
+                }
+            }
+            renderBenchmarkChart(data);
+        } catch (err) {
+            console.warn("Benchmark chart failed:", err);
+            showEmpty("benchmark-empty", true);
+        } finally {
+            showLoading("benchmark-loading", false);
+        }
+    }
+
+    function renderReturnCalendar(months) {
+        const grid = $("return-calendar-grid");
+        if (!grid) return;
+        grid.innerHTML = months.map(m => {
+            const ret = Number(m.return_pct) || 0;
+            const tone = ret > 0.05 ? "up" : ret < -0.05 ? "down" : "flat";
+            const label = MONTH_LABELS[(m.month || 1) - 1] || "?";
+            const yr = String(m.year || "").slice(-2);
+            return `<div class="return-cal-tile return-cal-tile--${tone}" title="${m.label}: ${ret >= 0 ? "+" : ""}${ret.toFixed(1)}%">
+                <span class="return-cal-month">${label}</span>
+                <span class="return-cal-year">'${yr}</span>
+                <span class="return-cal-pct">${ret >= 0 ? "+" : ""}${ret.toFixed(1)}%</span>
+            </div>`;
+        }).join("");
+    }
+
+    async function loadReturnCalendar() {
+        showLoading("return-calendar-loading", true);
+        showEmpty("return-calendar-empty", false);
+        try {
+            const res = await fetch("/api/portfolio/return-calendar");
+            const data = await res.json();
+            if (!data.has_data) {
+                showEmpty("return-calendar-empty", true);
+                const grid = $("return-calendar-grid");
+                if (grid) grid.innerHTML = "";
+                return;
+            }
+            renderReturnCalendar(data.months || []);
+        } catch (err) {
+            console.warn("Return calendar failed:", err);
+            showEmpty("return-calendar-empty", true);
+        } finally {
+            showLoading("return-calendar-loading", false);
+        }
+    }
+
+    function betaLaymanNote(beta) {
+        const b = Number(beta) || 1;
+        const marketMove = (b * 1).toFixed(1);
+        if (b < 0.85) {
+            return `If the S&P 500 moves 1% in a day, your portfolio has tended to move about ${marketMove}% — quieter than the market.`;
+        }
+        if (b < 1.15) {
+            return "If the S&P 500 moves 1% in a day, your portfolio has tended to move about the same — in step with the market.";
+        }
+        const extra = Math.round((b - 1) * 100);
+        return `If the S&P 500 moves 1% in a day, your portfolio has tended to move about ${marketMove}% — roughly ${extra}% more swing than the market.`;
+    }
+
+    function betaZoneKey(beta) {
+        const b = Number(beta) || 1;
+        if (b < 0.75) return "defensive";
+        if (b < 1.1) return "market";
+        return "aggressive";
+    }
+
+    function volLevel(pct) {
+        const v = Number(pct) || 0;
+        if (v < 14) return { key: "calm", label: "Calm", hint: "smaller day-to-day swings" };
+        if (v < 22) return { key: "moderate", label: "Typical", hint: "normal for a stock portfolio" };
+        return { key: "choppy", label: "Choppy", hint: "larger ups and downs lately" };
+    }
+
+    function volLaymanNote(current, level) {
+        return `Right now your ride feels <strong>${level.label.toLowerCase()}</strong> — about <strong>${current.toFixed(1)}%</strong> yearly ups and downs (${level.hint}).`;
+    }
+
+    function drawGaugeTick(ctx, cx, cy, r, norm, label) {
+        const start = Math.PI;
+        const end = 0;
+        const angle = start + (end - start) * norm;
+        const inner = r - 8;
+        const outer = r + 8;
+        const x1 = cx + inner * Math.cos(angle);
+        const y1 = cy + inner * Math.sin(angle);
+        const x2 = cx + outer * Math.cos(angle);
+        const y2 = cy + outer * Math.sin(angle);
+
+        ctx.save();
+        ctx.strokeStyle = token("--text-secondary", "rgba(235,235,245,0.72)");
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+
+        const lx = cx + (r + 20) * Math.cos(angle);
+        const ly = cy + (r + 20) * Math.sin(angle);
+        ctx.fillStyle = token("--text-tertiary", "rgba(235,235,245,0.55)");
+        ctx.font = `600 9px -apple-system, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(label, lx, ly);
+        ctx.restore();
+    }
+
+    function drawBetaGauge(beta) {
+        const canvas = $("beta-gauge");
+        if (!canvas) return;
+        const wrap = canvas.parentElement;
+        const ctx = canvas.getContext("2d");
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const W = Math.min(320, Math.max(200, wrap?.clientWidth || 280));
+        const H = Math.round(W * 0.62);
+        canvas.width = Math.floor(W * dpr);
+        canvas.height = Math.floor(H * dpr);
+        canvas.style.width = `${W}px`;
+        canvas.style.height = `${H}px`;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        const cx = W / 2;
+        const cy = H - 18;
+        const r = Math.min(108, W * 0.33);
+        const start = Math.PI;
+        const end = 0;
+        const val = Math.max(0, Math.min(2, beta));
+        const norm = val / 2;
+        const needleAngle = start + (end - start) * norm;
+
+        ctx.clearRect(0, 0, W, H);
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, start, end);
+        ctx.strokeStyle = token("--hairline", "rgba(255,255,255,0.1)");
+        ctx.lineWidth = 14;
+        ctx.lineCap = "round";
+        ctx.stroke();
+
+        const grad = ctx.createLinearGradient(cx - r, cy, cx + r, cy);
+        grad.addColorStop(0, token("--accent-blue", "#0a84ff"));
+        grad.addColorStop(0.5, token("--accent-cyan", "#64d2ff"));
+        grad.addColorStop(1, token("--accent-red", "#ff453a"));
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, start, needleAngle);
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 14;
+        ctx.lineCap = "round";
+        ctx.stroke();
+
+        drawGaugeTick(ctx, cx, cy, r, 0.5, "Market 1.0");
+
+        drawGaugeNeedle(ctx, cx, cy, r, needleAngle);
+
+        const label = beta < 0.75 ? "Defensive" : beta < 1.1 ? "Market pace" : "Aggressive";
+        ctx.fillStyle = token("--text-primary", "#f5f5f7");
+        ctx.font = `600 15px -apple-system, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.fillText(label, cx, cy - 46);
+        ctx.fillStyle = token("--text-tertiary", "rgba(235,235,245,0.42)");
+        ctx.font = `500 11px -apple-system, sans-serif`;
+        ctx.fillText(`Sensitivity ${val.toFixed(2)}×`, cx, cy - 26);
+
+        const legend = $("beta-zone-legend");
+        legend?.querySelectorAll(".gauge-zone").forEach(el => {
+            el.classList.toggle("is-active", el.classList.contains(`gauge-zone--${betaZoneKey(beta)}`));
+        });
+    }
+
+    async function loadBetaGauge() {
+        showLoading("beta-loading", true);
+        showEmpty("beta-empty", false);
+        try {
+            const res = await fetch("/api/portfolio/beta");
+            const data = await res.json();
+            if (!data.has_data) {
+                showEmpty("beta-empty", true);
+                return;
+            }
+            const beta = Number(data.beta) || 1;
+            const layman = $("beta-layman-note");
+            if (layman) layman.textContent = betaLaymanNote(beta);
+            drawBetaGauge(beta);
+            _lastBeta = beta;
+            _betaGaugeReady = true;
+        } catch (err) {
+            console.warn("Beta gauge failed:", err);
+            showEmpty("beta-empty", true);
+        } finally {
+            showLoading("beta-loading", false);
+        }
+    }
+
+    async function loadRollingVolChart() {
+        showLoading("rolling-vol-loading", true);
+        showEmpty("rolling-vol-empty", false);
+        try {
+            const res = await fetch("/api/portfolio/rolling-volatility");
+            const data = await res.json();
+            if (!data.has_data) {
+                showEmpty("rolling-vol-empty", true);
+                $("rolling-vol-summary")?.setAttribute("hidden", "");
+                rollingVolChart?.destroy();
+                rollingVolChart = null;
+                return;
+            }
+
+            const current = Number(data.current_vol_pct) || 0;
+            const level = volLevel(current);
+            const series = data.series || [];
+            const prior = series.length >= 20 ? Number(series[series.length - 20].vol_pct) : null;
+            const trendDelta = prior != null ? current - prior : 0;
+
+            const summary = $("rolling-vol-summary");
+            const badge = $("rolling-vol-badge");
+            const trendEl = $("rolling-vol-trend");
+            const layman = $("rolling-vol-layman");
+            const zones = $("rolling-vol-zones");
+
+            if (summary) summary.hidden = false;
+            if (badge) {
+                badge.textContent = level.label;
+                badge.className = `vol-level-badge vol-level-badge--${level.key}`;
+            }
+            if (trendEl) {
+                if (prior == null) {
+                    trendEl.textContent = "";
+                    trendEl.hidden = true;
+                } else {
+                    trendEl.hidden = false;
+                    const dir = trendDelta > 1 ? "Bumpier than a month ago" : trendDelta < -1 ? "Calmer than a month ago" : "Similar to a month ago";
+                    const icon = trendDelta > 1 ? "↑" : trendDelta < -1 ? "↓" : "→";
+                    trendEl.textContent = `${icon} ${dir}`;
+                    trendEl.className = `rolling-vol-trend rolling-vol-trend--${trendDelta > 1 ? "up" : trendDelta < -1 ? "down" : "flat"}`;
+                }
+            }
+            if (layman) layman.innerHTML = volLaymanNote(current, level);
+            zones?.querySelectorAll(".vol-zone").forEach(el => {
+                el.classList.toggle("is-active", el.classList.contains(`vol-zone--${level.key}`));
+            });
+
+            const theme = chartTheme();
+            const scale = uiScale();
+            const ctx = $("rolling-vol-chart")?.getContext("2d");
+            if (!ctx) return;
+            const labels = series.map(s => s.date);
+            const values = series.map(s => s.vol_pct);
+            const color = token("--accent-yellow", "#ffd60a");
+            const calmLine = token("--accent-green", "#30d158");
+            const typicalLine = token("--accent-cyan", "#64d2ff");
+
+            rollingVolChart?.destroy();
+            rollingVolChart = new Chart(ctx, {
+                type: "line",
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: "Calm guide (14%)",
+                            data: labels.map(() => 14),
+                            borderColor: calmLine + "55",
+                            borderDash: [4, 4],
+                            pointRadius: 0,
+                            borderWidth: 1,
+                            fill: false,
+                        },
+                        {
+                            label: "Typical guide (22%)",
+                            data: labels.map(() => 22),
+                            borderColor: typicalLine + "55",
+                            borderDash: [4, 4],
+                            pointRadius: 0,
+                            borderWidth: 1,
+                            fill: false,
+                        },
+                        {
+                            label: "Your bumpiness",
+                            data: values,
+                            borderColor: color,
+                            backgroundColor: color + "28",
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 0,
+                            borderWidth: 2,
+                        },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            ...tooltipOptions(),
+                            filter(item) {
+                                return item.datasetIndex === 2;
+                            },
+                            callbacks: {
+                                label(item) {
+                                    const v = Number(item.parsed?.y ?? item.raw);
+                                    const lvl = volLevel(v);
+                                    return `Bumpiness: ${v.toFixed(1)}% (${lvl.label.toLowerCase()})`;
+                                },
+                            },
+                        },
+                    },
+                    scales: {
+                        x: { ticks: { color: theme.tick, maxTicksLimit: 5, font: { size: 9 * scale } }, grid: { color: theme.grid } },
+                        y: {
+                            title: {
+                                display: true,
+                                text: "Yearly swing size",
+                                color: theme.tick,
+                                font: { size: 10 * scale },
+                            },
+                            ticks: { color: theme.tick, font: { size: 10 * scale }, callback: v => `${v}%` },
+                            grid: { color: theme.grid },
+                            suggestedMin: 8,
+                        },
+                    },
+                },
+            });
+        } catch (err) {
+            console.warn("Rolling vol failed:", err);
+            showEmpty("rolling-vol-empty", true);
+        } finally {
+            showLoading("rolling-vol-loading", false);
+        }
+    }
+
+    function renderSectorTilt(sectors) {
+        const root = $("sector-tilt-chart");
+        if (!root) return;
+        const maxTilt = Math.max(...sectors.map(s => Math.abs(s.tilt_pct || 0)), 5);
+        root.innerHTML = sectors.map(s => {
+            const tilt = Number(s.tilt_pct) || 0;
+            const port = Number(s.portfolio_pct) || 0;
+            const bench = Number(s.benchmark_pct) || 0;
+            const w = Math.round(Math.abs(tilt) / maxTilt * 48);
+            const side = tilt >= 0 ? "over" : "under";
+            return `<div class="sector-tilt-row">
+                <span class="sector-tilt-name">${escapeHtml(s.name)}</span>
+                <span class="sector-tilt-port">${port.toFixed(1)}%</span>
+                <div class="sector-tilt-track" aria-hidden="true">
+                    <div class="sector-tilt-bar sector-tilt-bar--${side}" style="width:${w}%"></div>
+                </div>
+                <span class="sector-tilt-bench">${bench.toFixed(1)}%</span>
+                <span class="sector-tilt-val ${tilt >= 0 ? "text-success" : "text-danger"}">${tilt >= 0 ? "+" : ""}${tilt.toFixed(1)}pp</span>
+            </div>`;
+        }).join("");
+    }
+
+    async function loadSectorTilt() {
+        showLoading("sector-tilt-loading", true);
+        showEmpty("sector-tilt-empty", false);
+        try {
+            const res = await fetch("/api/portfolio/sector-tilt");
+            const data = await res.json();
+            if (!data.has_data) {
+                showEmpty("sector-tilt-empty", true);
+                return;
+            }
+            renderSectorTilt(data.sectors || []);
+        } catch (err) {
+            console.warn("Sector tilt failed:", err);
+            showEmpty("sector-tilt-empty", true);
+        } finally {
+            showLoading("sector-tilt-loading", false);
+        }
+    }
+
+    const GAP_CONFIG = {
+        large_trim: {
+            badge: "TRIM",
+            icon: "bi-arrow-down-circle",
+            colorVar: "--accent-red",
+            colorFallback: "#ff453a",
+            desc: g => `You hold ${g.allocation_pct}% but the signal says trim — this position may be oversized relative to current conviction.`,
+        },
+        small_add: {
+            badge: "ADD",
+            icon: "bi-arrow-up-circle",
+            colorVar: "--accent-cyan",
+            colorFallback: "#64d2ff",
+            desc: g => `Strong buy signal but only ${g.allocation_pct}% allocated — the AI thinks this position has more room to grow.`,
+        },
+        heavy_hold: {
+            badge: "HOLD",
+            icon: "bi-dash-circle",
+            colorVar: "--accent-yellow",
+            colorFallback: "#ffd60a",
+            desc: g => `${g.allocation_pct}% of your portfolio sits here on a hold signal — a sizeable bet without a strong case to grow or cut.`,
+        },
+        uncertain_hold: {
+            badge: "UNSURE",
+            icon: "bi-question-circle",
+            colorVar: "--text-tertiary",
+            colorFallback: "#8e8e93",
+            desc: g => `${g.allocation_pct}% allocated but the AI has low confidence (${g.confidence}%) in this signal — the outlook here is unclear.`,
+        },
+    };
+
+    function renderConvictionGaps(gaps, summary) {
+        const list = $("conviction-gap-list");
+        if (!list) return;
+
+        // portfolio-wide summary pill above the list
+        const summaryEl = $("conviction-gap-summary");
+        if (summaryEl && summary) {
+            const { flagged, total, flagged_alloc_pct } = summary;
+            summaryEl.innerHTML = `
+                <span class="cg-summary-stat"><strong>${flagged}</strong> of ${total} holdings flagged</span>
+                <span class="cg-summary-dot">·</span>
+                <span class="cg-summary-stat"><strong>${flagged_alloc_pct}%</strong> of portfolio weight</span>`;
+            summaryEl.style.display = "flex";
+        }
+        list.innerHTML = gaps.map(g => {
+            const cfg = GAP_CONFIG[g.gap_type] || {
+                badge: (g.action || "?").toUpperCase(),
+                icon: "bi-circle",
+                colorVar: "--text-secondary",
+                colorFallback: "#8e8e93",
+                desc: () => "",
+            };
+            const col = token(cfg.colorVar, cfg.colorFallback);
+            const confCol = g.confidence >= 75
+                ? token("--accent-green", "#30d158")
+                : g.confidence >= 60
+                    ? token("--accent-yellow", "#ffd60a")
+                    : token("--text-tertiary", "#636366");
+            return `<div class="conviction-gap-row">
+                <div class="conviction-gap-top">
+                    <span class="conviction-gap-ticker">${escapeHtml(g.ticker)}</span>
+                    <span class="conviction-gap-badge" style="color:${col};border-color:${col}">
+                        <i class="bi ${cfg.icon}"></i>${cfg.badge}
+                    </span>
+                    <span class="conviction-gap-alloc">${g.allocation_pct}% of portfolio</span>
+                </div>
+                <div class="conviction-gap-desc">${cfg.desc(g)}</div>
+                <div class="conviction-gap-footer">
+                    <span class="conviction-gap-conf" style="color:${confCol}">AI confidence: ${g.confidence}%</span>
+                </div>
+            </div>`;
+        }).join("");
+    }
+
+    async function loadConvictionGaps() {
+        showLoading("conviction-gap-loading", true);
+        showEmpty("conviction-gap-empty", false);
+        try {
+            const res = await fetch("/api/portfolio/conviction-gaps");
+            const data = await res.json();
+            if (!data.has_data) {
+                showEmpty("conviction-gap-empty", true);
+                const list = $("conviction-gap-list");
+                if (list) list.innerHTML = "";
+                return;
+            }
+            renderConvictionGaps(data.gaps || [], data.summary || null);
+        } catch (err) {
+            console.warn("Conviction gaps failed:", err);
+            showEmpty("conviction-gap-empty", true);
+        } finally {
+            showLoading("conviction-gap-loading", false);
+        }
+    }
+
+    const CS_BAND_META = {
+        low:       { label: "Uncertain",       hint: "AI signal is weak or unclear" },
+        mid:       { label: "Moderate",        hint: "Some conviction, room for doubt" },
+        high:      { label: "Confident",       hint: "Clear, reliable AI signal" },
+        very_high: { label: "Very confident",  hint: "Strong conviction — high-signal bet" },
+    };
+
+    function renderConfidenceSpectrum(buckets, avg, holdings) {
+        const root = $("confidence-spectrum-chart");
+        if (!root) return;
+        const colors = {
+            low:       token("--accent-red",    "#ff453a"),
+            mid:       token("--accent-yellow", "#ffd60a"),
+            high:      token("--accent-cyan",   "#64d2ff"),
+            very_high: token("--accent-green",  "#30d158"),
+        };
+
+        // Group holdings by band key
+        const grouped = { low: [], mid: [], high: [], very_high: [] };
+        (holdings || []).forEach(h => {
+            const k = h.confidence < 60 ? "low"
+                    : h.confidence < 70 ? "mid"
+                    : h.confidence < 85 ? "high"
+                    : "very_high";
+            grouped[k].push(h);
+        });
+        // Sort each group by allocation descending
+        Object.keys(grouped).forEach(k => grouped[k].sort((a, b) => b.allocation_pct - a.allocation_pct));
+
+        const avgNote = avg >= 75 ? "Signals are generally strong across your book."
+                      : avg >= 60 ? "Signals are mixed — some certainty, some guesswork."
+                      : "Many signals are uncertain — worth reviewing positions carefully.";
+
+        const bandRows = buckets.map(b => {
+            const meta = CS_BAND_META[b.key] || { label: b.band, hint: "" };
+            const tickers = grouped[b.key] || [];
+            const tickerHtml = tickers.length
+                ? `<div class="cs-band-tickers">${
+                    tickers.slice(0, 6).map(t =>
+                        `<span class="cs-ticker-pill" title="${t.ticker}: ${t.confidence}% confidence · ${t.allocation_pct}% of portfolio">${escapeHtml(t.ticker)}</span>`
+                    ).join("")}${tickers.length > 6 ? `<span class="cs-ticker-more">+${tickers.length - 6} more</span>` : ""}</div>`
+                : "";
+            return `<div class="cs-band${b.weight_pct === 0 ? " cs-band-empty" : ""}">
+                <div class="cs-band-header">
+                    <span class="cs-band-dot" style="background:${colors[b.key]}"></span>
+                    <span class="cs-band-range">${escapeHtml(b.band)}</span>
+                    <span class="cs-band-name">${meta.label}</span>
+                    <span class="cs-band-pct">${b.weight_pct}%</span>
+                </div>
+                ${b.weight_pct > 0 ? `<div class="cs-band-hint">${meta.hint}</div>` : ""}
+                ${tickerHtml}
+            </div>`;
+        }).join("");
+
+        root.innerHTML = `
+            <div class="confidence-spectrum-bar" role="img" aria-label="Confidence distribution">
+                ${buckets.filter(b => b.weight_pct > 0).map(b => {
+                    const w = Math.min(100, Math.max(0, b.weight_pct));
+                    return `<div class="confidence-spectrum-seg" style="width:${w}%;background:${colors[b.key] || colors.mid}" title="${escapeHtml(b.band)}: ${b.weight_pct}%"></div>`;
+                }).join("")}
+            </div>
+            <div class="cs-bands">${bandRows}</div>
+            <div class="cs-avg-row">
+                <span class="cs-avg-label">Avg confidence</span>
+                <strong class="cs-avg-value">${avg}%</strong>
+                <span class="cs-avg-note">${avgNote}</span>
+            </div>`;
+    }
+
+    async function loadConfidenceSpectrum() {
+        showLoading("confidence-spectrum-loading", true);
+        showEmpty("confidence-spectrum-empty", false);
+        try {
+            const res = await fetch("/api/portfolio/confidence-spectrum");
+            const data = await res.json();
+            if (!data.has_data) {
+                showEmpty("confidence-spectrum-empty", true);
+                return;
+            }
+            renderConfidenceSpectrum(data.buckets || [], data.avg_confidence || 0, data.holdings || []);
+        } catch (err) {
+            console.warn("Confidence spectrum failed:", err);
+            showEmpty("confidence-spectrum-empty", true);
+        } finally {
+            showLoading("confidence-spectrum-loading", false);
+        }
+    }
+
+    function renderMacroAlignmentLegend(points) {
+        const legend = $("macro-alignment-legend");
+        if (!legend) return;
+        if (!points?.length) {
+            legend.hidden = true;
+            legend.innerHTML = "";
+            return;
+        }
+        const esc = typeof escapeHtml === "function" ? escapeHtml : s => s;
+        const sorted = [...points].sort((a, b) => b.x - a.x || b.y - a.y);
+        legend.innerHTML = sorted.map(pt => {
+            const name = `${pt.flag ? pt.flag + " " : ""}${esc(pt.label)}`;
+            return `<span class="macro-alignment-legend-item">
+                <span class="macro-alignment-legend-dot" style="background:${pt.color}"></span>
+                <span>${name}</span>
+                <span class="macro-alignment-legend-meta">${pt.x.toFixed(0)}% corr · ${pt.y.toFixed(0)}% geo</span>
+            </span>`;
+        }).join("");
+        legend.hidden = false;
+    }
+
+    async function loadMacroAlignment() {
+        showLoading("macro-alignment-loading", true);
+        showEmpty("macro-alignment-empty", false);
+        try {
+            const res = await fetch("/api/portfolio/macro-alignment");
+            const data = await res.json();
+            if (!data.has_data || !data.points?.length) {
+                showEmpty("macro-alignment-empty", true);
+                macroAlignmentChart?.destroy();
+                macroAlignmentChart = null;
+                renderMacroAlignmentLegend([]);
+                return;
+            }
+            const theme = chartTheme();
+            const scale = uiScale();
+            const isLight = typeof currentTheme === "function" && currentTheme() === "light";
+            const ctx = $("macro-alignment-chart")?.getContext("2d");
+            if (!ctx) return;
+
+            const allY = data.points.map(p => p.geo_weight_pct || 0);
+            const maxY = Math.max(...allY, 10);
+            const midX = 50;
+            const midY = Math.max(maxY * 0.5, 5);
+
+            const QUAD_COLORS = {
+                tr: "#ff453a",
+                br: "#ff9f0a",
+                tl: "#64d2ff",
+                bl: "#30d158",
+            };
+
+            const points = data.points.map(p => {
+                const x = (p.correlation || 0) * 100;
+                const y = p.geo_weight_pct || 0;
+                const quad = (x >= midX ? "r" : "l");
+                const row  = (y >= midY ? "t" : "b");
+                const color = QUAD_COLORS[row + quad];
+                return { x, y, label: p.name, flag: p.flag || "", color, quad: row + quad };
+            });
+
+            renderMacroAlignmentLegend(points);
+
+            const quadrantPlugin = {
+                id: "macroQuadrant",
+                beforeDraw(chart) {
+                    const { ctx: c, chartArea: a, scales: { x: xs, y: ys } } = chart;
+                    if (!a) return;
+                    c.save();
+
+                    const qx = xs.getPixelForValue(midX);
+                    const qy = ys.getPixelForValue(midY);
+
+                    const quadDefs = [
+                        { x: a.left,  y: a.top,  w: qx - a.left,  h: qy - a.top,    fill: isLight ? "rgba(100,210,255,.05)" : "rgba(100,210,255,.04)", label: "Geo exposure", sub: "not correlated", anchor: "tl" },
+                        { x: qx,      y: a.top,  w: a.right - qx, h: qy - a.top,    fill: isLight ? "rgba(255,69,58,.06)"   : "rgba(255,69,58,.07)",   label: "Most exposed",  sub: "headlines hit hardest", anchor: "tr" },
+                        { x: a.left,  y: qy,     w: qx - a.left,  h: a.bottom - qy, fill: isLight ? "rgba(48,209,88,.04)"   : "rgba(48,209,88,.03)",   label: "Low impact",    sub: "low corr & exposure", anchor: "bl" },
+                        { x: qx,      y: qy,     w: a.right - qx, h: a.bottom - qy, fill: isLight ? "rgba(255,159,10,.04)"  : "rgba(255,159,10,.04)",  label: "Moves with you", sub: "correlated, less geo", anchor: "br" },
+                    ];
+
+                    quadDefs.forEach(q => {
+                        c.fillStyle = q.fill;
+                        c.fillRect(q.x, q.y, q.w, q.h);
+                    });
+
+                    c.strokeStyle = isLight ? "rgba(0,0,0,.14)" : "rgba(255,255,255,.14)";
+                    c.lineWidth = 1;
+                    c.setLineDash([5, 5]);
+                    c.beginPath(); c.moveTo(qx, a.top);    c.lineTo(qx, a.bottom); c.stroke();
+                    c.beginPath(); c.moveTo(a.left, qy);   c.lineTo(a.right, qy);  c.stroke();
+                    c.setLineDash([]);
+
+                    const lfs = Math.max(9, 10 * scale);
+                    const sfs = Math.max(7,  8 * scale);
+                    const pad = 10;
+
+                    quadDefs.forEach(q => {
+                        const isRight = q.anchor.endsWith("r");
+                        const isBottom = q.anchor.startsWith("b");
+                        const lx = isRight  ? q.x + q.w - pad : q.x + pad;
+                        const baseY = isBottom
+                            ? q.y + q.h - pad - sfs - 4
+                            : q.y + pad + lfs;
+
+                        c.textAlign = isRight ? "right" : "left";
+                        c.font = `700 ${lfs}px -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif`;
+                        c.fillStyle = isLight ? "rgba(0,0,0,.32)" : "rgba(255,255,255,.26)";
+                        c.fillText(q.label, lx, baseY);
+
+                        c.font = `400 ${sfs}px -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif`;
+                        c.fillStyle = isLight ? "rgba(0,0,0,.20)" : "rgba(255,255,255,.16)";
+                        c.fillText(q.sub, lx, baseY + sfs + 3);
+                    });
+
+                    c.restore();
+                },
+            };
+
+            macroAlignmentChart?.destroy();
+            macroAlignmentChart = new Chart(ctx, {
+                type: "scatter",
+                plugins: [quadrantPlugin],
+                data: {
+                    datasets: [{
+                        label: "Indices",
+                        data: points,
+                        backgroundColor: points.map(p => p.color + "cc"),
+                        borderColor:     points.map(p => p.color),
+                        borderWidth: 1.5,
+                        pointRadius:      points.map(() => 8 * scale),
+                        pointHoverRadius: 11 * scale,
+                        clip: false,
+                    }],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: {
+                        padding: {
+                            top: 8,
+                            right: 8,
+                            bottom: 10,
+                            left: 4,
+                        },
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            ...tooltipOptions(),
+                            callbacks: {
+                                title(items) {
+                                    const raw = items[0]?.raw;
+                                    return (raw?.flag ? raw.flag + " " : "") + (raw?.label || "");
+                                },
+                                label(item) {
+                                    const raw = item.raw;
+                                    const corrLabel = raw.x >= midX ? "High" : "Low";
+                                    const geoLabel  = raw.y >= midY ? "High" : "Low";
+                                    return [
+                                        `Correlation with your portfolio: ${raw.x.toFixed(0)}% (${corrLabel})`,
+                                        `Geographic exposure: ${raw.y.toFixed(0)}% (${geoLabel})`,
+                                    ];
+                                },
+                            },
+                        },
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: "← Less correlated   ·   More correlated →",
+                                color: theme.tick,
+                                font: { size: 9.5 * scale, weight: "500" },
+                            },
+                            min: 0,
+                            max: 100,
+                            grace: "2%",
+                            ticks: {
+                                color: theme.tick,
+                                font: { size: 9 * scale },
+                                callback: v => v + "%",
+                            },
+                            grid: { color: theme.grid },
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: "Geographic exposure (% of portfolio) ↑",
+                                color: theme.tick,
+                                font: { size: 9.5 * scale, weight: "500" },
+                            },
+                            min: 0,
+                            suggestedMax: Math.max(maxY * 1.15, maxY + 8),
+                            grace: "12%",
+                            ticks: {
+                                color: theme.tick,
+                                font: { size: 9 * scale },
+                                callback: v => v + "%",
+                            },
+                            grid: { color: theme.grid },
+                        },
+                    },
+                },
+            });
+        } catch (err) {
+            console.warn("Macro alignment failed:", err);
+            showEmpty("macro-alignment-empty", true);
+            renderMacroAlignmentLegend([]);
+        } finally {
+            showLoading("macro-alignment-loading", false);
         }
     }
 
@@ -1301,7 +2341,7 @@ const AnalyticsCharts = (() => {
                 ? "—"
                 : (typeof formatPct === "function" ? formatPct(h.change_pct) : `${h.change_pct}%`);
             const shareStr = h.contribution_pct != null
-                ? `${Math.abs(h.contribution_pct).toFixed(0)}% of move`
+                ? `${Math.min(100, Math.abs(h.contribution_pct)).toFixed(0)}% of move`
                 : "";
             const weightStr = h.allocation_pct != null
                 ? `${Number(h.allocation_pct).toFixed(1)}% wt`
@@ -1622,50 +2662,65 @@ const AnalyticsCharts = (() => {
     }
 
     function resizeCharts() {
-        [riskRewardChart, drawdownChart, treemapChart].forEach(c => {
+        [riskRewardChart, drawdownChart, treemapChart, benchmarkChart, rollingVolChart, macroAlignmentChart].forEach(c => {
             c?.resize?.();
             c?.update?.("none");
         });
         if (_correlationData) drawCorrelationHeatmap();
         if (_gaugeReady) drawConcentrationGauge(_lastHhi);
+        if (_betaGaugeReady) drawBetaGauge(_lastBeta);
+        if (_benchmarkData) renderBenchmarkChart(_benchmarkData);
     }
-
-    let _lastHhi = 0;
-    let _gaugeReady = false;
 
     function onThemeChange() {
         updateChartChrome(riskRewardChart);
         if (_correlationData) drawCorrelationHeatmap();
         updateChartChrome(drawdownChart);
         updateChartChrome(treemapChart);
+        updateChartChrome(benchmarkChart);
+        updateChartChrome(rollingVolChart);
+        updateChartChrome(macroAlignmentChart);
         if (rendered.has("risk")) {
             loadConcentrationGauge();
+            loadBetaGauge();
         }
         if (rendered.has("exposure")) {
             loadGeoExposure();
-            if (treemapChart) {
-                treemapChart.update("none");
-            }
+            loadSectorTilt();
+            if (treemapChart) treemapChart.update("none");
         }
         if (rendered.has("signals")) {
             loadContributionChart();
+            loadConfidenceSpectrum();
+        }
+        if (rendered.has("performance")) {
+            loadBenchmarkChart();
+            loadReturnCalendar();
+        }
+        if (rendered.has("markets")) {
+            loadMacroAlignment();
         }
     }
 
     function onRefresh() {
         loadModuleInsights(true);
+        if (activePane === "performance" && rendered.has("performance")) loadPerformancePane();
         if (activePane === "risk" && rendered.has("risk")) loadRiskPane();
         if (activePane === "exposure" && rendered.has("exposure")) loadExposurePane();
         if (activePane === "signals" && rendered.has("signals")) loadSignalsPane();
-        if (activePane === "markets" || rendered.has("markets")) refreshMarketsFromApi();
+        if (activePane === "markets" || rendered.has("markets")) loadMarketsPane();
     }
 
     function onAnalyticsZoneEnter() {
         loadModuleInsights();
         requestAnimationFrame(resizeCharts);
-        if (activePane !== "performance" && !rendered.has(activePane)) {
+        if (!rendered.has(activePane)) {
             rendered.add(activePane);
             loadPane(activePane);
+        } else if (activePane === "performance") {
+            loadPerformancePane();
+        } else if (activePane === "markets") {
+            refreshMarketsTape(_cachedMarkets);
         }
     }
 

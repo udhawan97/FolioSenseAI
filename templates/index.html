@@ -344,10 +344,11 @@
                     <div class="card-body briefing-card-body" id="briefing-body">
                         <!-- skeleton shown while loading -->
                         <div class="briefing-skeleton" id="briefing-skeleton" aria-hidden="true">
-                            <div class="shimmer-line" style="width:72%;margin-bottom:.6rem"></div>
-                            <div class="shimmer-line" style="width:52%;margin-bottom:.45rem"></div>
-                            <div class="shimmer-line" style="width:61%;margin-bottom:.45rem"></div>
-                            <div class="shimmer-line" style="width:40%;margin-top:.7rem"></div>
+                            <div class="shimmer-line" style="width:82%;margin-bottom:.45rem"></div>
+                            <div class="shimmer-line" style="width:66%;margin-bottom:1rem"></div>
+                            <div class="shimmer-line" style="width:48%;margin-bottom:.4rem"></div>
+                            <div class="shimmer-line" style="width:57%;margin-bottom:.8rem"></div>
+                            <div class="shimmer-line" style="width:72%;"></div>
                         </div>
                         <!-- content injected by JS -->
                         <div class="briefing-content" id="briefing-content" aria-live="polite"></div>
@@ -574,6 +575,7 @@
                             </div>
                             <span class="fw-bold" id="realized-gain">--</span>
                         </div>
+                        <p class="analytics-widget-insight" data-widget-insight="total-return"></p>
                     </div>
                 </div>
             </div>
@@ -632,6 +634,7 @@
                                 <div class="performance-chart-shell">
                                     <canvas id="pnl-chart" height="150"></canvas>
                                 </div>
+                                <p class="analytics-widget-insight" data-widget-insight="pnl-history"></p>
                             </div>
                             <div class="tab-pane fade" id="realized-gains-pane"
                                  role="tabpanel" aria-labelledby="realized-gains-tab" tabindex="0">
@@ -740,6 +743,106 @@
                             <canvas id="projection-chart" height="220"></canvas>
                         </div>
                         <p class="projection-disclaimer" id="projection-disclaimer"></p>
+                        <p class="analytics-widget-insight" data-widget-insight="projection"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Benchmark comparison + return calendar ─────────────────── -->
+        <div class="row g-3 g-md-4 mb-3">
+            <div class="col-12 col-lg-7">
+                <div class="card bg-dark border-secondary h-100 analytics-chart-card" id="benchmark-tracker-card">
+                    <div class="card-header d-flex align-items-center gap-2 flex-wrap">
+                        <i class="bi bi-bar-chart analytics-card-icon"></i>
+                        <div class="analytics-card-titles">
+                            <span>Benchmark comparison</span>
+                            <span class="analytics-card-sub">portfolio vs S&amp;P 500</span>
+                        </div>
+                        <div class="benchmark-range-tabs ms-auto" id="benchmark-range-tabs"
+                             role="group" aria-label="Benchmark range" data-active-range="1y">
+                            <button class="benchmark-range-btn" type="button" data-range="1m" aria-pressed="false">1M</button>
+                            <button class="benchmark-range-btn" type="button" data-range="3m" aria-pressed="false">3M</button>
+                            <button class="benchmark-range-btn is-active" type="button" data-range="1y" aria-pressed="true">1Y</button>
+                            <button class="benchmark-range-btn" type="button" data-range="max" aria-pressed="false">Max</button>
+                        </div>
+                        <button class="tip-trigger"
+                            data-tip-title="Benchmark Comparison"
+                            data-tip-body="Cumulative return of your portfolio vs the S&amp;P 500. Alpha is the gap — positive means you beat the benchmark over that window."
+                            data-tip-hint="Uses daily portfolio snapshots"
+                            data-tip-icon="bi-bar-chart">
+                            <i class="bi bi-info-circle"></i>
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="benchmark-empty" class="perf-callout" style="display:none">
+                            <i class="bi bi-bar-chart perf-callout-icon"></i>
+                            <div class="perf-callout-text">
+                                <div class="perf-callout-title">Need history for benchmark comparison</div>
+                                <div class="perf-callout-body">Set share counts and visit daily to chart your path vs the S&amp;P 500.</div>
+                            </div>
+                        </div>
+                        <div id="benchmark-loading" class="analytics-skeleton" aria-hidden="true">
+                            <div class="shimmer-line"></div><div class="shimmer-line"></div>
+                        </div>
+                        <div class="benchmark-stat-row" id="benchmark-stat-row" hidden>
+                            <div class="benchmark-stat">
+                                <span class="benchmark-stat-label">You</span>
+                                <span class="benchmark-stat-value" id="benchmark-port-pct">—</span>
+                            </div>
+                            <div class="benchmark-stat benchmark-stat--bench">
+                                <span class="benchmark-stat-label">S&amp;P 500</span>
+                                <span class="benchmark-stat-value" id="benchmark-spy-pct">—</span>
+                            </div>
+                            <div class="benchmark-stat benchmark-stat--alpha">
+                                <span class="benchmark-stat-label">Alpha</span>
+                                <span class="benchmark-stat-value" id="benchmark-alpha-pct">—</span>
+                            </div>
+                        </div>
+                        <div class="analytics-chart-shell analytics-chart-shell--md">
+                            <canvas id="benchmark-chart" aria-label="Portfolio vs S&P 500 chart"></canvas>
+                        </div>
+                        <p class="analytics-widget-insight" data-widget-insight="benchmark-tracker"></p>
+                        <p class="analytics-chart-caption">
+                            Solid line is your portfolio; dashed is the S&amp;P 500 — both rebased to zero
+                            at the start of the selected window.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-lg-5">
+                <div class="card bg-dark border-secondary h-100 analytics-chart-card" id="return-calendar-card">
+                    <div class="card-header d-flex align-items-center gap-2">
+                        <i class="bi bi-calendar3 analytics-card-icon"></i>
+                        <div class="analytics-card-titles">
+                            <span>Return calendar</span>
+                            <span class="analytics-card-sub">monthly heatmap</span>
+                        </div>
+                        <button class="tip-trigger ms-auto"
+                            data-tip-title="Return Calendar"
+                            data-tip-body="Each tile is one month's portfolio return from your snapshot history. Greener months gained; redder months lost."
+                            data-tip-hint="Needs a few weeks of visits"
+                            data-tip-icon="bi-calendar3">
+                            <i class="bi bi-info-circle"></i>
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="return-calendar-empty" class="perf-callout" style="display:none">
+                            <i class="bi bi-calendar3 perf-callout-icon"></i>
+                            <div class="perf-callout-text">
+                                <div class="perf-callout-title">Not enough monthly history</div>
+                                <div class="perf-callout-body">Return tiles fill in as you build snapshot history over time.</div>
+                            </div>
+                        </div>
+                        <div id="return-calendar-loading" class="analytics-skeleton" aria-hidden="true">
+                            <div class="shimmer-line"></div>
+                        </div>
+                        <div id="return-calendar-grid" class="return-calendar-grid"
+                             aria-label="Monthly portfolio returns"></div>
+                        <p class="analytics-widget-insight" data-widget-insight="return-calendar"></p>
+                        <p class="analytics-chart-caption analytics-chart-caption--center">
+                            Month-by-month scorecard — quick scan for winning and losing stretches.
+                        </p>
                     </div>
                 </div>
             </div>
@@ -787,6 +890,7 @@
                                 swing. Bigger circles are larger positions; the yellow dot is your whole portfolio.
                                 Tap any bubble for the exact reading.
                             </p>
+                            <p class="analytics-widget-insight" data-widget-insight="risk-reward"></p>
                         </div>
                     </div>
                 </div>
@@ -818,13 +922,13 @@
                                 <div class="shimmer-line"></div><div class="shimmer-line"></div>
                             </div>
                             <div class="correlation-chart-frame-wrap">
+                                <div id="correlation-cell-tip" class="correlation-cell-tip" hidden></div>
                                 <div class="correlation-chart-frame" id="correlation-chart-frame">
                                     <div class="correlation-y-labels" id="correlation-y-labels" aria-hidden="true"></div>
                                     <div class="correlation-scroll" id="correlation-scroll">
                                         <div class="correlation-scroll-inner" id="correlation-scroll-inner">
                                             <div class="analytics-chart-shell correlation-plot" id="correlation-plot">
                                                 <canvas id="correlation-chart" aria-label="Holdings correlation heatmap"></canvas>
-                                                <div id="correlation-cell-tip" class="correlation-cell-tip" hidden></div>
                                             </div>
                                             <div class="correlation-x-labels" id="correlation-x-labels" aria-hidden="true"></div>
                                         </div>
@@ -841,6 +945,7 @@
                                 together; cooler blues mean they often offset each other. A well-diversified
                                 portfolio shows more variety — tap any tile for the exact reading.
                             </p>
+                            <p class="analytics-widget-insight" data-widget-insight="correlation"></p>
                         </div>
                     </div>
                 </div>
@@ -881,6 +986,7 @@
                                 Green means well diversified; red means a few sectors or names carry most of the weight.
                             </p>
                             <p class="analytics-gauge-caption text-secondary small mb-0" id="concentration-caption"></p>
+                            <p class="analytics-widget-insight" data-widget-insight="concentration"></p>
                         </div>
                     </div>
                 </div>
@@ -919,6 +1025,113 @@
                                 How far below your recent peak the portfolio has fallen — the shaded area is
                                 &ldquo;underwater.&rdquo; A shallow dip close to zero means a calmer ride; a deeper
                                 valley means a bigger drop from your high-water mark.
+                            </p>
+                            <p class="analytics-widget-insight" data-widget-insight="drawdown"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="row g-3 g-md-4 mb-3">
+                <div class="col-12 col-md-5">
+                    <div class="card bg-dark border-secondary h-100 analytics-chart-card" id="beta-dial-card">
+                        <div class="card-header d-flex align-items-center gap-2">
+                            <i class="bi bi-compass analytics-card-icon"></i>
+                            <div class="analytics-card-titles">
+                                <span>Market sensitivity</span>
+                                <span class="analytics-card-sub">how much you swing vs the S&amp;P 500</span>
+                            </div>
+                            <button class="tip-trigger ms-auto"
+                                data-tip-title="Market Sensitivity (Beta)"
+                                data-tip-body="Think of 1.0 as moving in step with the S&amp;P 500. Below 1.0 = calmer on market days. Above 1.0 = bigger ups and downs when the market moves."
+                                data-tip-hint="Example: 1.2 ≈ 20% more swing than the market"
+                                data-tip-icon="bi-compass">
+                                <i class="bi bi-info-circle"></i>
+                            </button>
+                        </div>
+                        <div class="card-body d-flex flex-column align-items-center justify-content-center">
+                            <div id="beta-empty" class="perf-callout" style="display:none">
+                                <i class="bi bi-compass perf-callout-icon"></i>
+                                <div class="perf-callout-text">
+                                    <div class="perf-callout-title">Need holdings first</div>
+                                    <div class="perf-callout-body">We compare your daily moves to the S&amp;P 500 once positions are set up.</div>
+                                </div>
+                            </div>
+                            <div id="beta-loading" class="analytics-skeleton" aria-hidden="true">
+                                <div class="shimmer-line"></div>
+                            </div>
+                            <div class="analytics-gauge-wrap">
+                                <canvas id="beta-gauge" aria-label="Market sensitivity gauge versus S&P 500"></canvas>
+                            </div>
+                            <div class="analytics-gauge-zones" id="beta-zone-legend" aria-hidden="true">
+                                <span class="gauge-zone gauge-zone--defensive">
+                                    <i class="gauge-zone-swatch"></i>
+                                    <span class="gauge-zone-label">Defensive</span>
+                                    <span class="gauge-zone-range">below 0.75</span>
+                                </span>
+                                <span class="gauge-zone gauge-zone--market gauge-zone--active-marker">
+                                    <i class="gauge-zone-swatch"></i>
+                                    <span class="gauge-zone-label">Market pace</span>
+                                    <span class="gauge-zone-range">~1.0</span>
+                                </span>
+                                <span class="gauge-zone gauge-zone--aggressive">
+                                    <i class="gauge-zone-swatch"></i>
+                                    <span class="gauge-zone-label">Aggressive</span>
+                                    <span class="gauge-zone-range">above 1.1</span>
+                                </span>
+                            </div>
+                            <p class="analytics-layman-note" id="beta-layman-note"></p>
+                            <p class="analytics-widget-insight" data-widget-insight="beta-dial"></p>
+                            <p class="analytics-chart-caption analytics-chart-caption--center">
+                                The tick mark on the arc is the S&amp;P 500 (1.0). Your needle shows whether
+                                you typically swing less or more than the broad market.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-7">
+                    <div class="card bg-dark border-secondary h-100 analytics-chart-card" id="rolling-vol-card">
+                        <div class="card-header d-flex align-items-center gap-2 flex-wrap">
+                            <i class="bi bi-activity analytics-card-icon"></i>
+                            <div class="analytics-card-titles">
+                                <span>Bumpy ride meter</span>
+                                <span class="analytics-card-sub">how choppy your portfolio has been</span>
+                            </div>
+                            <div class="rolling-vol-summary ms-auto" id="rolling-vol-summary" hidden>
+                                <span class="vol-level-badge" id="rolling-vol-badge"></span>
+                                <span class="rolling-vol-trend" id="rolling-vol-trend"></span>
+                            </div>
+                            <button class="tip-trigger"
+                                data-tip-title="Bumpy Ride Meter"
+                                data-tip-body="Measures recent ups and downs as a yearly % — like how wild a roller coaster felt over the last month. Calm is under ~14%, typical is 14–22%, choppy is above ~22%."
+                                data-tip-hint="Based on last 30 days of prices"
+                                data-tip-icon="bi-activity">
+                                <i class="bi bi-info-circle"></i>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div id="rolling-vol-empty" class="perf-callout" style="display:none">
+                                <i class="bi bi-activity perf-callout-icon"></i>
+                                <div class="perf-callout-text">
+                                    <div class="perf-callout-title">Not enough history yet</div>
+                                    <div class="perf-callout-body">We need a few weeks of price data to measure how bumpy your ride has been.</div>
+                                </div>
+                            </div>
+                            <div id="rolling-vol-loading" class="analytics-skeleton" aria-hidden="true">
+                                <div class="shimmer-line"></div><div class="shimmer-line"></div>
+                            </div>
+                            <p class="analytics-layman-note analytics-layman-note--compact mb-2" id="rolling-vol-layman"></p>
+                            <div class="vol-zone-legend" id="rolling-vol-zones" aria-hidden="true">
+                                <span class="vol-zone vol-zone--calm"><i></i>Calm <small>&lt;14%</small></span>
+                                <span class="vol-zone vol-zone--moderate"><i></i>Typical <small>14–22%</small></span>
+                                <span class="vol-zone vol-zone--choppy"><i></i>Choppy <small>&gt;22%</small></span>
+                            </div>
+                            <div class="analytics-chart-shell analytics-chart-shell--sm">
+                                <canvas id="rolling-vol-chart" aria-label="Portfolio bumpiness over time"></canvas>
+                            </div>
+                            <p class="analytics-widget-insight" data-widget-insight="rolling-vol"></p>
+                            <p class="analytics-chart-caption">
+                                Higher line = bumpier recent weeks. Dashed guides mark calm and typical
+                                ranges for a diversified stock portfolio.
                             </p>
                         </div>
                     </div>
@@ -962,6 +1175,7 @@
                                 <canvas id="sector-treemap-chart" aria-label="Sector exposure treemap"></canvas>
                                 <div id="treemap-label-overlay" class="treemap-label-overlay" aria-hidden="true"></div>
                             </div>
+                            <p class="analytics-widget-insight" data-widget-insight="sector-treemap"></p>
                         </div>
                     </div>
                 </div>
@@ -994,6 +1208,46 @@
                             </div>
                             <div id="geo-exposure-list" class="geo-exposure-list"
                                  aria-label="Geographic exposure by country"></div>
+                            <p class="analytics-widget-insight" data-widget-insight="geo-exposure"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="row g-3 g-md-4 mb-3">
+                <div class="col-12">
+                    <div class="card bg-dark border-secondary h-100 analytics-chart-card" id="sector-tilt-card">
+                        <div class="card-header d-flex align-items-center gap-2">
+                            <i class="bi bi-sliders analytics-card-icon"></i>
+                            <div class="analytics-card-titles">
+                                <span>Benchmark tilt</span>
+                                <span class="analytics-card-sub">sector overweight vs S&amp;P 500</span>
+                            </div>
+                            <div class="sector-tilt-legend ms-auto d-flex gap-3 me-2">
+                                <span class="sector-tilt-legend-item sector-tilt-legend-item--port">Portfolio</span>
+                                <span class="sector-tilt-legend-item sector-tilt-legend-item--bench">S&amp;P 500</span>
+                            </div>
+                            <button class="tip-trigger"
+                                data-tip-title="Benchmark Tilt"
+                                data-tip-body="Compares your look-through sector weights to the S&amp;P 500. Green bars are overweight; red bars are underweight."
+                                data-tip-hint="Look-through ETF unpacking"
+                                data-tip-icon="bi-sliders">
+                                <i class="bi bi-info-circle"></i>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div id="sector-tilt-empty" class="perf-callout" style="display:none">
+                                <i class="bi bi-sliders perf-callout-icon"></i>
+                                <div class="perf-callout-text">
+                                    <div class="perf-callout-title">No sector tilt data</div>
+                                    <div class="perf-callout-body">Add holdings to see how your sector mix compares to the benchmark.</div>
+                                </div>
+                            </div>
+                            <div id="sector-tilt-loading" class="analytics-skeleton" aria-hidden="true">
+                                <div class="shimmer-line"></div>
+                            </div>
+                            <div id="sector-tilt-chart" class="sector-tilt-chart"
+                                 aria-label="Sector tilt vs S&P 500"></div>
+                            <p class="analytics-widget-insight" data-widget-insight="sector-tilt"></p>
                         </div>
                     </div>
                 </div>
@@ -1029,6 +1283,7 @@
                                 </thead>
                                 <tbody id="allocation-table"></tbody>
                             </table>
+                            <p class="analytics-widget-insight analytics-widget-insight--table" data-widget-insight="allocation-table"></p>
                         </div>
                     </div>
                 </div>
@@ -1077,6 +1332,7 @@
                                 <div id="contribution-chart" class="contribution-waterfall"
                                      aria-label="Portfolio contribution waterfall"></div>
                             </div>
+                            <p class="analytics-widget-insight" data-widget-insight="contribution"></p>
                         </div>
                     </div>
                 </div>
@@ -1111,6 +1367,7 @@
                             </div>
                             <div class="signal-board-grid" id="signal-board-grid" role="list"
                                  aria-label="Investment signal tiles"></div>
+                            <p class="analytics-widget-insight" data-widget-insight="signal-board"></p>
                         </div>
                     </div>
                 </div>
@@ -1152,7 +1409,79 @@
                                     position size, not just ticker count. Greener means more of the book leans
                                     add/buy; redder means more leans trim/sell.
                                 </p>
+                                <p class="analytics-widget-insight" data-widget-insight="verdict-mix"></p>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="row g-3 g-md-4 mb-3">
+                <div class="col-12 col-lg-6">
+                    <div class="card bg-dark border-secondary h-100 analytics-chart-card" id="conviction-gap-card">
+                        <div class="card-header d-flex align-items-center gap-2">
+                            <i class="bi bi-exclamation-diamond analytics-card-icon"></i>
+                            <div class="analytics-card-titles">
+                                <span>Conviction gap</span>
+                                <span class="analytics-card-sub">when your bet doesn't match the signal</span>
+                            </div>
+                            <button class="tip-trigger ms-auto"
+                                data-tip-title="Conviction Gap"
+                                data-tip-body="Flags positions where FolioSense's verdict tone doesn't match how large the bet is — e.g. trim on a big weight."
+                                data-tip-hint="Not financial advice"
+                                data-tip-icon="bi-exclamation-diamond">
+                                <i class="bi bi-info-circle"></i>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <p class="analytics-blurb">Holdings where the AI recommends one thing but your position size implies another — worth a second look.</p>
+                            <div id="conviction-gap-summary" class="cg-summary" style="display:none"></div>
+                            <div id="conviction-gap-empty" class="perf-callout" style="display:none">
+                                <i class="bi bi-exclamation-diamond perf-callout-icon"></i>
+                                <div class="perf-callout-text">
+                                    <div class="perf-callout-title">No gaps flagged</div>
+                                    <div class="perf-callout-body">Verdict tone broadly aligns with position sizes — or signals aren't loaded yet.</div>
+                                </div>
+                            </div>
+                            <div id="conviction-gap-loading" class="analytics-skeleton" aria-hidden="true">
+                                <div class="shimmer-line"></div>
+                            </div>
+                            <div id="conviction-gap-list" class="conviction-gap-list"
+                                 aria-label="Conviction gap items"></div>
+                            <p class="analytics-widget-insight" data-widget-insight="conviction-gap"></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-6">
+                    <div class="card bg-dark border-secondary h-100 analytics-chart-card" id="confidence-spectrum-card">
+                        <div class="card-header d-flex align-items-center gap-2">
+                            <i class="bi bi-distribute-vertical analytics-card-icon"></i>
+                            <div class="analytics-card-titles">
+                                <span>Confidence spectrum</span>
+                                <span class="analytics-card-sub">how sure is the AI about your holdings?</span>
+                            </div>
+                            <button class="tip-trigger ms-auto"
+                                data-tip-title="Confidence Spectrum"
+                                data-tip-body="How much of your book sits in each confidence band — weighted by allocation, not ticker count."
+                                data-tip-hint="From FolioSense verdicts"
+                                data-tip-icon="bi-distribute-vertical">
+                                <i class="bi bi-info-circle"></i>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <p class="analytics-blurb">How much of your money is backed by strong AI signals vs uncertain ones — by portfolio weight, not stock count.</p>
+                            <div id="confidence-spectrum-empty" class="perf-callout" style="display:none">
+                                <i class="bi bi-distribute-vertical perf-callout-icon"></i>
+                                <div class="perf-callout-text">
+                                    <div class="perf-callout-title">No confidence data</div>
+                                    <div class="perf-callout-body">Spectrum fills in once holdings and signals are available.</div>
+                                </div>
+                            </div>
+                            <div id="confidence-spectrum-loading" class="analytics-skeleton" aria-hidden="true">
+                                <div class="shimmer-line"></div>
+                            </div>
+                            <div id="confidence-spectrum-chart" class="confidence-spectrum-chart"
+                                 aria-label="Confidence distribution"></div>
+                            <p class="analytics-widget-insight" data-widget-insight="confidence-spectrum"></p>
                         </div>
                     </div>
                 </div>
@@ -1185,12 +1514,65 @@
                             <div class="markets-tape-wrap" id="markets-tape-wrap">
                                 <div class="markets-tape-track" id="markets-tape-track" aria-live="polite"></div>
                             </div>
-                            <div class="markets-portfolio-grid" id="markets-portfolio-grid"
+                            <p class="analytics-widget-insight analytics-widget-insight--tape" data-widget-insight="markets-tape"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="row g-3 g-md-4 mb-3 markets-grid-row">
+                <div class="col-12">
+                    <div class="card bg-dark border-secondary h-100 analytics-chart-card" id="markets-grid-card">
+                        <div class="card-header d-flex align-items-center gap-2">
+                            <i class="bi bi-grid-3x3 analytics-card-icon"></i>
+                            <div class="analytics-card-titles">
+                                <span>Index correlation grid</span>
+                                <span class="analytics-card-sub">moves with your book</span>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="markets-portfolio-grid markets-portfolio-grid--compact" id="markets-portfolio-grid"
                                  aria-label="World indices vs your portfolio"></div>
+                            <p class="analytics-widget-insight" data-widget-insight="markets-grid"></p>
                             <p class="analytics-chart-caption markets-portfolio-caption">
                                 Each card shows today&rsquo;s index move and how linked it is to your book.
-                                High correlation + high geographic exposure means that region&rsquo;s headlines
-                                may hit your portfolio harder.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="card bg-dark border-secondary analytics-chart-card" id="macro-alignment-card">
+                        <div class="card-header d-flex align-items-center gap-2">
+                            <i class="bi bi-scatter-chart analytics-card-icon"></i>
+                            <div class="analytics-card-titles">
+                                <span>Macro alignment map</span>
+                                <span class="analytics-card-sub">correlation vs geographic exposure</span>
+                            </div>
+                            <button class="tip-trigger ms-auto"
+                                data-tip-title="Macro Alignment"
+                                data-tip-body="Each dot is a world index. Right = more correlated with your daily moves; up = more geographic look-through exposure to that region."
+                                data-tip-hint="Top-right = high linkage + high exposure"
+                                data-tip-icon="bi-scatter-chart">
+                                <i class="bi bi-info-circle"></i>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div id="macro-alignment-empty" class="perf-callout" style="display:none">
+                                <i class="bi bi-scatter-chart perf-callout-icon"></i>
+                                <div class="perf-callout-text">
+                                    <div class="perf-callout-title">Alignment map unavailable</div>
+                                    <div class="perf-callout-body">Macro alignment needs holdings with look-through geographic data.</div>
+                                </div>
+                            </div>
+                            <div id="macro-alignment-loading" class="analytics-skeleton" aria-hidden="true">
+                                <div class="shimmer-line"></div><div class="shimmer-line"></div>
+                            </div>
+                            <div class="analytics-chart-shell analytics-chart-shell--xl macro-alignment-shell">
+                                <canvas id="macro-alignment-chart" aria-label="Macro alignment scatter chart"></canvas>
+                            </div>
+                            <div class="macro-alignment-legend" id="macro-alignment-legend" aria-label="Index legend" hidden></div>
+                            <p class="analytics-widget-insight" data-widget-insight="macro-alignment"></p>
+                            <p class="analytics-chart-caption">
+                                Color-coded dots show where each index sits. The legend below lists every index with its correlation and geographic exposure. The <strong>top-right</strong> quadrant is where global headlines hit your portfolio hardest.
                             </p>
                         </div>
                     </div>

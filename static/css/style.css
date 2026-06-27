@@ -4320,6 +4320,176 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.55; transform: translateX(1px); 
     color: rgba(245, 250, 255, 0.68);
 }
 
+/* ── What It Covers: layman-friendly layout ─────────────────────────────── */
+.coverage-hero {
+    margin-bottom: var(--intel-section-gap);
+    padding: 0.62rem 0.68rem;
+    border-radius: 10px;
+    border: 1px solid rgba(111, 214, 240, 0.16);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012)),
+        linear-gradient(135deg, rgba(111, 214, 240, 0.07), rgba(151, 172, 236, 0.04));
+}
+
+.coverage-hero-head {
+    margin-bottom: 0.42rem;
+}
+
+.coverage-hero .coverage-type-badge {
+    margin-bottom: 0;
+}
+
+.coverage-hero-tagline {
+    margin: 0 0 0.34rem;
+    font-size: var(--ts-sm);
+    font-weight: 650;
+    line-height: 1.45;
+    color: var(--text-primary);
+}
+
+.coverage-hero-subhint {
+    margin: 0 0 0.34rem;
+    font-size: var(--ts-xs);
+    line-height: 1.45;
+    color: var(--text-tertiary);
+}
+
+.coverage-hero-summary {
+    margin: 0;
+    font-size: var(--ts-xs);
+    line-height: 1.55;
+    color: rgba(245, 250, 255, 0.68);
+}
+
+.coverage-section {
+    margin-bottom: var(--intel-section-gap);
+}
+
+.coverage-section:last-child {
+    margin-bottom: 0;
+}
+
+.coverage-divider {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0 0.28rem;
+}
+
+.coverage-divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--hairline-soft);
+}
+
+.coverage-divider-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.28rem;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.coverage-divider-label i {
+    font-size: 0.62rem;
+    opacity: 0.85;
+}
+
+.coverage-section-hint {
+    margin: 0 0 0.48rem;
+    font-size: var(--ts-xs);
+    line-height: 1.45;
+    color: var(--text-tertiary);
+}
+
+.coverage-section .sector-bars,
+.coverage-section .country-chips,
+.coverage-section .top-holdings-list,
+.coverage-section .peer-chips {
+    margin-bottom: 0;
+}
+
+.country-chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.28rem;
+}
+
+.country-chip-name {
+    max-width: 9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.country-chip-pct {
+    font-variant-numeric: tabular-nums;
+    opacity: 0.9;
+}
+
+.coverage-quality-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.38rem;
+}
+
+.coverage-quality-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.18rem;
+    padding: 0.42rem 0.48rem;
+    border-radius: 8px;
+    border: 1px solid var(--hairline-soft);
+    background: rgba(255, 255, 255, 0.02);
+    min-width: 0;
+}
+
+.coverage-quality-card--wide {
+    grid-column: 1 / -1;
+}
+
+.coverage-quality-label {
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    line-height: 1.2;
+}
+
+.coverage-quality-card strong {
+    font-size: var(--ts-xs);
+    line-height: 1.3;
+    color: var(--text-primary);
+}
+
+.coverage-extras {
+    display: flex;
+    flex-direction: column;
+    gap: var(--intel-gap);
+    margin-top: var(--intel-section-gap);
+    padding-top: var(--intel-gap);
+    border-top: 1px solid var(--hairline-soft);
+}
+
+.coverage-extras .fund-scale-spotlight {
+    margin-bottom: 0;
+}
+
+.coverage-extras .market-pulse-strip {
+    margin-bottom: 0;
+}
+
+.coverage-extras .intel-meta-row {
+    margin-top: 0;
+}
+
 .sector-bars {
     display: grid;
     gap: 0.32rem;
@@ -4767,6 +4937,13 @@ tr[data-ticker]:hover .row-chevron { opacity: 0.55; transform: translateX(1px); 
 
 .intel-theme    { animation: textSharpReveal 0.48s var(--ease) both 0.07s; }
 .intel-strategy { animation: textSharpReveal 0.54s var(--ease) both 0.12s; }
+.coverage-hero  { animation: textSharpReveal 0.48s var(--ease) both 0.05s; }
+.coverage-section { animation: intelFadeUp 0.42s var(--ease) both; }
+.coverage-section:nth-of-type(1) { animation-delay: 0.06s; }
+.coverage-section:nth-of-type(2) { animation-delay: 0.12s; }
+.coverage-section:nth-of-type(3) { animation-delay: 0.18s; }
+.coverage-section:nth-of-type(4) { animation-delay: 0.24s; }
+.coverage-extras { animation: intelFadeUp 0.40s var(--ease) both 0.28s; }
 
 /* ── WHAT IT COVERS: ETF profile spec rows ───────────────────────────────── */
 .intel-spec-rows:not(.key-drivers) .intel-spec-row {
@@ -9170,8 +9347,20 @@ body > .dashboard-pet {
 }
 
 /* Strategy text — hardcoded white rgba → theme variable */
-[data-bs-theme="light"] .intel-strategy {
+[data-bs-theme="light"] .intel-strategy,
+[data-bs-theme="light"] .coverage-hero-summary {
     color: var(--text-secondary);
+}
+
+[data-bs-theme="light"] .coverage-hero {
+    border-color: rgba(10, 120, 180, 0.14);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.78)),
+        linear-gradient(135deg, rgba(10, 120, 180, 0.06), rgba(94, 92, 230, 0.03));
+}
+
+[data-bs-theme="light"] .coverage-quality-card {
+    background: rgba(0, 0, 0, 0.02);
 }
 
 /* Sector bars — labels, tracks, percentages */
@@ -10762,31 +10951,6 @@ svg.signal-radar {
     display: block;
 }
 
-.signal-radar-slot.is-pending {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 148px;
-    margin: 0 var(--verdict-inner-x, 0.9rem);
-}
-
-.signal-radar-placeholder {
-    width: min(72%, 200px);
-    height: 118px;
-    border-radius: 12px;
-    border: 1px dashed color-mix(in srgb, var(--text-tertiary) 22%, transparent);
-    background: color-mix(in srgb, var(--text-tertiary) 5%, transparent);
-}
-
-.verdict-lazy-sentinel {
-    width: 100%;
-    height: 1px;
-    margin: 0;
-    padding: 0;
-    pointer-events: none;
-    visibility: hidden;
-}
-
 .holding-expand-fab {
     position: fixed;
     right: max(1rem, env(safe-area-inset-right, 0px));
@@ -11955,22 +12119,13 @@ svg.signal-radar {
 }
 
 /* ── Portfolio Briefing card ─────────────────────────────────────────────────
-   briefing-card / briefing-seg / briefing-quote-chip / briefing-movers
+   Executive-level design: clean type hierarchy, WSJ-style section dividers,
+   generous whitespace, tabular movers grid.
    ───────────────────────────────────────────────────────────────────────── */
 
 @keyframes briefingReveal {
-    from { opacity: 0; transform: translateY(7px); }
+    from { opacity: 0; transform: translateY(6px); }
     to   { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes briefingStripeGrow {
-    from { transform: scaleY(0); }
-    to   { transform: scaleY(1); }
-}
-
-@keyframes briefingBadgePop {
-    from { opacity: 0; transform: scale(0.88); }
-    to   { opacity: 1; transform: scale(1); }
 }
 
 @keyframes briefingIconSparkle {
@@ -11983,9 +12138,8 @@ svg.signal-radar {
     to   { opacity: 1; }
 }
 
-@keyframes briefingQuoteShimmer {
-    0%, 100% { border-color: color-mix(in srgb, var(--color-brand) 18%, transparent); }
-    50%      { border-color: color-mix(in srgb, var(--color-brand) 32%, transparent); }
+@keyframes briefingSpinIcon {
+    to { transform: rotate(360deg); }
 }
 
 .briefing-card {
@@ -11993,6 +12147,7 @@ svg.signal-radar {
     overflow: hidden;
 }
 
+/* Ambient top glow */
 .briefing-card::before {
     content: "";
     position: absolute;
@@ -12000,9 +12155,9 @@ svg.signal-radar {
     border-radius: inherit;
     pointer-events: none;
     background: radial-gradient(
-        ellipse 90% 55% at 50% -10%,
-        color-mix(in srgb, var(--color-brand) 14%, transparent) 0%,
-        transparent 70%
+        ellipse 80% 40% at 50% -5%,
+        color-mix(in srgb, var(--color-brand) 9%, transparent) 0%,
+        transparent 65%
     );
     opacity: 0;
     z-index: 0;
@@ -12010,7 +12165,7 @@ svg.signal-radar {
 
 @media (prefers-reduced-motion: no-preference) {
     .briefing-card::before {
-        animation: briefingAmbientIn 0.5s var(--ease) 0.08s both;
+        animation: briefingAmbientIn 0.5s var(--ease) 0.1s both;
     }
 }
 
@@ -12019,33 +12174,34 @@ svg.signal-radar {
     z-index: 1;
 }
 
+/* ── Card header ─── */
 .briefing-card .card-header {
     border-bottom: 1px solid var(--hairline);
-    padding: 0.6rem 1rem;
+    padding: 0.65rem 1.1rem;
     gap: 0.5rem;
     flex-wrap: wrap;
 }
 
 .briefing-card-icon {
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     color: var(--color-brand);
     flex-shrink: 0;
 }
 
 @media (prefers-reduced-motion: no-preference) {
     .briefing-card-icon {
-        animation: briefingIconSparkle 2.8s var(--ease) infinite;
+        animation: briefingIconSparkle 3s var(--ease) infinite;
     }
 }
 
 .briefing-card-title {
-    font-size: 0.82rem;
+    font-size: 0.85rem;
     font-weight: 600;
     color: var(--text-primary);
     letter-spacing: 0.01em;
 }
 
-/* ── Refresh button ─────────────────────────────── */
+/* ── Refresh button ─── */
 .briefing-refresh-btn {
     display: inline-flex;
     align-items: center;
@@ -12061,6 +12217,7 @@ svg.signal-radar {
     cursor: pointer;
     transition: background 0.15s var(--ease), color 0.15s var(--ease);
 }
+
 .briefing-refresh-btn:hover {
     background: var(--surface-strong);
     color: var(--text-primary);
@@ -12071,11 +12228,8 @@ svg.signal-radar {
         animation: briefingSpinIcon 0.6s linear infinite;
     }
 }
-@keyframes briefingSpinIcon {
-    to { transform: rotate(360deg); }
-}
 
-/* ── Segmented control (Apple pill) ─────────────── */
+/* ── Segmented control ─── */
 .briefing-seg {
     display: inline-flex;
     align-items: center;
@@ -12101,18 +12255,14 @@ svg.signal-radar {
     white-space: nowrap;
     transition: color 0.22s var(--ease), background 0.22s var(--ease);
 }
+
 .briefing-seg-btn:hover:not(:disabled) {
     color: var(--text-primary);
 }
+
 .briefing-seg-btn:disabled {
     opacity: 0.38;
     cursor: not-allowed;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-    .briefing-seg-btn {
-        transition: color 0.22s var(--ease), background 0.22s var(--spring);
-    }
 }
 
 .briefing-seg-btn--active {
@@ -12122,18 +12272,9 @@ svg.signal-radar {
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-    .briefing-seg-btn--active {
-        transition: background 0.22s var(--spring),
-                    color 0.22s var(--ease),
-                    box-shadow 0.22s var(--ease),
-                    transform 0.22s var(--spring);
-    }
-}
-
-/* ── Card body ───────────────────────────────────── */
+/* ── Card body ─── */
 .briefing-card-body {
-    padding: 0.85rem 1rem;
+    padding: 1.1rem 1.25rem 1rem;
     min-height: 5.5rem;
 }
 
@@ -12141,7 +12282,7 @@ svg.signal-radar {
     transition: opacity 0.18s var(--ease);
 }
 
-/* ── Skeleton shimmer ────────────────────────────── */
+/* ── Skeleton shimmer ─── */
 .briefing-skeleton {
     padding: 0.15rem 0;
 }
@@ -12155,302 +12296,211 @@ svg.signal-radar {
 .briefing-skeleton .shimmer-line:nth-child(3) { animation-delay: 160ms; }
 .briefing-skeleton .shimmer-line:nth-child(4) { animation-delay: 240ms; }
 
-/* ── AI mode layout ──────────────────────────────── */
-.briefing-ai-wrap {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-}
-
-.briefing-section {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-    .briefing-enter .briefing-section {
-        animation: briefingReveal 0.34s var(--spring) both;
-        animation-delay: calc(var(--briefing-delay, 0) * 1ms);
-    }
-
-    .briefing-enter .briefing-section-badge {
-        animation: briefingBadgePop 0.3s var(--spring) both;
-        animation-delay: calc(var(--briefing-delay, 0) * 1ms + 20ms);
-    }
-
-    .briefing-enter .briefing-health-text {
-        animation: briefingReveal 0.32s var(--ease) both;
-        animation-delay: calc(var(--briefing-delay, 0) * 1ms + 45ms);
-    }
-
-    .briefing-enter .briefing-bullet-item {
-        animation: briefingReveal 0.28s var(--ease) both;
-        animation-delay: calc(var(--briefing-delay, 0) * 1ms);
-    }
-}
-
-/* Pill badge — replaces the flat ALL-CAPS label */
-.briefing-section-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.28rem;
-    padding: 0.14rem 0.52rem;
-    border-radius: 20px;
-    font-size: 0.62rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    border: 1px solid var(--hairline);
-    background: var(--surface);
-    color: var(--text-secondary);
-    width: fit-content;
-    line-height: 1.4;
-    transition: transform 0.2s var(--spring), box-shadow 0.2s var(--ease);
-}
-
-.briefing-section-badge:hover {
-    transform: scale(1.04);
-}
-
-.briefing-section-badge--health:hover {
-    box-shadow: 0 0 12px color-mix(in srgb, var(--brand-periwinkle) 22%, transparent);
-}
-
-.briefing-section-badge--movers:hover {
-    box-shadow: 0 0 12px color-mix(in srgb, var(--accent-cyan) 22%, transparent);
-}
-
-.briefing-section-badge--obs:hover {
-    box-shadow: 0 0 12px color-mix(in srgb, #ff9f0a 22%, transparent);
-}
-
-.briefing-section-badge--health {
-    color: var(--brand-periwinkle);
-    background: color-mix(in srgb, var(--brand-periwinkle) 7%, transparent);
-    border-color: color-mix(in srgb, var(--brand-periwinkle) 22%, transparent);
-}
-
-.briefing-section-badge--movers {
-    color: var(--accent-cyan);
-    background: color-mix(in srgb, var(--accent-cyan) 7%, transparent);
-    border-color: color-mix(in srgb, var(--accent-cyan) 22%, transparent);
-}
-
-.briefing-section-badge--obs {
-    color: #ff9f0a;
-    background: color-mix(in srgb, #ff9f0a 7%, transparent);
-    border-color: color-mix(in srgb, #ff9f0a 24%, transparent);
-}
-
-/* Health text — left accent stripe for visual weight */
-.briefing-health-text {
-    font-size: 0.84rem;
-    color: var(--text-primary);
-    margin: 0;
-    line-height: 1.6;
-    padding-left: 0.65rem;
-    position: relative;
-}
-
-.briefing-health-text::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 0.1rem;
-    bottom: 0.1rem;
-    width: 2px;
-    border-radius: 2px;
-    background: color-mix(in srgb, var(--brand-periwinkle) 55%, transparent);
-    transform-origin: top;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-    .briefing-enter .briefing-health-text::before {
-        animation: briefingStripeGrow 0.38s var(--ease) both;
-        animation-delay: calc(var(--briefing-delay, 0) * 1ms + 50ms);
-    }
-}
-
-/* ── Bullet lists ─────────────────── */
-.briefing-bullet-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-}
-
-.briefing-bullet-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.42rem;
-    font-size: 0.79rem;
-    color: var(--text-secondary);
-    line-height: 1.52;
-    border-radius: 6px;
-    padding: 0.18rem 0.35rem;
-    margin: -0.18rem -0.35rem;
-    transition: transform 0.18s var(--spring), color 0.18s var(--ease),
-                background 0.18s var(--ease);
-}
-
-.briefing-bullet-item:hover {
-    transform: translateX(4px);
-    color: var(--text-primary);
-    background: color-mix(in srgb, var(--text-primary) 4%, transparent);
-}
-
-/* Icon-bullet: aligned to cap-height of the text */
-.briefing-bullet-icon {
-    flex-shrink: 0;
-    font-size: 0.55rem;
-    margin-top: 0.35rem;
-}
-
-.briefing-bullet-icon--driver {
-    color: var(--brand-periwinkle);
-}
-
-.briefing-bullet-icon--obs {
-    color: #ff9f0a;
-}
-
-/* Inline bold ticker inside AI bullet text */
-.briefing-inline-ticker {
-    font-weight: 700;
-    color: var(--text-primary);
-    transition: color 0.18s var(--ease);
-}
-
-.briefing-bullet-item:hover .briefing-inline-ticker {
-    color: var(--color-brand);
-}
-
-/* ── Quote chip ──────────────────────────────────── */
-.briefing-quote-chip {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.45rem;
-    padding: 0.5rem 0.75rem;
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--color-brand) 8%, transparent);
-    border: 1px solid color-mix(in srgb, var(--color-brand) 18%, transparent);
-    margin-top: 0.2rem;
-    transition: transform 0.22s var(--spring), box-shadow 0.22s var(--ease);
-}
-
-.briefing-quote-chip:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 14px color-mix(in srgb, var(--color-brand) 12%, transparent);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-    .briefing-enter .briefing-quote-chip {
-        animation: briefingReveal 0.36s var(--spring) both,
-                   briefingQuoteShimmer 2.4s var(--ease) 0.5s infinite;
-    }
-}
-
-.briefing-quote-icon {
-    font-size: 0.7rem;
-    color: var(--color-brand);
-    margin-top: 0.12rem;
-    flex-shrink: 0;
-}
-
-.briefing-quote-text {
-    font-size: 0.78rem;
-    font-style: italic;
-    color: var(--text-primary);
-    flex: 1;
-    line-height: 1.45;
-}
-
-.briefing-source-note {
-    font-size: 0.62rem;
-    color: var(--text-tertiary);
-    white-space: nowrap;
-    margin-top: 0.1rem;
-    align-self: flex-end;
-}
-
-/* ── Local mode layout (mirrors AI sections) ────── */
+/* ── Outer wrappers ─── */
+.briefing-ai-wrap,
 .briefing-local-wrap {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;   /* matches .briefing-ai-wrap */
+    gap: 0;
 }
 
-/* Summary badge — neutral, no tint */
-.briefing-section-badge--summary {
-    color: var(--text-secondary);
-    background: var(--surface);
-    border-color: var(--hairline-hover);
+/* ── Lead / headline statement ─── */
+.briefing-lead {
+    font-size: 0.97rem;
+    font-weight: 400;
+    color: var(--text-primary);
+    line-height: 1.7;
+    margin: 0 0 1rem;
+    letter-spacing: 0.005em;
 }
 
-/* Directional caret bullets — gain / loss colour */
-.briefing-bullet-icon--gain {
-    color: var(--color-gain);
-    font-size: 0.58rem;
-    margin-top: 0.38rem;
-}
-.briefing-bullet-icon--loss {
-    color: var(--color-loss);
-    font-size: 0.58rem;
-    margin-top: 0.38rem;
-}
-
-/* Single-line mover row */
-.briefing-mover-inline {
+/* ── Section divider — editorial style ─── */
+.briefing-divider {
     display: flex;
-    align-items: baseline;
-    flex-wrap: wrap;
-    gap: 0.3rem 0.38rem;
+    align-items: center;
+    gap: 0.55rem;
+    margin: 0 0 0.55rem;
+}
+
+.briefing-divider::after {
+    content: "";
     flex: 1;
-    min-width: 0;
+    height: 1px;
+    background: var(--hairline);
+}
+
+.briefing-divider-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.28rem;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.briefing-divider-label i {
+    font-size: 0.6rem;
+    opacity: 0.85;
+}
+
+.briefing-divider--movers .briefing-divider-label {
+    color: var(--accent-cyan);
+}
+
+.briefing-divider--movers::after {
+    background: color-mix(in srgb, var(--accent-cyan) 18%, var(--hairline));
+}
+
+.briefing-divider--insights .briefing-divider-label {
+    color: #e6920a;
+}
+
+.briefing-divider--insights::after {
+    background: color-mix(in srgb, #e6920a 18%, var(--hairline));
+}
+
+/* ── Driver list (AI "what moved") ─── */
+.briefing-driver-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.18rem;
+    margin-bottom: 0.85rem;
+}
+
+.briefing-driver-item {
+    font-size: 0.83rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    padding: 0.2rem 0.2rem 0.2rem 0.75rem;
+    border-left: 2px solid color-mix(in srgb, var(--accent-cyan) 30%, transparent);
+    transition: color 0.18s var(--ease), border-color 0.18s var(--ease);
+}
+
+.briefing-driver-item:hover {
+    color: var(--text-primary);
+    border-left-color: var(--accent-cyan);
+}
+
+/* ── Insight list (AI observations) ─── */
+.briefing-insight-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.18rem;
+    margin-bottom: 0.85rem;
+}
+
+.briefing-insight-item {
+    font-size: 0.83rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    padding: 0.2rem 0.2rem 0.2rem 0.75rem;
+    border-left: 2px solid color-mix(in srgb, #e6920a 30%, transparent);
+    transition: color 0.18s var(--ease), border-color 0.18s var(--ease);
+}
+
+.briefing-insight-item:hover {
+    color: var(--text-primary);
+    border-left-color: #e6920a;
+}
+
+/* Inline bold ticker */
+.briefing-inline-ticker {
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+/* ── Quote footer ─── */
+.briefing-footer {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.75rem;
+    padding: 0.55rem 0.8rem;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--color-brand) 5%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-brand) 13%, transparent);
+}
+
+.briefing-footer-quote {
+    font-size: 0.8rem;
+    font-style: italic;
+    color: var(--text-secondary);
+    flex: 1;
+    line-height: 1.55;
+}
+
+.briefing-source-note {
+    font-size: 0.59rem;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+    flex-shrink: 0;
+    letter-spacing: 0.02em;
+}
+
+/* ── Local mode: tabular movers grid ─── */
+.briefing-mover-grid {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0.25rem;
+}
+
+.briefing-mover-row {
+    display: grid;
+    grid-template-columns: 3.6rem 3.8rem 4.2rem 1fr;
+    align-items: baseline;
+    gap: 0 0.5rem;
+    padding: 0.35rem 0.3rem;
+    border-bottom: 1px solid var(--hairline);
+    transition: background 0.15s var(--ease);
+}
+
+.briefing-mover-row:first-child {
+    border-top: none;
+}
+
+.briefing-mover-row:last-child {
+    border-bottom: none;
+}
+
+.briefing-mover-row:hover {
+    background: color-mix(in srgb, var(--text-primary) 3%, transparent);
 }
 
 .briefing-mover-ticker {
     font-weight: 700;
+    font-size: 0.83rem;
     color: var(--text-primary);
-    font-size: 0.79rem;
-    letter-spacing: 0.03em;
-    flex-shrink: 0;
-    min-width: 2.8rem;
-}
-
-.briefing-mover-nums {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 0.3rem;
-    flex-shrink: 0;
+    letter-spacing: 0.04em;
 }
 
 .briefing-mover-change {
     font-variant-numeric: tabular-nums;
     font-weight: 600;
-    font-size: 0.79rem;
+    font-size: 0.83rem;
+    text-align: right;
 }
 
 .briefing-mover-dollar {
     font-variant-numeric: tabular-nums;
-    font-weight: 500;
-    font-size: 0.74rem;
+    font-weight: 400;
+    font-size: 0.79rem;
     color: var(--text-tertiary);
+    text-align: right;
 }
 
-/* First-sentence context — muted, wraps if needed */
-.briefing-mover-tag {
-    font-size: 0.73rem;
+.briefing-mover-context {
+    font-size: 0.76rem;
     color: var(--text-tertiary);
     line-height: 1.45;
-    flex: 1;
-    min-width: 9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-/* ── Offline note + error ────────────────────────── */
+/* ── Offline / error ─── */
 .briefing-offline-note {
     font-size: 0.63rem;
     color: var(--text-tertiary);
@@ -12468,16 +12518,44 @@ svg.signal-radar {
     font-style: italic;
 }
 
-/* ── Reduced-motion gate: strip ALL transitions/animations ── */
+/* ── Staggered enter animations ─── */
+@media (prefers-reduced-motion: no-preference) {
+    .briefing-enter .briefing-lead {
+        animation: briefingReveal 0.38s var(--ease) both;
+    }
+
+    .briefing-enter .briefing-divider {
+        animation: briefingReveal 0.3s var(--ease) both;
+        animation-delay: calc(var(--briefing-delay, 0) * 1ms);
+    }
+
+    .briefing-enter .briefing-driver-item,
+    .briefing-enter .briefing-insight-item {
+        animation: briefingReveal 0.26s var(--ease) both;
+        animation-delay: calc(var(--briefing-delay, 0) * 1ms);
+    }
+
+    .briefing-enter .briefing-footer {
+        animation: briefingReveal 0.34s var(--ease) both;
+        animation-delay: calc(var(--briefing-delay, 0) * 1ms);
+    }
+
+    .briefing-enter .briefing-mover-row {
+        animation: briefingReveal 0.26s var(--ease) both;
+        animation-delay: calc(var(--briefing-delay, 0) * 1ms);
+    }
+}
+
+/* ── Reduced-motion gate ─── */
 @media (prefers-reduced-motion: reduce) {
     .briefing-card::before,
     .briefing-card-icon,
-    .briefing-enter .briefing-section,
-    .briefing-enter .briefing-section-badge,
-    .briefing-enter .briefing-health-text,
-    .briefing-enter .briefing-health-text::before,
-    .briefing-enter .briefing-bullet-item,
-    .briefing-enter .briefing-quote-chip,
+    .briefing-enter .briefing-lead,
+    .briefing-enter .briefing-divider,
+    .briefing-enter .briefing-driver-item,
+    .briefing-enter .briefing-insight-item,
+    .briefing-enter .briefing-footer,
+    .briefing-enter .briefing-mover-row,
     .briefing-skeleton .shimmer-line {
         animation: none !important;
     }
@@ -12485,21 +12563,22 @@ svg.signal-radar {
     .briefing-seg-btn,
     .briefing-seg-btn--active,
     .briefing-refresh-btn,
-    .briefing-quote-chip,
-    .briefing-bullet-item,
-    .briefing-section-badge {
+    .briefing-footer,
+    .briefing-driver-item,
+    .briefing-insight-item,
+    .briefing-mover-row {
         transition: none !important;
         animation: none !important;
     }
 }
 
-/* ── Light-mode overrides ─────────────────────────── */
+/* ── Light-mode overrides ─── */
 [data-bs-theme="light"] .briefing-seg-btn--active {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
-[data-bs-theme="light"] .briefing-quote-chip {
-    border-color: color-mix(in srgb, var(--color-brand) 25%, transparent);
+[data-bs-theme="light"] .briefing-footer {
+    border-color: color-mix(in srgb, var(--color-brand) 20%, transparent);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -12681,6 +12760,55 @@ svg.signal-radar {
 .analytics-chart-shell--lg {
     min-height: 280px;
     height: 280px;
+}
+
+.analytics-chart-shell--xl {
+    min-height: 380px;
+    height: 380px;
+}
+
+/* Macro alignment — allow dot labels room; legend sits below the canvas */
+.macro-alignment-shell {
+    overflow: visible;
+    padding: 0.35rem 0.15rem 0.15rem;
+}
+
+.macro-alignment-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.55rem;
+    margin-top: 0.65rem;
+    padding: 0.55rem 0.65rem;
+    border-radius: 10px;
+    border: 1px solid var(--hairline-soft);
+    background: color-mix(in srgb, var(--surface-elevated) 55%, transparent);
+}
+
+.macro-alignment-legend[hidden] {
+    display: none !important;
+}
+
+.macro-alignment-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.68rem;
+    line-height: 1.25;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.macro-alignment-legend-dot {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.macro-alignment-legend-meta {
+    font-size: 0.6rem;
+    color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
 }
 
 .analytics-chart-shell--contrib {
@@ -13262,6 +13390,7 @@ svg.signal-radar {
 }
 
 .correlation-chart-frame-wrap {
+    position: relative;
     width: 100%;
     min-width: 0;
 }
@@ -13315,12 +13444,8 @@ svg.signal-radar {
     margin-top: var(--corr-label-gap, 12px);
     height: var(--corr-x-label-height, 2.5rem);
     flex-shrink: 0;
-    overflow: visible;
+    overflow: hidden;
     box-sizing: content-box;
-}
-
-.correlation-x-labels:not(.correlation-x-labels--horizontal) {
-    padding-bottom: 0.65rem;
 }
 
 .correlation-axis-label {
@@ -13391,19 +13516,23 @@ svg.signal-radar {
 }
 
 .correlation-cell-tip {
-    position: absolute;
-    z-index: 4;
+    position: fixed;
+    z-index: 9999;
     pointer-events: none;
-    padding: 0.35rem 0.55rem;
-    border-radius: 8px;
+    padding: 0.42rem 0.62rem;
+    border-radius: 10px;
     font-size: 0.68rem;
+    font-weight: 600;
     line-height: 1.35;
+    letter-spacing: 0.01em;
     color: var(--text-primary);
-    background: color-mix(in srgb, var(--surface-strong) 92%, transparent);
+    background: var(--popover-surface);
     border: 1px solid var(--hairline);
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--shadow-float, 0 8px 24px rgba(0, 0, 0, 0.28));
+    backdrop-filter: blur(18px) saturate(170%);
+    -webkit-backdrop-filter: blur(18px) saturate(170%);
     white-space: nowrap;
-    transform: translate(-50%, calc(-100% - 8px));
+    transform: translate(-50%, calc(-100% - 10px));
 }
 
 .correlation-scale {
@@ -13747,3 +13876,776 @@ svg.signal-radar {
     to   { transform: translateX(-50%); }
 }
 
+/* ── Widget AI tip cards (per-card) ─────────────────────────────── */
+.analytics-widget-insight {
+    margin: 0.7rem 0 0;
+    padding: 0.6rem 0.75rem;
+    border-radius: 10px;
+    font-size: 0.72rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+    background: color-mix(in srgb, var(--surface-elevated) 70%, transparent);
+    border: 1px solid var(--hairline-soft);
+    transition: background 0.25s var(--ease), border-color 0.25s var(--ease);
+}
+
+.analytics-widget-insight:empty,
+.analytics-widget-insight[hidden] {
+    display: none !important;
+}
+
+/* Local intel mode */
+.analytics-widget-insight[data-insight-mode="local"] {
+    border-color: color-mix(in srgb, var(--accent-cyan) 22%, var(--hairline-soft));
+    background: color-mix(in srgb, var(--accent-cyan) 4%, var(--surface-elevated));
+}
+
+/* AI mode — periwinkle tint */
+.analytics-widget-insight[data-insight-mode="ai"] {
+    border-color: color-mix(in srgb, var(--color-brand) 32%, var(--hairline-soft));
+    background: color-mix(in srgb, var(--color-brand) 7%, var(--surface-elevated));
+}
+
+/* ── Tip card sub-elements ──────────────────────────────────────── */
+
+/* Eyebrow label: "AI Tip" or "Local Intel" */
+.wi-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.28rem;
+    font-size: 0.60rem;
+    font-weight: 660;
+    text-transform: uppercase;
+    letter-spacing: 0.075em;
+    line-height: 1;
+    margin-bottom: 0.38rem;
+    animation: wi-slide-in 0.28s var(--ease) both;
+}
+
+.analytics-widget-insight[data-insight-mode="ai"] .wi-eyebrow {
+    color: var(--brand-periwinkle);
+}
+.analytics-widget-insight[data-insight-mode="local"] .wi-eyebrow {
+    color: var(--accent-cyan);
+}
+
+.wi-eyebrow i {
+    font-size: 0.62rem;
+    flex-shrink: 0;
+}
+
+/* Educational headline */
+.wi-headline {
+    display: block;
+    font-size: 0.76rem;
+    font-weight: 660;
+    color: var(--text-primary);
+    line-height: 1.3;
+    margin-bottom: 0.22rem;
+    animation: wi-slide-in 0.3s var(--ease) 0.04s both;
+}
+
+/* Personalized insight */
+.wi-text {
+    display: block;
+    font-size: 0.71rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    animation: wi-slide-in 0.32s var(--ease) 0.08s both;
+}
+
+@keyframes wi-slide-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.analytics-widget-insight--table {
+    margin: 0.5rem 0.75rem 0.75rem;
+}
+
+.analytics-widget-insight--tape {
+    margin: 0.5rem 0.75rem 0.75rem;
+}
+
+/* ── Layman notes & gauge zones ───────────────────────────────── */
+.analytics-layman-note {
+    margin: 0.55rem 0 0;
+    padding: 0.5rem 0.65rem;
+    border-radius: 8px;
+    font-size: 0.74rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    background: color-mix(in srgb, var(--accent-cyan) 6%, var(--surface));
+    border: 1px solid color-mix(in srgb, var(--accent-cyan) 18%, var(--hairline-soft));
+    text-align: center;
+    width: 100%;
+}
+
+.analytics-layman-note strong {
+    color: var(--text-primary);
+    font-weight: 650;
+}
+
+.analytics-layman-note--compact {
+    text-align: left;
+}
+
+.analytics-gauge-zones {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.35rem;
+    width: 100%;
+    max-width: 18rem;
+    margin-top: 0.35rem;
+}
+
+.gauge-zone {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.1rem;
+    padding: 0.3rem 0.2rem;
+    border-radius: 8px;
+    font-size: 0.62rem;
+    color: var(--text-tertiary);
+    text-align: center;
+    border: 1px solid transparent;
+}
+
+.gauge-zone-swatch {
+    display: block;
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 999px;
+}
+
+.gauge-zone--defensive .gauge-zone-swatch { background: var(--accent-blue); }
+.gauge-zone--market .gauge-zone-swatch { background: var(--accent-cyan); }
+.gauge-zone--aggressive .gauge-zone-swatch { background: var(--accent-red); }
+
+.gauge-zone-label {
+    font-weight: 650;
+    color: var(--text-secondary);
+    font-size: 0.65rem;
+}
+
+.gauge-zone-range {
+    font-size: 0.58rem;
+    opacity: 0.85;
+}
+
+.gauge-zone.is-active {
+    background: var(--surface-elevated);
+    border-color: var(--hairline);
+    color: var(--text-primary);
+}
+
+.gauge-zone.is-active .gauge-zone-label {
+    color: var(--text-primary);
+}
+
+/* ── Vol level badge & zones ──────────────────────────────────── */
+.rolling-vol-summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+}
+
+.vol-level-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.18rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    border: 1px solid var(--hairline-soft);
+}
+
+.vol-level-badge--calm {
+    color: var(--accent-green);
+    background: color-mix(in srgb, var(--accent-green) 12%, transparent);
+    border-color: color-mix(in srgb, var(--accent-green) 35%, transparent);
+}
+
+.vol-level-badge--moderate {
+    color: var(--accent-cyan);
+    background: color-mix(in srgb, var(--accent-cyan) 12%, transparent);
+    border-color: color-mix(in srgb, var(--accent-cyan) 35%, transparent);
+}
+
+.vol-level-badge--choppy {
+    color: var(--accent-yellow);
+    background: color-mix(in srgb, var(--accent-yellow) 12%, transparent);
+    border-color: color-mix(in srgb, var(--accent-yellow) 35%, transparent);
+}
+
+.rolling-vol-trend {
+    font-size: 0.65rem;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+}
+
+.rolling-vol-trend--up { color: var(--accent-red); }
+.rolling-vol-trend--down { color: var(--accent-green); }
+
+.vol-zone-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.65rem;
+    margin-bottom: 0.5rem;
+}
+
+.vol-zone {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.65rem;
+    color: var(--text-tertiary);
+    padding: 0.15rem 0.4rem;
+    border-radius: 6px;
+    border: 1px solid transparent;
+}
+
+.vol-zone i {
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 2px;
+    display: inline-block;
+}
+
+.vol-zone--calm i { background: var(--accent-green); }
+.vol-zone--moderate i { background: var(--accent-cyan); }
+.vol-zone--choppy i { background: var(--accent-yellow); }
+
+.vol-zone small {
+    opacity: 0.8;
+    margin-left: 0.1rem;
+}
+
+.vol-zone.is-active {
+    color: var(--text-primary);
+    background: var(--surface-elevated);
+    border-color: var(--hairline-soft);
+    font-weight: 600;
+}
+
+/* ── Benchmark comparison ─────────────────────────────────────── */
+.benchmark-range-tabs,
+.benchmark-stat-row {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+}
+
+.benchmark-range-btn {
+    padding: 0.2rem 0.55rem;
+    border: 1px solid var(--hairline-soft);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.68rem;
+    font-weight: 600;
+}
+
+.benchmark-range-btn.is-active {
+    background: var(--surface-elevated);
+    color: var(--text-primary);
+    border-color: var(--hairline);
+}
+
+.benchmark-stat-row {
+    margin-bottom: 0.65rem;
+    gap: 0.5rem;
+}
+
+.benchmark-stat {
+    flex: 1 1 5.5rem;
+    min-width: 0;
+    padding: 0.45rem 0.55rem;
+    border-radius: 10px;
+    background: var(--surface);
+    border: 1px solid var(--hairline-soft);
+}
+
+.benchmark-stat-label {
+    display: block;
+    font-size: 0.62rem;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.benchmark-stat-value {
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+
+/* ── Return calendar ──────────────────────────────────────────── */
+.return-calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(3.4rem, 1fr));
+    gap: 0.35rem;
+}
+
+.return-cal-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 3.6rem;
+    padding: 0.25rem;
+    border-radius: 8px;
+    border: 1px solid var(--hairline-soft);
+    background: var(--surface);
+    text-align: center;
+}
+
+.return-cal-tile--up {
+    background: color-mix(in srgb, var(--accent-green) 14%, var(--surface));
+    border-color: color-mix(in srgb, var(--accent-green) 35%, transparent);
+}
+
+.return-cal-tile--down {
+    background: color-mix(in srgb, var(--accent-red) 12%, var(--surface));
+    border-color: color-mix(in srgb, var(--accent-red) 30%, transparent);
+}
+
+.return-cal-month {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.return-cal-year,
+.return-cal-pct {
+    font-size: 0.58rem;
+    color: var(--text-tertiary);
+}
+
+.return-cal-pct {
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+/* ── Sector tilt ──────────────────────────────────────────────── */
+.sector-tilt-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.sector-tilt-row {
+    display: grid;
+    grid-template-columns: minmax(0, 6.5rem) 3rem 1fr 3rem 3.8rem;
+    gap: 0.4rem;
+    align-items: center;
+}
+
+.sector-tilt-name {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sector-tilt-track {
+    position: relative;
+    height: 0.45rem;
+    border-radius: 999px;
+    background: var(--hairline-soft);
+}
+
+.sector-tilt-track::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: -2px;
+    bottom: -2px;
+    width: 1px;
+    background: var(--hairline);
+}
+
+.sector-tilt-bar {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    border-radius: 999px;
+    max-width: 50%;
+}
+
+.sector-tilt-bar--over {
+    left: 50%;
+    background: var(--accent-green);
+}
+
+.sector-tilt-bar--under {
+    right: 50%;
+    background: var(--accent-red);
+}
+
+.sector-tilt-port,
+.sector-tilt-bench {
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-align: right;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+}
+
+.sector-tilt-port { color: var(--accent-cyan); }
+.sector-tilt-bench { color: var(--text-tertiary); }
+
+.sector-tilt-val {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-align: right;
+}
+
+.sector-tilt-legend {
+    align-items: center;
+}
+
+.sector-tilt-legend-item {
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+.sector-tilt-legend-item--port { color: var(--accent-cyan); }
+.sector-tilt-legend-item--bench { color: var(--text-tertiary); }
+
+/* ── Top underlying ─────────────────────────────────────────── */
+.top-underlying-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.top-underlying-row {
+    display: grid;
+    grid-template-columns: 2.8rem minmax(0, 1fr) 2.8rem;
+    grid-template-rows: auto auto;
+    gap: 0.15rem 0.4rem;
+    align-items: center;
+}
+
+.top-underlying-ticker {
+    font-weight: 700;
+    font-size: 0.78rem;
+}
+
+.top-underlying-name {
+    grid-column: 2 / -1;
+    font-size: 0.65rem;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.top-underlying-track {
+    grid-column: 2;
+    height: 0.35rem;
+    border-radius: 999px;
+    background: var(--hairline-soft);
+    overflow: hidden;
+}
+
+.top-underlying-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--accent-cyan), var(--accent-green));
+}
+
+.top-underlying-pct {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-align: right;
+}
+
+/* ── Analytics description blurb ─────────────────────────────── */
+.analytics-blurb {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 0.75rem;
+}
+
+/* ── Conviction gap ───────────────────────────────────────────── */
+.cg-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.68rem;
+    color: var(--text-secondary);
+    background: var(--surface);
+    border: 1px solid var(--hairline-soft);
+    border-radius: 8px;
+    padding: 0.35rem 0.6rem;
+    margin-bottom: 0.6rem;
+}
+
+.cg-summary-stat strong {
+    color: var(--text-primary);
+}
+
+.cg-summary-dot {
+    color: var(--text-tertiary);
+}
+
+.conviction-gap-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.conviction-gap-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.28rem;
+    padding: 0.6rem 0.65rem;
+    border-radius: 10px;
+    background: var(--surface);
+    border: 1px solid var(--hairline-soft);
+}
+
+.conviction-gap-top {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.conviction-gap-ticker {
+    font-weight: 700;
+    font-size: 0.82rem;
+    min-width: 2.8rem;
+}
+
+.conviction-gap-badge {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 0.1rem 0.4rem;
+    border-radius: 5px;
+    border: 1px solid currentColor;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+}
+
+.conviction-gap-alloc {
+    font-size: 0.67rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-left: auto;
+}
+
+.conviction-gap-desc {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    line-height: 1.45;
+}
+
+.conviction-gap-footer {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-top: 0.05rem;
+}
+
+.conviction-gap-conf {
+    font-size: 0.63rem;
+    font-weight: 600;
+}
+
+/* ── Confidence spectrum ──────────────────────────────────────── */
+.confidence-spectrum-bar {
+    display: flex;
+    height: 0.8rem;
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--hairline-soft);
+    margin-bottom: 0.85rem;
+}
+
+.confidence-spectrum-seg {
+    min-width: 2px;
+    transition: width 0.35s ease;
+}
+
+/* band rows */
+.cs-bands {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    margin-bottom: 0.75rem;
+}
+
+.cs-band {
+    display: flex;
+    flex-direction: column;
+    gap: 0.18rem;
+}
+
+.cs-band-empty {
+    opacity: 0.38;
+}
+
+.cs-band-header {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.cs-band-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.cs-band-range {
+    font-size: 0.68rem;
+    font-weight: 700;
+    min-width: 3rem;
+    color: var(--text-primary);
+}
+
+.cs-band-name {
+    font-size: 0.66rem;
+    color: var(--text-secondary);
+}
+
+.cs-band-pct {
+    font-size: 0.72rem;
+    font-weight: 700;
+    margin-left: auto;
+}
+
+.cs-band-hint {
+    font-size: 0.63rem;
+    color: var(--text-tertiary);
+    padding-left: 0.9rem;
+    line-height: 1.3;
+}
+
+.cs-band-tickers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.22rem;
+    padding-left: 0.9rem;
+    padding-top: 0.1rem;
+}
+
+.cs-ticker-pill {
+    font-size: 0.6rem;
+    font-weight: 600;
+    padding: 0.08rem 0.38rem;
+    border-radius: 4px;
+    background: var(--hairline-soft);
+    color: var(--text-secondary);
+    cursor: default;
+    letter-spacing: 0.02em;
+}
+
+.cs-ticker-more {
+    font-size: 0.6rem;
+    color: var(--text-tertiary);
+    padding: 0.08rem 0.2rem;
+    align-self: center;
+}
+
+/* avg row */
+.cs-avg-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-top: 0.55rem;
+    border-top: 1px solid var(--hairline-soft);
+}
+
+.cs-avg-label {
+    font-size: 0.67rem;
+    color: var(--text-secondary);
+}
+
+.cs-avg-value {
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.cs-avg-note {
+    font-size: 0.62rem;
+    color: var(--text-tertiary);
+    margin-left: auto;
+    text-align: right;
+    max-width: 11rem;
+    line-height: 1.3;
+}
+
+/* ── Markets 2×2 layout ───────────────────────────────────────── */
+.markets-grid-row {
+    align-items: stretch;
+}
+
+.markets-portfolio-grid--compact {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
+    gap: 0.55rem;
+    padding-right: 0.15rem;
+}
+
+.markets-portfolio-grid--compact .markets-portfolio-tile {
+    padding: 0.65rem 0.75rem;
+}
+
+@media (max-width: 575.98px) {
+    .benchmark-stat-row {
+        flex-direction: column;
+    }
+
+    .benchmark-stat {
+        width: 100%;
+    }
+
+    .return-calendar-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+
+    .sector-tilt-row {
+        grid-template-columns: minmax(0, 5rem) 2.6rem 1fr 2.6rem 3.2rem;
+    }
+
+    .conviction-gap-row {
+        grid-template-columns: 2.8rem 1fr auto;
+    }
+
+    .markets-portfolio-grid--compact {
+        grid-template-columns: 1fr;
+        max-height: none;
+    }
+
+    .analytics-chart-shell--md {
+        min-height: 10.5rem;
+    }
+
+    .analytics-chart-shell--sm {
+        min-height: 8rem;
+    }
+}
+
+@media (min-width: 992px) {
+    .markets-grid-row > .col-lg-6 {
+        display: flex;
+    }
+
+    .markets-grid-row > .col-lg-6 > .card {
+        width: 100%;
+    }
+}

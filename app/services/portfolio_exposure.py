@@ -38,9 +38,18 @@ def _aggregate_weights(
             weight = float(entry.get("weight") or 0)
             if not name or weight <= 0:
                 continue
+            # Guard: individual holding's sector/country weights should be ≤100 %.
+            # A value >100 usually means the source already multiplied by 100 twice.
+            if weight > 100:
+                weight = 100.0
             contribution = alloc * weight / 100.0
             totals[name] = totals.get(name, 0.0) + contribution
     rows = [{"name": k, "weight_pct": round(v, 1)} for k, v in totals.items()]
+    # Individual look-through entries must not exceed total portfolio weight (100 %).
+    rows = [r for r in rows if r["weight_pct"] > 0]
+    for r in rows:
+        if r["weight_pct"] > 100:
+            r["weight_pct"] = 100.0
     rows.sort(key=lambda x: x["weight_pct"], reverse=True)
     return rows
 
@@ -182,8 +191,8 @@ def build_portfolio_exposure(
         flags.append("Hidden duplication detected across holdings")
 
     return {
-        "sector_exposure": sector_exposure[:8],
-        "country_exposure": country_exposure[:8],
+        "sector_exposure": sector_exposure[:11],
+        "country_exposure": country_exposure[:12],
         "theme_overlap": theme_overlap,
         "duplicate_flags": duplicate_flags,
         "concentration_hhi": hhi,

@@ -14,6 +14,14 @@ from app.services.portfolio_analytics import (
     compute_drawdown,
     compute_contribution,
     compute_market_context,
+    compute_benchmark_comparison,
+    compute_return_calendar,
+    compute_portfolio_beta,
+    compute_rolling_volatility,
+    compute_sector_tilt,
+    compute_conviction_gaps,
+    compute_confidence_spectrum,
+    compute_macro_alignment,
 )
 
 # All routes in this file are grouped under the /api/portfolio prefix
@@ -634,3 +642,87 @@ async def get_portfolio_market_context(portfolio_id: int = 1, db: Session = Depe
     result, _total, _daily, _cost = _compute_portfolio(portfolio_id, db)
     world_payload = await get_world_markets()
     return compute_market_context(result, world_payload.get("markets", []))
+
+
+def _portfolio_snapshots(portfolio_id: int, db: Session) -> list[dict]:
+    snapshots = (
+        db.query(PortfolioSnapshot)
+        .filter(PortfolioSnapshot.portfolio_id == portfolio_id)
+        .order_by(PortfolioSnapshot.snapshot_date.asc())
+        .all()
+    )
+    return [{"date": s.snapshot_date, "total_value": s.total_value} for s in snapshots]
+
+
+@router.get("/benchmark-comparison")
+async def get_benchmark_comparison(portfolio_id: int = 1, db: Session = Depends(get_db)):
+    """Portfolio vs S&P 500 cumulative return and alpha by range."""
+    _get_portfolio_or_404(portfolio_id, db)
+    result, _total, _daily, _cost = _compute_portfolio(portfolio_id, db)
+    return compute_benchmark_comparison(result, _portfolio_snapshots(portfolio_id, db))
+
+
+@router.get("/return-calendar")
+async def get_return_calendar(portfolio_id: int = 1, db: Session = Depends(get_db)):
+    """Monthly return heatmap from portfolio snapshot history."""
+    _get_portfolio_or_404(portfolio_id, db)
+    return compute_return_calendar(_portfolio_snapshots(portfolio_id, db))
+
+
+@router.get("/beta")
+async def get_portfolio_beta(portfolio_id: int = 1, db: Session = Depends(get_db)):
+    """Portfolio beta vs S&P 500."""
+    _get_portfolio_or_404(portfolio_id, db)
+    result, _total, _daily, _cost = _compute_portfolio(portfolio_id, db)
+    return compute_portfolio_beta(result)
+
+
+@router.get("/rolling-volatility")
+async def get_rolling_volatility(portfolio_id: int = 1, db: Session = Depends(get_db)):
+    """Trailing 30-day annualized volatility series."""
+    _get_portfolio_or_404(portfolio_id, db)
+    result, _total, _daily, _cost = _compute_portfolio(portfolio_id, db)
+    return compute_rolling_volatility(result)
+
+
+@router.get("/sector-tilt")
+async def get_sector_tilt(portfolio_id: int = 1, db: Session = Depends(get_db)):
+    """Sector overweight / underweight vs S&P 500."""
+    _get_portfolio_or_404(portfolio_id, db)
+    result, _total, _daily, _cost = _compute_portfolio(portfolio_id, db)
+    return compute_sector_tilt(result)
+
+
+@router.get("/conviction-gaps")
+async def get_conviction_gaps(portfolio_id: int = 1, db: Session = Depends(get_db)):
+    """Verdict vs position-size mismatches."""
+    from app.routers.ai import get_all_investment_signals
+
+    _get_portfolio_or_404(portfolio_id, db)
+    result, _total, _daily, _cost = _compute_portfolio(portfolio_id, db)
+    sig_payload = await get_all_investment_signals(db=db, force_local=True)
+    return compute_conviction_gaps(result, sig_payload.get("signals") or {})
+
+
+@router.get("/confidence-spectrum")
+async def get_confidence_spectrum(portfolio_id: int = 1, db: Session = Depends(get_db)):
+    """Allocation-weighted confidence distribution."""
+    from app.routers.ai import get_all_investment_signals
+
+    _get_portfolio_or_404(portfolio_id, db)
+    result, _total, _daily, _cost = _compute_portfolio(portfolio_id, db)
+    sig_payload = await get_all_investment_signals(db=db, force_local=True)
+    return compute_confidence_spectrum(result, sig_payload.get("signals") or {})
+
+
+@router.get("/macro-alignment")
+async def get_macro_alignment(portfolio_id: int = 1, db: Session = Depends(get_db)):
+    """Index correlation vs geographic exposure scatter data."""
+    from app.routers.stocks import get_world_markets  # noqa: PLC0415
+
+    _get_portfolio_or_404(portfolio_id, db)
+    result, _total, _daily, _cost = _compute_portfolio(portfolio_id, db)
+    world_payload = await get_world_markets()
+    return compute_macro_alignment(result, world_payload.get("markets", []))
+
+

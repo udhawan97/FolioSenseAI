@@ -136,3 +136,36 @@ def test_correlation_single_holding():
     assert result["tickers"] == ["VOO"]
     assert result["has_data"] is False
 
+
+def test_compute_return_calendar():
+    history = [
+        {"date": "2024-01-05", "total_value": 10000},
+        {"date": "2024-01-20", "total_value": 10500},
+        {"date": "2024-02-05", "total_value": 10200},
+        {"date": "2024-02-20", "total_value": 10800},
+    ]
+    result = pa.compute_return_calendar(history)
+    assert result["has_data"] is True
+    assert len(result["months"]) >= 2
+
+
+def test_compute_confidence_spectrum():
+    holdings = [
+        {"ticker": "A", "allocation_pct": 60, "is_watchlist": False},
+        {"ticker": "B", "allocation_pct": 40, "is_watchlist": False},
+    ]
+    signals = {"A": {"action": "hold", "confidence": 80}, "B": {"action": "trim", "confidence": 55}}
+    result = pa.compute_confidence_spectrum(holdings, signals)
+    assert result["has_data"] is True
+    assert result["avg_confidence"] > 0
+
+
+def test_compute_conviction_gaps():
+    holdings = [
+        {"ticker": "BIG", "allocation_pct": 30, "is_watchlist": False},
+    ]
+    signals = {"BIG": {"action": "trim", "confidence": 80}}
+    result = pa.compute_conviction_gaps(holdings, signals)
+    assert result["has_data"] is True
+    assert result["gaps"][0]["ticker"] == "BIG"
+

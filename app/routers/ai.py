@@ -1706,10 +1706,37 @@ async def get_analytics_insights(
 
     try:
         parsed = generate_analytics_insights(snapshot)
+        from app.services.analytics_insights import build_local_widget_insights
+
+        local_widgets = build_local_widget_insights(snapshot)
+        ai_widgets = parsed.get("widget_insights") or {}
+
+        # Merge strategy: AI's structured dict wins; if AI returned a plain string for a
+        # key widget that local has structured, preserve the headline from local and use
+        # AI's insight text so the tip card still renders properly.
+        merged_widgets: dict = {}
+        for k in set(list(local_widgets.keys()) + list(ai_widgets.keys())):
+            ai_val = ai_widgets.get(k)
+            local_val = local_widgets.get(k)
+            if ai_val is not None:
+                if isinstance(ai_val, dict) and ai_val.get("insight"):
+                    merged_widgets[k] = ai_val
+                elif isinstance(ai_val, str) and ai_val.strip():
+                    if isinstance(local_val, dict):
+                        # AI returned a flat string for a key widget — fold it into the card
+                        merged_widgets[k] = {
+                            "headline": local_val.get("headline", ""),
+                            "insight": ai_val,
+                        }
+                    else:
+                        merged_widgets[k] = ai_val
+            if k not in merged_widgets and local_val is not None:
+                merged_widgets[k] = local_val
         payload: dict = {
             "mode": "ai",
             "source": "claude",
-            **parsed,
+            "insights": parsed.get("insights") or {},
+            "widget_insights": merged_widgets,
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
         try:
@@ -1727,4 +1754,5 @@ async def get_analytics_insights(
 
     except Exception as exc:
         logger.warning("AI analytics insights failed; exception_type=%s", type(exc).__name__)
-        return build_analytics_fallback(snapshot)
+        fallback = build_analytics_fallback(snapshot)
+        return fallback

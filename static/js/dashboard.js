@@ -2330,13 +2330,12 @@ function repaintAllTrendSparklines() {
 
 function repaintOpenVerdictSparklines() {
     document.querySelectorAll(".intel-verdict-section").forEach(section => {
-        if (section.dataset.lazyChartsReady !== "1") return;
         const expandRow = section.closest(".summary-expand-row");
         const mainRow = expandRow?.previousElementSibling;
         const ticker = mainRow?.dataset?.ticker;
-        if (ticker && cachedVerdicts[ticker]) {
-            _paintVerdictSparkline(section, cachedVerdicts[ticker], ticker);
-        }
+        if (!ticker || !mainRow?.classList.contains("summary-open")) return;
+        const verdict = section._chartVerdict || cachedVerdicts[ticker];
+        if (verdict) _paintVerdictSparkline(section, verdict, ticker);
     });
 }
 
@@ -2728,12 +2727,18 @@ function toggleSummaryRow(mainRow) {
                 const coverage = expandRow.querySelector(".intel-coverage-section");
                 if (coverage) requestDeepIntel(ticker, coverage);
                 const verdictSection = expandRow.querySelector(".intel-verdict-section");
-                if (verdictSection) _retryVerdictLazyCharts(verdictSection);
+                if (verdictSection) {
+                    const verdict = verdictSection._chartVerdict || cachedVerdicts[ticker];
+                    if (verdict) _syncVerdictCharts(verdictSection, verdict, ticker);
+                }
             });
             body.addEventListener("transitionend", (e) => {
                 if (e.propertyName !== "max-height") return;
                 const verdictSection = expandRow.querySelector(".intel-verdict-section");
-                if (verdictSection) _retryVerdictLazyCharts(verdictSection);
+                if (verdictSection) {
+                    const verdict = verdictSection._chartVerdict || cachedVerdicts[ticker];
+                    if (verdict) _syncVerdictCharts(verdictSection, verdict, ticker);
+                }
             }, { once: true });
         }
     }
@@ -2789,15 +2794,20 @@ function renderCoverageShimmer(section) {
     section.innerHTML = `
         <div class="intel-coverage">
             <div class="intel-label"><i class="bi bi-layers"></i> What It Covers</div>
-            <div class="shimmer-line" style="width:80px;height:18px;border-radius:20px;margin-bottom:.5rem"></div>
-            <div class="shimmer-line" style="width:95%;height:10px;margin-bottom:.25rem"></div>
-            <div class="shimmer-line" style="width:78%;height:10px;margin-bottom:.6rem"></div>
-            ${[80, 60, 45, 35, 25].map(w => `
-                <div class="sector-bar-row">
-                    <div class="shimmer-line" style="width:72px;height:9px;flex-shrink:0"></div>
-                    <div class="shimmer-line" style="width:${w}%;height:4px"></div>
-                    <div class="shimmer-line" style="width:26px;height:9px;flex-shrink:0"></div>
-                </div>`).join("")}
+            <div class="coverage-hero">
+                <div class="shimmer-line" style="width:120px;height:20px;border-radius:20px;margin-bottom:.45rem"></div>
+                <div class="shimmer-line" style="width:88%;height:11px;margin-bottom:.3rem"></div>
+                <div class="shimmer-line" style="width:72%;height:11px"></div>
+            </div>
+            <div class="coverage-section">
+                <div class="shimmer-line" style="width:90px;height:9px;margin-bottom:.5rem"></div>
+                ${[80, 60, 45, 35, 25].map(w => `
+                    <div class="sector-bar-row">
+                        <div class="shimmer-line" style="width:72px;height:9px;flex-shrink:0"></div>
+                        <div class="shimmer-line" style="width:${w}%;height:4px"></div>
+                        <div class="shimmer-line" style="width:26px;height:9px;flex-shrink:0"></div>
+                    </div>`).join("")}
+            </div>
         </div>`;
 }
 
@@ -2947,6 +2957,29 @@ function renderMoveExplainer(section, data, coverageData = null) {
 }
 
 // ── Holding Coverage ("What It Covers") ──────────────────────────────────────
+
+const COVERAGE_TYPE_HINTS = {
+    equity: "You own one company — not a basket of stocks",
+    "etf-broad": "A fund that holds many stocks across the whole market",
+    "etf-sector": "A fund focused on one industry, like tech or healthcare",
+    "etf-thematic": "A fund built around a theme, like AI or clean energy",
+    "etf-international": "A fund focused on companies outside the United States",
+    "etf-crypto": "A fund that tracks cryptocurrency prices",
+};
+
+function coverageTypeHint(type = "") {
+    return COVERAGE_TYPE_HINTS[type] || "What this holding represents in your portfolio";
+}
+
+function renderCoverageDivider(icon, label) {
+    return `<div class="coverage-divider">
+        <span class="coverage-divider-label"><i class="bi ${icon}"></i>${escapeHtml(label)}</span>
+    </div>`;
+}
+
+function renderCoverageSectionHint(text) {
+    return text ? `<p class="coverage-section-hint">${escapeHtml(text)}</p>` : "";
+}
 
 function formatFactWeight(value, decimals = 1) {
     if (!isFiniteNumber(value)) return "";
@@ -3431,99 +3464,150 @@ function renderHoldingCoverage(section, data) {
         return;
     }
 
-    const coverageClass = (data.coverage_type || "equity").replace(/[^a-z-]/g, "");
+    const coverageType = data.coverage_type || "equity";
+    const coverageClass = coverageType.replace(/[^a-z-]/g, "");
     const rating = cachedRecommendations[data.ticker] || {};
     const quality = rating.etf_quality || null;
     const priceSignal = rating.price_signal || null;
+    const typeLabel = data.coverage_label || data.coverage_type || "Holding";
+    const typeHint = coverageTypeHint(coverageType);
+    const heroTagline = data.theme || typeHint;
+    const heroSubhint = data.theme ? typeHint : "";
+    const strategyText = (data.strategy || "").trim();
 
-    // Sector bars (top 5)
+    const heroHtml = `
+        <div class="coverage-hero">
+            <div class="coverage-hero-head">
+                <span class="coverage-type-badge ${escapeHtml(coverageClass)}">${escapeHtml(typeLabel)}</span>
+            </div>
+            <p class="coverage-hero-tagline">${escapeHtml(heroTagline)}</p>
+            ${heroSubhint ? `<p class="coverage-hero-subhint">${escapeHtml(heroSubhint)}</p>` : ""}
+            ${strategyText && strategyText !== heroTagline && strategyText !== heroSubhint
+                ? `<p class="coverage-hero-summary">${escapeHtml(strategyText)}</p>`
+                : ""}
+        </div>`;
+
     const sectorBarsHtml = data.sectors && data.sectors.length
-        ? `<div class="intel-label"><i class="bi bi-diagram-3"></i> Sectors</div>
-           <div class="sector-bars">
-             ${data.sectors.slice(0, 5).map((s, i) => `
-               <div class="sector-bar-row">
-                 <span class="sector-bar-swatch" style="--sector-color:${chartColor(i)}"></span>
-                 <div class="sector-bar-label" title="${escapeHtml(s.name)}">${escapeHtml(s.name)}</div>
-                 <div class="sector-bar-track"><div class="sector-bar-fill" style="--sector-color:${chartColor(i)};width:${Math.min(s.weight, 100)}%"></div></div>
-                 <div class="sector-bar-pct">${s.weight.toFixed(1)}%</div>
-               </div>`).join("")}
-           </div>`
-        : "";
-
-    // Country chips (top 6)
-    const countryChipsHtml = data.countries && data.countries.length
-        ? `<div class="intel-label"><i class="bi bi-globe2"></i> Countries / Regions</div>
-           <div class="country-chips">
-             ${data.countries.slice(0, 6).map((c, i) =>
-               `<span class="country-chip${i === 0 ? " primary" : ""}">${escapeHtml(c.name)} ${c.weight.toFixed(0)}%</span>`
-             ).join("")}
-           </div>`
-        : "";
-
-    // Top holdings mini list (for individual stock: show peers instead)
-    let topHoldingsHtml = "";
-    if (data.top_holdings && data.top_holdings.length && data.coverage_type !== "equity") {
-        const maxBarWeight = Math.max(...data.top_holdings.map(h => h.weight), 1);
-        topHoldingsHtml = `
-            <div class="intel-label"><i class="bi bi-list-task"></i> Top Holdings</div>
-            <div class="top-holdings-list">
-              ${data.top_holdings.slice(0, 5).map(h => `
-                <div class="holding-mini-row">
-                  <span class="holding-mini-ticker">${escapeHtml(h.ticker)}</span>
-                  <span class="holding-mini-name">${escapeHtml(h.name)}</span>
-                  <div class="holding-mini-weight">
-                    <div class="holding-mini-bar-track">
-                      <div class="holding-mini-bar-fill" style="width:${(h.weight / maxBarWeight * 100).toFixed(0)}%"></div>
-                    </div>
-                    <span class="holding-mini-pct">${h.weight.toFixed(1)}%</span>
-                  </div>
+        ? `<div class="coverage-section">
+            ${renderCoverageDivider("bi-diagram-3", "Industries")}
+            ${renderCoverageSectionHint("Business types inside this holding — wider bars mean a bigger slice")}
+            <div class="sector-bars">
+              ${data.sectors.slice(0, 5).map((s, i) => `
+                <div class="sector-bar-row">
+                  <span class="sector-bar-swatch" style="--sector-color:${chartColor(i)}"></span>
+                  <div class="sector-bar-label" title="${escapeHtml(s.name)}">${escapeHtml(s.name)}</div>
+                  <div class="sector-bar-track"><div class="sector-bar-fill" style="--sector-color:${chartColor(i)};width:${Math.min(s.weight, 100)}%"></div></div>
+                  <div class="sector-bar-pct">${s.weight.toFixed(1)}%</div>
                 </div>`).join("")}
+            </div>
+           </div>`
+        : "";
+
+    const countryChipsHtml = data.countries && data.countries.length
+        ? `<div class="coverage-section">
+            ${renderCoverageDivider("bi-globe2", "Geography")}
+            ${renderCoverageSectionHint("Where your money is invested — percentages add up inside this holding")}
+            <div class="country-chips">
+              ${data.countries.slice(0, 6).map((c, i) =>
+                `<span class="country-chip${i === 0 ? " primary" : ""}" title="${escapeHtml(c.name)}: ${c.weight.toFixed(1)}%">
+                   <span class="country-chip-name">${escapeHtml(c.name)}</span>
+                   <span class="country-chip-pct">${c.weight.toFixed(0)}%</span>
+                 </span>`
+              ).join("")}
+            </div>
+           </div>`
+        : "";
+
+    let insideHtml = "";
+    if (data.top_holdings && data.top_holdings.length && coverageType !== "equity") {
+        const maxBarWeight = Math.max(...data.top_holdings.map(h => h.weight), 1);
+        insideHtml = `
+            <div class="coverage-section">
+                ${renderCoverageDivider("bi-list-task", "Biggest positions inside")}
+                ${renderCoverageSectionHint("Largest companies this fund owns — not your whole portfolio")}
+                <div class="top-holdings-list">
+                  ${data.top_holdings.slice(0, 5).map(h => `
+                    <div class="holding-mini-row">
+                      <span class="holding-mini-ticker">${escapeHtml(h.ticker)}</span>
+                      <span class="holding-mini-name">${escapeHtml(h.name)}</span>
+                      <div class="holding-mini-weight">
+                        <div class="holding-mini-bar-track">
+                          <div class="holding-mini-bar-fill" style="width:${(h.weight / maxBarWeight * 100).toFixed(0)}%"></div>
+                        </div>
+                        <span class="holding-mini-pct">${h.weight.toFixed(1)}%</span>
+                      </div>
+                    </div>`).join("")}
+                </div>
             </div>`;
-    } else if (data.coverage_type === "equity" && data.peer_tickers && data.peer_tickers.length) {
-        topHoldingsHtml = `
-            <div class="intel-label"><i class="bi bi-people"></i> Peer Group</div>
-            <div class="peer-chips">
-              ${data.peer_tickers.slice(0, 6).map(p => `<span class="peer-chip">${escapeHtml(p)}</span>`).join("")}
+    } else if (coverageType === "equity" && data.peer_tickers && data.peer_tickers.length) {
+        insideHtml = `
+            <div class="coverage-section">
+                ${renderCoverageDivider("bi-people", "Similar companies")}
+                ${renderCoverageSectionHint("Peers in the same industry — useful for comparing moves")}
+                <div class="peer-chips">
+                  ${data.peer_tickers.slice(0, 6).map(p => `<span class="peer-chip">${escapeHtml(p)}</span>`).join("")}
+                </div>
             </div>`;
     }
 
-    const etfProfileHtml = quality && (data.coverage_type || "").startsWith("etf")
-        ? `<div class="intel-label"><i class="bi bi-sliders"></i> ETF Profile</div>
-           <div class="intel-spec-rows">
-             <div class="intel-spec-row"><span>ETF quality</span><strong><span class="spec-pill">${escapeHtml(quality.qualityLabel || "Insufficient Data")}</span></strong></div>
-             <div class="intel-spec-row"><span>Cost</span><strong><span class="spec-pill">${escapeHtml(quality.costLabel || "Unknown")}</span></strong></div>
-             <div class="intel-spec-row"><span>Liquidity</span><strong>${escapeHtml(quality.liquidityLabel || "Unknown")}</strong></div>
-             <div class="intel-spec-row"><span>Diversification</span><strong>${escapeHtml(quality.diversificationLabel || "Unknown")}</strong></div>
-             <div class="intel-spec-row"><span>Category risk</span><strong><span class="spec-pill risk">${escapeHtml(quality.categoryRiskLabel || "Unknown")}</span></strong></div>
+    const etfProfileHtml = quality && coverageType.startsWith("etf")
+        ? `<div class="coverage-section">
+            ${renderCoverageDivider("bi-sliders", "Fund quality")}
+            ${renderCoverageSectionHint("Quick health check — fees, spread, and how diversified the fund is")}
+            <div class="coverage-quality-grid">
+              <div class="coverage-quality-card">
+                <span class="coverage-quality-label">Overall</span>
+                <strong class="spec-pill">${escapeHtml(quality.qualityLabel || "Unknown")}</strong>
+              </div>
+              <div class="coverage-quality-card">
+                <span class="coverage-quality-label">Fees</span>
+                <strong class="spec-pill">${escapeHtml(quality.costLabel || "Unknown")}</strong>
+              </div>
+              <div class="coverage-quality-card">
+                <span class="coverage-quality-label">Easy to trade</span>
+                <strong>${escapeHtml(quality.liquidityLabel || "Unknown")}</strong>
+              </div>
+              <div class="coverage-quality-card">
+                <span class="coverage-quality-label">Spread</span>
+                <strong>${escapeHtml(quality.diversificationLabel || "Unknown")}</strong>
+              </div>
+              <div class="coverage-quality-card coverage-quality-card--wide">
+                <span class="coverage-quality-label">Typical risk</span>
+                <strong class="spec-pill risk">${escapeHtml(quality.categoryRiskLabel || "Unknown")}</strong>
+              </div>
+            </div>
            </div>`
         : "";
 
-    // Metadata footer
     const marketPulseHtml = renderMarketPulseStrip(data);
     const fundScaleHtml = renderFundScaleSpotlight(data, priceSignal);
     const fact = buildHoldingFact(data);
     const missingPulse = data.load_status?.market_pulse?.missing || [];
     const pulseStatusHtml = !marketPulseLoaded(data) && intelligenceExhaustedTickers.has(data.ticker)
-        ? `<span class="fact-tag intel-refresh-note"><i class="bi bi-arrow-repeat"></i>Some live metrics are still unavailable. Tap Holding Intel again; Claude can be selective and may need one more look for the full picture.</span>`
+        ? `<span class="fact-tag intel-refresh-note"><i class="bi bi-arrow-repeat"></i>Some live metrics are still loading — tap Holding Intel again for the full picture.</span>`
         : missingPulse.length && intelligenceRetryingTickers.has(data.ticker)
             ? `<span class="fact-tag intel-refresh-note"><i class="bi bi-arrow-repeat"></i>Refreshing ${escapeHtml(missingPulse.join(", "))}</span>`
             : "";
     const factTag = fact && !fundScaleHtml
         ? `<span class="fact-tag"><i class="bi bi-stars"></i>${escapeHtml(fact)}</span>` : "";
 
-    section.innerHTML = `
-        <div class="intel-coverage">
-            <div class="intel-label"><i class="bi bi-layers"></i> What It Covers</div>
-            <span class="coverage-type-badge ${escapeHtml(coverageClass)}">${escapeHtml(data.coverage_label || data.coverage_type)}</span>
-            ${data.theme ? `<div class="intel-theme">${escapeHtml(data.theme)}</div>` : ""}
-            <div class="intel-strategy">${escapeHtml(data.strategy || "")}</div>
-            ${sectorBarsHtml}
-            ${countryChipsHtml}
-            ${topHoldingsHtml}
-            ${etfProfileHtml}
+    const extrasHtml = (fundScaleHtml || marketPulseHtml || factTag || pulseStatusHtml)
+        ? `<div class="coverage-extras">
             ${fundScaleHtml}
             ${marketPulseHtml}
             <div class="intel-meta-row">${factTag}${pulseStatusHtml}</div>
+           </div>`
+        : "";
+
+    section.innerHTML = `
+        <div class="intel-coverage">
+            <div class="intel-label"><i class="bi bi-layers"></i> What It Covers</div>
+            ${heroHtml}
+            ${sectorBarsHtml}
+            ${countryChipsHtml}
+            ${insideHtml}
+            ${etfProfileHtml}
+            ${extrasHtml}
         </div>`;
     if (data.ticker && _isCoverageRowOpen(section)) {
         _syncDeepIntelSection(section, data.ticker);
@@ -4034,7 +4118,7 @@ function _renderLocalSynthesisPanel(verdict, ticker = "") {
         ${tags ? `<div class="synth-tags">${tags}</div>` : ""}
         ${note && note !== plain ? `<p class="synth-note"><span class="synth-note-label">Detail</span> ${escapeHtml(note)}</p>` : ""}
         <p class="synth-radar-caption">Balance of expert views, price, trend, and quality</p>
-        ${_renderSignalRadarSlot("local")}
+        ${_renderSignalRadarMarkup(verdict, "local")}
     </div>`;
 }
 
@@ -4117,13 +4201,7 @@ function _renderAiSynthesisPanel(verdict, ticker = "") {
         ${tagHtml ? `<div class="synth-tags">${tagHtml}</div>` : ""}
         ${note && note !== plain ? `<p class="synth-note"><span class="synth-note-label">Supporting detail</span> ${escapeHtml(note)}</p>` : ""}
         <p class="synth-radar-caption">Balance of expert views, price, trend, and quality</p>
-        ${_renderSignalRadarSlot("ai")}
-    </div>`;
-}
-
-function _renderSignalRadarSlot(variant = "ai") {
-    return `<div class="signal-radar-slot is-pending is-${variant}" data-radar-variant="${escapeHtml(variant)}" aria-hidden="true">
-        <div class="signal-radar-placeholder" aria-hidden="true"></div>
+        ${_renderSignalRadarMarkup(verdict, "ai")}
     </div>`;
 }
 
@@ -4180,68 +4258,21 @@ function _renderAiRadarArtifact(verdict) {
     return _renderSignalRadarMarkup(verdict, "ai");
 }
 
-let _verdictLazyObserver = null;
 let _lastExpandedHoldingTicker = null;
 
-function ensureVerdictLazyObserver() {
-    if (_verdictLazyObserver || typeof IntersectionObserver === "undefined") return;
-    _verdictLazyObserver = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            if (!entry.isIntersecting) return;
-            const section = entry.target.closest(".intel-verdict-section");
-            if (section) _hydrateVerdictLazyCharts(section);
-        });
-    }, { root: null, rootMargin: "0px 0px 80px 0px", threshold: 0.08 });
+function _isHoldingRowOpen(section) {
+    const expandRow = section?.closest(".summary-expand-row");
+    const mainRow = expandRow?.previousElementSibling;
+    return !!mainRow?.classList.contains("summary-open");
 }
 
-function _bindVerdictLazyCharts(section, verdict, ticker) {
+function _syncVerdictCharts(section, verdict, ticker) {
     if (!section || !verdict) return;
-    section._lazyVerdict = verdict;
-    section._lazyTicker = ticker;
-    delete section.dataset.lazyChartsReady;
-    ensureVerdictLazyObserver();
-    const sentinel = section.querySelector(".verdict-lazy-sentinel");
-    if (!sentinel || !_verdictLazyObserver) return;
-    _verdictLazyObserver.unobserve(sentinel);
-    _verdictLazyObserver.observe(sentinel);
-}
-
-function _retryVerdictLazyCharts(section) {
-    if (!section || section.dataset.lazyChartsReady === "1") return;
-    const sentinel = section.querySelector(".verdict-lazy-sentinel");
-    if (!sentinel || !_verdictLazyObserver) return;
-    _verdictLazyObserver.unobserve(sentinel);
-    _verdictLazyObserver.observe(sentinel);
-}
-
-function _hydrateVerdictLazyCharts(section) {
-    if (!section || section.dataset.lazyChartsReady === "1") return;
-    const verdict = section._lazyVerdict;
-    const ticker = section._lazyTicker;
-    if (!verdict) return;
-
-    section.dataset.lazyChartsReady = "1";
-    const sentinel = section.querySelector(".verdict-lazy-sentinel");
-    if (sentinel && _verdictLazyObserver) _verdictLazyObserver.unobserve(sentinel);
-
-    section.querySelectorAll(".signal-radar-slot.is-pending").forEach(slot => {
-        const variant = slot.dataset.radarVariant || "ai";
-        const markup = _renderSignalRadarMarkup(verdict, variant);
-        if (!markup) {
-            slot.remove();
-            return;
-        }
-        const temp = document.createElement("div");
-        temp.innerHTML = markup;
-        const wrap = temp.firstElementChild;
-        if (wrap) slot.replaceWith(wrap);
-    });
-
-    _paintVerdictSparkline(section, verdict, ticker);
-}
-
-function _renderVerdictLazySentinel() {
-    return `<div class="verdict-lazy-sentinel" aria-hidden="true"></div>`;
+    section._chartVerdict = verdict;
+    section._chartTicker = ticker;
+    if (_isHoldingRowOpen(section)) {
+        _paintVerdictSparkline(section, verdict, ticker);
+    }
 }
 
 function initHoldingExpandFab() {
@@ -5441,8 +5472,7 @@ function renderAiVerdict(section, verdict, ticker, options = {}) {
                 <span class="fact-tag">${escapeHtml(disc)}</span>
             </div>` : ""}
             ${_renderCalibrationFootnote(verdict)}
-        </div>
-        ${_renderVerdictLazySentinel()}`;
+        </div>`;
 
     const confEl = section.querySelector(".verdict-conf-pct");
     const meterFill = section.querySelector(".verdict-meter-fill");
@@ -5467,7 +5497,7 @@ function renderAiVerdict(section, verdict, ticker, options = {}) {
         if (meterFill) meterFill.style.width = `${conf}%`;
         if (confEl) confEl.textContent = `${conf}%`;
     }
-    _bindVerdictLazyCharts(section, verdict, ticker);
+    _syncVerdictCharts(section, verdict, ticker);
 }
 
 let _lastAiCostUsd = null;
@@ -6504,22 +6534,31 @@ function _briefingAnimateIn(wrap) {
     wrap.classList.add("briefing-enter");
     let delay = 0;
 
-    wrap.querySelectorAll(".briefing-section").forEach(section => {
-        section.style.setProperty("--briefing-delay", String(delay));
-        const health = section.querySelector(".briefing-health-text");
-        if (health) health.style.setProperty("--briefing-delay", String(delay));
+    const lead = wrap.querySelector(".briefing-lead");
+    if (lead) {
+        lead.style.setProperty("--briefing-delay", String(delay));
+        delay += 60;
+    }
 
-        let itemDelay = delay + 50;
-        section.querySelectorAll(".briefing-bullet-item").forEach(item => {
-            item.style.setProperty("--briefing-delay", String(itemDelay));
-            itemDelay += 38;
-        });
+    wrap.querySelectorAll(".briefing-divider").forEach(div => {
+        div.style.setProperty("--briefing-delay", String(delay));
+        delay += 30;
 
-        delay += section.querySelector(".briefing-bullet-list") ? 58 : 48;
+        let itemDelay = delay;
+        const listEl = div.nextElementSibling;
+        if (listEl) {
+            listEl.querySelectorAll(
+                ".briefing-driver-item, .briefing-insight-item, .briefing-mover-row"
+            ).forEach(item => {
+                item.style.setProperty("--briefing-delay", String(itemDelay));
+                itemDelay += 36;
+            });
+            delay = itemDelay + 20;
+        }
     });
 
-    const quote = wrap.querySelector(".briefing-quote-chip");
-    if (quote) quote.style.setProperty("--briefing-delay", String(delay));
+    const footer = wrap.querySelector(".briefing-footer");
+    if (footer) footer.style.setProperty("--briefing-delay", String(delay));
 }
 
 function _briefingRenderAi(data) {
@@ -6529,51 +6568,42 @@ function _briefingRenderAi(data) {
     const esc = s => escapeHtml(String(s || ""));
 
     const driverItems = (data.drivers || [])
-        .map(d => `
-            <li class="briefing-bullet-item">
-                <i class="bi bi-caret-right-fill briefing-bullet-icon briefing-bullet-icon--driver" aria-hidden="true"></i>
-                <span>${_briefingBoldTickers(d)}</span>
-            </li>`)
+        .map(d => `<div class="briefing-driver-item">${_briefingBoldTickers(d)}</div>`)
         .join("");
 
     const adjItems = (data.adjustments || [])
-        .map(a => `
-            <li class="briefing-bullet-item">
-                <i class="bi bi-lightbulb-fill briefing-bullet-icon briefing-bullet-icon--obs" aria-hidden="true"></i>
-                <span>${_briefingBoldTickers(a)}</span>
-            </li>`)
+        .map(a => `<div class="briefing-insight-item">${_briefingBoldTickers(a)}</div>`)
         .join("");
 
     const sourceNote = data.source === "local-fallback"
-        ? `<span class="briefing-source-note">Local fallback — Claude unavailable</span>`
+        ? `<span class="briefing-source-note">Local fallback</span>`
         : (data.from_cache ? `<span class="briefing-source-note">Cached</span>` : "");
+
+    const moversSection = driverItems ? `
+        <div class="briefing-divider briefing-divider--movers">
+            <span class="briefing-divider-label">
+                <i class="bi bi-bar-chart-line" aria-hidden="true"></i>
+                Today's Movers
+            </span>
+        </div>
+        <div class="briefing-driver-list">${driverItems}</div>` : "";
+
+    const insightsSection = adjItems ? `
+        <div class="briefing-divider briefing-divider--insights">
+            <span class="briefing-divider-label">
+                <i class="bi bi-lightbulb" aria-hidden="true"></i>
+                Insights
+            </span>
+        </div>
+        <div class="briefing-insight-list">${adjItems}</div>` : "";
 
     content.innerHTML = `
         <div class="briefing-ai-wrap">
-            <div class="briefing-section">
-                <div class="briefing-section-badge briefing-section-badge--health">
-                    <i class="bi bi-activity" aria-hidden="true"></i>
-                    Health
-                </div>
-                <p class="briefing-health-text">${esc(data.health)}</p>
-            </div>
-            <div class="briefing-section">
-                <div class="briefing-section-badge briefing-section-badge--movers">
-                    <i class="bi bi-arrow-left-right" aria-hidden="true"></i>
-                    What moved
-                </div>
-                <ul class="briefing-bullet-list">${driverItems}</ul>
-            </div>
-            <div class="briefing-section">
-                <div class="briefing-section-badge briefing-section-badge--obs">
-                    <i class="bi bi-lightbulb" aria-hidden="true"></i>
-                    Observations
-                </div>
-                <ul class="briefing-bullet-list">${adjItems}</ul>
-            </div>
-            <div class="briefing-quote-chip">
-                <i class="bi bi-chat-quote-fill briefing-quote-icon" aria-hidden="true"></i>
-                <span class="briefing-quote-text">${esc(data.quote)}</span>
+            <p class="briefing-lead">${esc(data.health)}</p>
+            ${moversSection}
+            ${insightsSection}
+            <div class="briefing-footer">
+                <span class="briefing-footer-quote">${esc(data.quote)}</span>
                 ${sourceNote}
             </div>
         </div>`;
@@ -6592,45 +6622,36 @@ function _briefingRenderLocal(data) {
 
     const esc = s => escapeHtml(String(s || ""));
 
-    const movers = (data.movers || []).map(m => {
+    const moverRows = (data.movers || []).map(m => {
         const isGain = m.day_change_pct >= 0;
         const sign   = isGain ? "gain" : "loss";
-        const arrow  = isGain ? "bi-caret-up-fill" : "bi-caret-down-fill";
         const pct    = (isGain ? "+" : "") + Number(m.day_change_pct).toFixed(2) + "%";
         const dollar = (m.day_change_dollar >= 0 ? "+$" : "–$") +
             Math.abs(m.day_change_dollar).toFixed(2);
-        const tag = esc(_briefingFirstSentence(m.explanation));
+        const ctx = esc(_briefingFirstSentence(m.explanation));
 
         return `
-            <li class="briefing-bullet-item">
-                <i class="bi ${arrow} briefing-bullet-icon briefing-bullet-icon--${sign}" aria-hidden="true"></i>
-                <span class="briefing-mover-inline">
-                    <span class="briefing-mover-ticker">${esc(m.ticker)}</span>
-                    <span class="briefing-mover-nums">
-                        <span class="briefing-mover-change text-${sign}">${esc(pct)}</span>
-                        <span class="briefing-mover-dollar">${esc(dollar)}</span>
-                    </span>
-                    ${tag ? `<span class="briefing-mover-tag">${tag}</span>` : ""}
-                </span>
-            </li>`;
+            <div class="briefing-mover-row">
+                <span class="briefing-mover-ticker">${esc(m.ticker)}</span>
+                <span class="briefing-mover-change text-${sign}">${esc(pct)}</span>
+                <span class="briefing-mover-dollar">${esc(dollar)}</span>
+                ${ctx ? `<span class="briefing-mover-context">${ctx}</span>` : "<span></span>"}
+            </div>`;
     }).join("");
+
+    const moversSection = moverRows ? `
+        <div class="briefing-divider briefing-divider--movers">
+            <span class="briefing-divider-label">
+                <i class="bi bi-bar-chart-line" aria-hidden="true"></i>
+                Today's Movers
+            </span>
+        </div>
+        <div class="briefing-mover-grid">${moverRows}</div>` : "";
 
     content.innerHTML = `
         <div class="briefing-local-wrap">
-            <div class="briefing-section">
-                <div class="briefing-section-badge briefing-section-badge--summary">
-                    <i class="bi bi-bar-chart-steps" aria-hidden="true"></i>
-                    Summary
-                </div>
-                <p class="briefing-health-text">${esc(data.lead)}</p>
-            </div>
-            <div class="briefing-section">
-                <div class="briefing-section-badge briefing-section-badge--movers">
-                    <i class="bi bi-arrow-left-right" aria-hidden="true"></i>
-                    Movers
-                </div>
-                <ul class="briefing-bullet-list">${movers || "<li class='briefing-empty'>No holdings data.</li>"}</ul>
-            </div>
+            <p class="briefing-lead">${esc(data.lead)}</p>
+            ${moversSection}
         </div>`;
     _briefingAnimateIn(content.querySelector(".briefing-local-wrap"));
 }
