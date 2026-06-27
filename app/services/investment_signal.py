@@ -489,7 +489,6 @@ def _confidence_level(score: int) -> str:
 
 
 def _confidence_summary(score: int, action: str) -> str:
-    level = _confidence_level(score)
     action_phrase = {
         "add": "leaning toward adding",
         "hold": "comfortable holding",
@@ -497,10 +496,10 @@ def _confidence_summary(score: int, action: str) -> str:
         "needs-data": "waiting on more data",
     }.get(action, "evaluating")
     if score >= 62:
-        return f"{level} — signals mostly point the same way on {action_phrase}."
+        return f"Signals mostly point the same way on {action_phrase}."
     if score >= 46:
-        return f"{level} — some inputs agree, others are quiet on {action_phrase}."
-    return f"{level} — the inputs don't strongly agree yet."
+        return f"Some inputs agree, others are quiet on {action_phrase}."
+    return "The inputs don't strongly agree yet."
 
 
 def _analyst_component_score(rec: AnalystRec, action: str) -> int:

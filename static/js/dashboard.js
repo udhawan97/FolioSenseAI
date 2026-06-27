@@ -68,6 +68,21 @@ const valueClass = (v) => {
     return Number(v) > 0 ? "text-success" : "text-danger";
 };
 const TREND_DAYS = 7;
+
+const _VERDICT_COMP_META = {
+    analyst:   { icon: "bi-people-fill",       layman: "What Wall Street thinks" },
+    valuation: { icon: "bi-tag-fill",          layman: "Cheap or expensive vs history" },
+    momentum:  { icon: "bi-speedometer2",      layman: "Which way price is moving" },
+    quality:   { icon: "bi-shield-check",      layman: "How solid the fund or business is" },
+};
+
+const _REGIME_CHIP_CLASS = {
+    risk_on: "is-risk-on",
+    risk_off: "is-risk-off",
+    neutral: "is-neutral",
+};
+
+let _trendObserver = null;
 const THEME_KEY = "foliosense-theme";
 const TEXT_SIZE_KEY = "foliosense-text-size";
 const DASHBOARD_PET_KEY = "foliosense-dashboard-pet-visible";
@@ -726,7 +741,9 @@ async function loadPortfolioValue() {
         latestHoldings = data.holdings;
         updateHoldingsFilterCounts();
 
-        // Wrap all rendering so Chart.js or DOM errors don't trigger "Refresh failed".
+        const tickers = data.holdings.map(h => h.ticker);
+        const trendPromise = tickers.length ? loadTrendData(tickers) : Promise.resolve({});
+
         try {
             renderAllocation();
 
@@ -749,8 +766,9 @@ async function loadPortfolioValue() {
             }
 
             renderHoldings();
-            latestTrendData = await loadTrendData(data.holdings.map(h => h.ticker));
-            renderHoldings();
+            latestTrendData = await trendPromise;
+            repaintAllTrendSparklines();
+            repaintOpenVerdictSparklines();
         } catch (renderErr) {
             console.warn("Portfolio render error (data is current):", renderErr);
         }
@@ -1829,6 +1847,51 @@ async function loadTrendData(tickers) {
     }
 }
 
+function repaintAllTrendSparklines() {
+    document.querySelectorAll("#holdings-table tr[data-ticker]").forEach(row => {
+        const ticker = row.dataset.ticker;
+        const canvas = row.querySelector("canvas.trend-sparkline");
+        if (!canvas) return;
+        delete canvas.dataset.trendSig;
+        drawTrend(canvas, latestTrendData[ticker] || []);
+    });
+}
+
+function repaintOpenVerdictSparklines() {
+    document.querySelectorAll(".intel-verdict-section").forEach(section => {
+        const expandRow = section.closest(".summary-expand-row");
+        const mainRow = expandRow?.previousElementSibling;
+        const ticker = mainRow?.dataset?.ticker;
+        if (ticker && cachedVerdicts[ticker]) {
+            _paintVerdictSparkline(section, cachedVerdicts[ticker], ticker);
+        }
+    });
+}
+
+function ensureTrendObserver() {
+    if (_trendObserver || typeof IntersectionObserver === "undefined") return;
+    _trendObserver = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+            if (!entry.isIntersecting) return;
+            const cell = entry.target;
+            const row = cell.closest("tr[data-ticker]");
+            const canvas = cell.querySelector("canvas.trend-sparkline");
+            if (!row || !canvas) return;
+            const ticker = row.dataset.ticker;
+            const history = latestTrendData[ticker] || [];
+            if (history.length >= 2) {
+                delete canvas.dataset.trendSig;
+                drawTrend(canvas, history);
+            }
+        });
+    }, { root: null, threshold: 0.01 });
+}
+
+function observeTrendCell(cell) {
+    ensureTrendObserver();
+    if (_trendObserver && cell) _trendObserver.observe(cell);
+}
+
 function setCellHtml(cell, html) {
     if (cell && cell.innerHTML !== html) cell.innerHTML = html;
 }
@@ -1852,6 +1915,9 @@ function moveBadgeHtml(ticker) {
 }
 
 function dayChangeHtml(h) {
+    if (!isFiniteNumber(h.day_change_pct)) {
+        return `<span class="day-chg-cell text-secondary" title="Today's change unavailable">—</span>`;
+    }
     const up = h.day_change_pct >= 0;
     return `
         <div class="day-chg-cell ${colorClass(h.day_change_pct)}">
@@ -1873,7 +1939,7 @@ function createHoldingRow(h) {
         <td class="text-end" data-field="allocation"></td>
         <td class="text-end d-none d-sm-table-cell" data-field="target" id="target-cell-${h.ticker}"></td>
         <td class="text-center d-none d-lg-table-cell" data-field="rec" id="rec-cell-${h.ticker}"></td>
-        <td class="text-center d-none d-xl-table-cell trend-cell" data-field="trend"></td>
+        <td class="text-center d-none d-lg-table-cell trend-cell" data-field="trend"></td>
     `;
     row.addEventListener("click", event => {
         if (event.target.closest(".tip-trigger")) return;
@@ -1907,8 +1973,15 @@ function updateHoldingRow(row, h, index, trendData = {}) {
 
     const trendCell = row.querySelector(".trend-cell");
     if (!trendCell) return;
+    const history = trendData[h.ticker] || latestTrendData[h.ticker] || [];
+    if (history.length < 2) {
+        trendCell.innerHTML = `<span class="trend-pending" title="Loading price trend"><i class="bi bi-graph-up"></i></span>`;
+        observeTrendCell(trendCell);
+        return;
+    }
     let canvas = trendCell.querySelector("canvas.trend-sparkline");
     if (!canvas) {
+        trendCell.innerHTML = "";
         canvas = document.createElement("canvas");
         canvas.className = "trend-sparkline";
         canvas.width = 150;
@@ -1916,11 +1989,12 @@ function updateHoldingRow(row, h, index, trendData = {}) {
         trendCell.appendChild(canvas);
     }
     canvas.setAttribute("aria-label", `${h.ticker} ${TREND_DAYS}-day trend`);
-    const sig = trendSignature(trendData[h.ticker]);
+    const sig = trendSignature(history);
     if (canvas.dataset.trendSig !== sig) {
         canvas.dataset.trendSig = sig;
-        drawTrend(canvas, trendData[h.ticker]);
+        drawTrend(canvas, history);
     }
+    observeTrendCell(trendCell);
 }
 
 function removeHoldingRowPair(row) {
@@ -3261,10 +3335,8 @@ const FOLIO_SENSE_VERDICT_COPY = {
     kicker: "Folio Sense \u00d7 Claude",
     feelsPrefix: "Folio Sense feels",
     unavailable: "Verdict unavailable — tap Holding Intel to refresh.",
-    localDisclaimer:
-        "Folio Sense Local Intelligence \u2014 a signal read, not financial advice. Verify before you trade.",
-    aiDisclaimer:
-        "Folio Sense \u00d7 Claude \u2014 local signals plus a small AI refinement. Not financial advice.",
+    disclaimer:
+        "Folio Sense Intelligence \u2014 a signal read, not financial advice. Verify before you trade.",
 };
 
 function _isAiVerdictActive(verdict) {
@@ -3328,28 +3400,79 @@ function _verdictLoadingLine(ticker) {
 
 function _verdictKickerLabel() {
     return isLocalIntelligenceMode()
-        ? "Folio Sense Local Intelligence"
+        ? "Folio Sense Intelligence"
         : FOLIO_SENSE_VERDICT_COPY.kicker;
 }
 
 function _verdictDisclaimer(verdict) {
-    if (isLocalIntelligenceMode()) {
-        return FOLIO_SENSE_VERDICT_COPY.localDisclaimer;
-    }
-    if (_isAiVerdictActive(verdict)) {
-        return verdict?.disclaimer || FOLIO_SENSE_VERDICT_COPY.aiDisclaimer;
-    }
-    return verdict?.disclaimer || "";
+    return verdict?.disclaimer || FOLIO_SENSE_VERDICT_COPY.disclaimer;
 }
 
 function _verdictBrand(verdict) {
     const brand = verdict?.brand || {};
+    const isLocal = isLocalIntelligenceMode() && !_isAiVerdictActive(verdict);
     return {
-        kicker: isLocalIntelligenceMode()
+        kicker: isLocal
             ? _verdictKickerLabel()
             : (brand.kicker || FOLIO_SENSE_VERDICT_COPY.kicker),
-        feelsPrefix: brand.feels_prefix || brand.feelsPrefix || FOLIO_SENSE_VERDICT_COPY.feelsPrefix,
+        feelsPrefix: isLocal
+            ? "The signals suggest"
+            : (brand.feels_prefix || brand.feelsPrefix || FOLIO_SENSE_VERDICT_COPY.feelsPrefix),
     };
+}
+
+function _verdictIntelIcon() {
+    return isLocalIntelligenceMode() ? "bi-cpu-fill" : "bi-dice-5";
+}
+
+function _renderLocalOrbital() {
+    return `<div class="verdict-local-orbital" aria-hidden="true">
+        <span class="verdict-local-orbit-ring"></span>
+        <span class="verdict-local-orbit-ring ring-2"></span>
+    </div>`;
+}
+
+function _localSynthTags(verdict) {
+    const mix = verdict?.signal_mix || [];
+    return mix
+        .filter(item => item.stance === "support" || item.stance === "against")
+        .slice(0, 2)
+        .map(item => {
+            const cls = item.stance === "support" ? "is-support" : "is-against";
+            return `<span class="local-synth-tag ${cls}">${escapeHtml(item.label || "Signal")}</span>`;
+        })
+        .join("");
+}
+
+function _renderLocalSynthesisPanel(verdict) {
+    if (!isLocalIntelligenceMode() || _isAiVerdictActive(verdict)) return "";
+    const detail = verdict?.confidence_detail || {};
+    const headline = (detail.summary || `${verdict.label || "Hold"} — ${detail.level || "mixed signals"}`).slice(0, 120);
+    const note = (verdict.reasons || [])[0] || "";
+    const tags = _localSynthTags(verdict);
+    const score = verdict.confidence;
+
+    return `<div class="verdict-synthesis-panel is-local">
+        <div class="verdict-synthesis-head">
+            <span class="synth-kicker"><i class="bi bi-cpu-fill" aria-hidden="true"></i> Local read</span>
+            ${_verdictTip({
+                title: "Deterministic synthesis",
+                body: "Built from the same four inputs as the bars below — weighted on your device, no AI nudges. The radar shows how balanced the inputs are.",
+                icon: "bi-cpu-fill",
+                variant: "local",
+            })}
+            <span class="synth-score-badge">${Math.round(score || 0)}%</span>
+        </div>
+        <div class="synth-headline">${escapeHtml(headline)}</div>
+        ${tags ? `<div class="synth-tags">${tags}</div>` : ""}
+        ${note ? `<p class="synth-note">${escapeHtml(note)}</p>` : ""}
+        ${_renderSignalRadar(verdict, "local")}
+    </div>`;
+}
+
+function _renderSynthesisPanel(verdict) {
+    if (_isAiVerdictActive(verdict)) return _renderAiSynthesisPanel(verdict);
+    return _renderLocalSynthesisPanel(verdict);
 }
 
 function _verdictTip({ title, body, hint = "", icon = "bi-info-circle-fill", variant = "" }) {
@@ -3364,11 +3487,14 @@ function _verdictTip({ title, body, hint = "", icon = "bi-info-circle-fill", var
 }
 
 function _verdictInfoTip() {
+    const isLocal = isLocalIntelligenceMode();
     return _verdictTip({
-        title: "How Folio Sense decides",
-        body: "It blends the signals that fit each holding — analyst consensus for stocks, price-zone and fund quality for ETFs — with the recent trend and your position size. It defaults to Hold and only leans Add or Trim when the evidence clearly points there.",
+        title: isLocal ? "How local intelligence works" : "How Folio Sense decides",
+        body: isLocal
+            ? "Purely on your machine — analyst data, price zones, trend, and quality are weighted into Add, Hold, or Trim. No cloud calls. Same math every time, fully explainable via the bars below."
+            : "It blends the signals that fit each holding — analyst consensus for stocks, price-zone and fund quality for ETFs — with the recent trend and your position size. It defaults to Hold and only leans Add or Trim when the evidence clearly points there.",
         hint: "Re-scan to refresh on the latest prices. Not financial advice.",
-        icon: "bi-dice-5-fill",
+        icon: isLocal ? "bi-cpu-fill" : "bi-dice-5-fill",
     });
 }
 
@@ -3376,8 +3502,8 @@ function _confidenceTip(isAi) {
     return _verdictTip({
         title: isAi ? "AI signal strength" : "Signal strength",
         body: isAi
-            ? "Starts from local weighted inputs, then Claude applies tiny bounded nudges (±12 pts max) after reading the same data. Higher means stronger agreement on the call."
-            : "A weighted score from four inputs — expert opinions, price vs history, recent trend, and quality. Higher means the inputs agree more on the current Add, Hold, or Trim call.",
+            ? "One number summarizing how strongly the inputs agree — after Claude's tiny, bounded adjustments. Higher = more conviction in the Add, Hold, or Trim call."
+            : "One number from four inputs: expert views, price vs history, recent trend, and quality. 45–60 on a Hold is normal — it means nothing is shouting.",
         icon: isAi ? "bi-stars" : "bi-speedometer2",
         variant: isAi ? "ai" : "",
     });
@@ -3407,9 +3533,9 @@ function _renderAiSynthesisPanel(verdict) {
         ? `<span class="ai-synth-compare">Local ${localScore}% → AI ${aiScore}%</span>`
         : "";
 
-    return `<div class="verdict-ai-synthesis">
-        <div class="verdict-ai-synthesis-head">
-            <span class="ai-synth-kicker"><i class="bi bi-stars" aria-hidden="true"></i> Claude synthesis</span>
+    return `<div class="verdict-synthesis-panel is-ai">
+        <div class="verdict-synthesis-head">
+            <span class="synth-kicker"><i class="bi bi-stars" aria-hidden="true"></i> Claude synthesis</span>
             ${_verdictTip({
                 title: "How Claude refines this",
                 body: "One batched read of the same local stats — a headline, tiny score nudges, and a watch note. No new prices or invented data. Cached 24h like the quip.",
@@ -3418,14 +3544,14 @@ function _renderAiSynthesisPanel(verdict) {
             })}
             ${compareHtml}
         </div>
-        ${headline ? `<div class="ai-synth-headline">${escapeHtml(headline)}</div>` : ""}
-        ${tagHtml ? `<div class="ai-synth-tags">${tagHtml}</div>` : ""}
-        ${note ? `<p class="ai-synth-note">${escapeHtml(note)}</p>` : ""}
-        ${_renderAiRadarArtifact(verdict)}
+        ${headline ? `<div class="synth-headline">${escapeHtml(headline)}</div>` : ""}
+        ${tagHtml ? `<div class="synth-tags">${tagHtml}</div>` : ""}
+        ${note ? `<p class="synth-note">${escapeHtml(note)}</p>` : ""}
+        ${_renderSignalRadar(verdict, "ai")}
     </div>`;
 }
 
-function _renderAiRadarArtifact(verdict) {
+function _renderSignalRadar(verdict, variant = "ai") {
     const components = verdict?.confidence_detail?.components;
     if (!Array.isArray(components) || components.length < 4) return "";
     const scores = components.slice(0, 4).map(c => Math.min(100, Math.max(0, Number(c.score) || 0)));
@@ -3462,15 +3588,19 @@ function _renderAiRadarArtifact(verdict) {
         return `<text class="ai-radar-label" x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="middle">${labels[i]}</text>`;
     }).join("");
 
-    return `<div class="ai-radar-wrap">
-        <svg class="ai-radar" viewBox="0 0 100 100" role="img" aria-label="Signal balance radar">
+    return `<div class="signal-radar-wrap is-${variant}">
+        <svg class="signal-radar" viewBox="0 0 100 100" role="img" aria-label="Signal balance radar">
             ${rings}
             ${spokes}
-            <polygon class="ai-radar-fill" points="${poly}"></polygon>
-            <polygon class="ai-radar-stroke" points="${poly}"></polygon>
+            <polygon class="signal-radar-fill" points="${poly}"></polygon>
+            <polygon class="signal-radar-stroke" points="${poly}"></polygon>
             ${labelNodes}
         </svg>
     </div>`;
+}
+
+function _renderAiRadarArtifact(verdict) {
+    return _renderSignalRadar(verdict, "ai");
 }
 
 function _renderAiOrbital(conf) {
@@ -3494,10 +3624,11 @@ function _renderConfidenceStats(verdict) {
     if (!detail?.components?.length) return "";
 
     const isAi = _isAiVerdictActive(verdict);
+    const isLocal = isLocalIntelligenceMode() && !isAi;
     const level = detail.level || "Mixed signals";
     const summary = detail.summary || "";
     const levelClass = _confidenceLevelClass(level);
-    const aiPanelClass = isAi ? " is-ai-refined" : "";
+    const panelClass = isAi ? " is-ai-refined" : (isLocal ? " is-local-refined" : "");
 
     const bars = detail.components.map(comp => {
         const stance = ["support", "neutral", "against"].includes(comp.stance)
@@ -3505,25 +3636,34 @@ function _renderConfidenceStats(verdict) {
             : "neutral";
         const score = Math.min(100, Math.max(0, Math.round(comp.score || 0)));
         const nudge = Number(comp.ai_nudge);
+        const meta = _VERDICT_COMP_META[comp.key] || { icon: "bi-circle-fill", layman: "" };
         const nudgeHtml = isAi && Number.isFinite(nudge) && nudge !== 0
             ? `<span class="conf-stat-nudge">${nudge > 0 ? "+" : ""}${nudge}</span>`
             : "";
         const tip = _verdictTip({
             title: comp.tip_title || comp.label,
             body: isAi && Number.isFinite(comp.local_score)
-                ? `${comp.tip_body || ""} Local was ${comp.local_score}%; Claude nudged ${nudge > 0 ? "+" : ""}${nudge || 0}.`
-                : (comp.tip_body || ""),
-            icon: isAi ? "bi-stars" : "bi-bar-chart-fill",
+                ? `${comp.tip_body || meta.layman} Local was ${comp.local_score}%; Claude nudged ${nudge > 0 ? "+" : ""}${nudge || 0}.`
+                : (comp.tip_body || meta.layman),
+            icon: meta.icon,
             variant: isAi ? "ai" : "",
         });
+        const stanceLabel = { support: "Helps the call", neutral: "Neutral", against: "Pushes back" }[stance];
         return `<div class="conf-stat-row" data-stance="${escapeHtml(stance)}">
             <div class="conf-stat-head">
-                <span class="conf-stat-label">${escapeHtml(comp.label || "Signal")}</span>
-                <span class="conf-stat-score">${score}${nudgeHtml}${tip}</span>
+                <span class="conf-stat-label">
+                    <i class="bi ${meta.icon} conf-stat-icon" aria-hidden="true"></i>
+                    <span class="conf-stat-label-text">
+                        <span class="conf-stat-name">${escapeHtml(comp.label || "Signal")}</span>
+                        <span class="conf-stat-layman">${escapeHtml(meta.layman)}</span>
+                    </span>
+                </span>
+                <span class="conf-stat-score">${score}%${nudgeHtml}${tip}</span>
             </div>
             <div class="conf-stat-bar" role="presentation">
                 <div class="conf-stat-bar-fill" style="width:${score}%"></div>
             </div>
+            <span class="conf-stat-stance">${escapeHtml(stanceLabel)}</span>
         </div>`;
     }).join("");
 
@@ -3548,7 +3688,7 @@ function _renderConfidenceStats(verdict) {
     if (agreement.opposing) agreeParts.push(`${agreement.opposing} disagree`);
     const agreeCopy = agreeParts.length ? agreeParts.join(" · ") : "";
 
-    return `<div class="verdict-confidence-panel ${levelClass}${aiPanelClass}">
+    return `<div class="verdict-confidence-panel ${levelClass}${panelClass}">
         <div class="verdict-confidence-head">
             <span class="verdict-confidence-level">${escapeHtml(level)}</span>
             ${_verdictTip({
@@ -3563,8 +3703,13 @@ function _renderConfidenceStats(verdict) {
         ${summary ? `<p class="verdict-confidence-summary">${escapeHtml(summary)}</p>` : ""}
         <div class="conf-stats-grid">${bars}</div>
         ${agreeCopy ? `<div class="conf-agreement-row">
-            <span class="conf-agreement-label">Inputs at a glance</span>
+            <span class="conf-agreement-label"><i class="bi bi-ui-checks"></i> Quick read</span>
             <span class="conf-agreement-copy">${escapeHtml(agreeCopy)}</span>
+            ${_verdictTip({
+                title: "Inputs at a glance",
+                body: "How many of the four signals agree with the verdict, sit neutral, or push the other way.",
+                icon: "bi-ui-checks",
+            })}
         </div>` : ""}
         ${modifiers ? `<div class="conf-mod-row">${modifiers}</div>` : ""}
     </div>`;
@@ -3579,10 +3724,10 @@ function _renderVerdictSparkline(verdict, ticker) {
 
     return `<div class="verdict-sparkline-wrap">
         <div class="verdict-sparkline-head">
-            <span class="verdict-face-label">Last 30 days</span>
+            <span class="verdict-face-label"><i class="bi bi-graph-up" aria-hidden="true"></i> Last 30 days</span>
             ${_verdictTip({
                 title: "Price path",
-                body: "A quick look at how the price moved over the last month. Green means up vs the start of the window; red means down. Uses the same cached prices as the rest of the dashboard.",
+                body: "How the price moved over the last month. Green = up vs the start; red = down. Same data as the holdings table sparkline.",
                 icon: "bi-graph-up",
             })}
         </div>
@@ -3680,15 +3825,29 @@ function _renderHorizonPill(verdict, ticker) {
         </button>`;
 }
 
+function _shouldShowBookExposure(ticker) {
+    if (!cachedPortfolioExposure?.sector_exposure?.length) return false;
+    const live = latestHoldings.filter(h => !h.is_watchlist);
+    if (!live.length) return false;
+    const top = live.reduce((a, b) =>
+        (Number(a.allocation_pct) || 0) >= (Number(b.allocation_pct) || 0) ? a : b
+    );
+    return top.ticker === ticker;
+}
+
 function _renderMarketBackdropChip(verdict) {
     const regime = verdict?.regime_context || cachedMarketRegime;
     if (!regime?.label) return "";
-    return `<span class="verdict-context-chip verdict-regime-chip">
-        <i class="bi bi-globe2" aria-hidden="true"></i> ${escapeHtml(regime.label)}
+    const riskKey = regime.risk_regime || "neutral";
+    const chipClass = _REGIME_CHIP_CLASS[riskKey] || "is-neutral";
+    return `<span class="verdict-context-chip verdict-regime-chip ${chipClass}">
+        <i class="bi bi-globe-americas" aria-hidden="true"></i>
+        <span class="chip-label">Market</span>
+        <span class="chip-value">${escapeHtml(regime.label)}</span>
         ${_verdictTip({
             title: regime.tip_title || "Market backdrop",
-            body: regime.tip_body || "Current macro environment shifts how much each input counts.",
-            icon: "bi-globe2",
+            body: regime.tip_body || "The big-picture mood — risk appetite, rates, and the dollar — shifts how much each signal counts on your verdict.",
+            icon: "bi-globe-americas",
         })}
     </span>`;
 }
@@ -3697,17 +3856,19 @@ function _renderPeerRelativeLine(verdict) {
     const peer = verdict?.peer_relative;
     if (!peer?.vs_own_range && peer?.peer_comparison === "unavailable") return "";
     const comparison = {
-        cheaper_than_peers: "Cheaper vs peers",
-        richer_than_peers: "Richer vs peers",
-        in_line_with_peers: "In line with peers",
-    }[peer.peer_comparison] || peer.vs_own_label || "";
-    if (!comparison) return "";
-    return `<div class="verdict-peer-line">
-        <span class="verdict-face-label">${escapeHtml(peer.peer_label || "Vs peers")}</span>
-        <span class="verdict-peer-copy">${escapeHtml(comparison)}</span>
+        cheaper_than_peers: { label: "Cheaper than peers", icon: "bi-arrow-down-circle-fill", cls: "is-cheaper" },
+        richer_than_peers: { label: "Richer than peers", icon: "bi-arrow-up-circle-fill", cls: "is-richer" },
+        in_line_with_peers: { label: "In line with peers", icon: "bi-dash-circle-fill", cls: "is-inline" },
+    }[peer.peer_comparison] || { label: peer.vs_own_label || "Vs history", icon: "bi-bar-chart-steps", cls: "" };
+    return `<div class="verdict-insight-card verdict-peer-card ${comparison.cls}">
+        <div class="verdict-insight-icon"><i class="bi ${comparison.icon}" aria-hidden="true"></i></div>
+        <div class="verdict-insight-body">
+            <span class="verdict-insight-kicker">${escapeHtml(peer.peer_label || "Compared to similar funds")}</span>
+            <span class="verdict-insight-value">${escapeHtml(comparison.label)}</span>
+        </div>
         ${_verdictTip({
             title: peer.tip_title || "Vs peers",
-            body: peer.tip_body || "",
+            body: peer.tip_body || "Compares where price sits in this holding's own range vs a small peer set.",
             icon: "bi-bar-chart-steps",
         })}
     </div>`;
@@ -3717,10 +3878,12 @@ function _renderEventChip(verdict) {
     const ev = verdict?.events;
     if (!ev?.label) return "";
     return `<span class="verdict-context-chip verdict-event-chip">
-        <i class="bi bi-calendar-event" aria-hidden="true"></i> ${escapeHtml(ev.label)}
+        <i class="bi bi-calendar-event" aria-hidden="true"></i>
+        <span class="chip-label">Event</span>
+        <span class="chip-value">${escapeHtml(ev.label)}</span>
         ${_verdictTip({
             title: ev.tip_title || "Upcoming event",
-            body: ev.tip_body || "",
+            body: ev.tip_body || "Earnings and other events add uncertainty — confidence may be capped until the news lands.",
             icon: "bi-calendar-event",
         })}
     </span>`;
@@ -3731,22 +3894,43 @@ function _renderConfidenceRange(verdict, conf) {
     const low = detail?.range_low;
     const high = detail?.range_high;
     if (!Number.isFinite(low) || !Number.isFinite(high) || high - low < 3) return "";
-    return `<span class="verdict-conf-range">${low}–${high}% band</span>`;
+    return `<span class="verdict-conf-range">
+        <i class="bi bi-arrows-expand" aria-hidden="true"></i>
+        Likely ${low}–${high}%
+        ${_verdictTip({
+            title: "Why a range?",
+            body: "When the four inputs disagree, we show a band instead of fake precision. The big number animates to the middle — the range shows how much wiggle room the signals allow.",
+            icon: "bi-arrows-expand",
+        })}
+    </span>`;
 }
 
 function _renderScenarios(verdict) {
     const scenarios = verdict?.confidence_detail?.scenarios;
     if (!scenarios?.base) return "";
     const pills = [
-        { key: "base", label: "Base", text: scenarios.base },
-        { key: "bull", label: "Bull", text: scenarios.bull },
-        { key: "bear", label: "Bear", text: scenarios.bear },
+        { key: "base", label: "Base", icon: "bi-signpost-fill", cls: "is-base", text: scenarios.base },
+        { key: "bull", label: "Bull", icon: "bi-graph-up-arrow", cls: "is-bull", text: scenarios.bull },
+        { key: "bear", label: "Bear", icon: "bi-graph-down-arrow", cls: "is-bear", text: scenarios.bear },
     ];
-    return `<div class="verdict-scenarios-row">
-        ${pills.map(p => `<span class="verdict-scenario-pill tip-trigger" type="button"
-            data-tip-title="${escapeHtml(p.label)} case"
-            data-tip-body="${escapeHtml(p.text)}"
-            data-tip-icon="bi-signpost-2">${escapeHtml(p.label)}</span>`).join("")}
+    return `<div class="verdict-scenarios-block">
+        <div class="verdict-scenarios-head">
+            <i class="bi bi-signpost-split" aria-hidden="true"></i>
+            <span>What could happen next</span>
+            ${_verdictTip({
+                title: "Three simple futures",
+                body: "Plain-English outcomes if things stay similar (Base), improve (Bull), or worsen (Bear). Tap each pill for the one-sentence story — not predictions, just context.",
+                icon: "bi-signpost-split",
+            })}
+        </div>
+        <div class="verdict-scenarios-row">
+            ${pills.map(p => `<button class="verdict-scenario-pill tip-trigger ${p.cls}" type="button"
+                data-tip-title="${escapeHtml(p.label)} case"
+                data-tip-body="${escapeHtml(p.text)}"
+                data-tip-icon="${p.icon}">
+                <i class="bi ${p.icon}" aria-hidden="true"></i> ${escapeHtml(p.label)}
+            </button>`).join("")}
+        </div>
     </div>`;
 }
 
@@ -3782,27 +3966,41 @@ function _renderCalibrationFootnote(verdict) {
     </div>`;
 }
 
-function _renderBookExposureStrip() {
+function _renderBookExposureStrip(ticker) {
+    if (!_shouldShowBookExposure(ticker)) return "";
     const exp = cachedPortfolioExposure;
     if (!exp?.sector_exposure?.length) return "";
-    const top = exp.sector_exposure.slice(0, 4);
-    const pills = top.map(s =>
-        `<span class="book-exp-pill" style="--pill-pct:${Math.min(100, s.weight_pct)}%">
-            ${escapeHtml(s.name)} ${s.weight_pct.toFixed(0)}%
+    const top = exp.sector_exposure.slice(0, 5);
+    const total = top.reduce((s, x) => s + x.weight_pct, 0) || 1;
+    const barSegments = top.map((s, i) => {
+        const pct = (s.weight_pct / total) * 100;
+        const hues = [210, 145, 35, 280, 15];
+        return `<span class="book-exp-seg" style="width:${pct}%;--seg-hue:${hues[i % hues.length]}"
+            title="${escapeHtml(s.name)} ${s.weight_pct.toFixed(0)}%"></span>`;
+    }).join("");
+    const hues = [210, 145, 35, 280, 15];
+    const legend = top.map((s, i) =>
+        `<span class="book-exp-legend-item">
+            <span class="book-exp-dot" style="background:hsl(${hues[i % hues.length]} 62% 52%)"></span>
+            ${escapeHtml(s.name)} <strong>${s.weight_pct.toFixed(0)}%</strong>
         </span>`
     ).join("");
     const dupNote = (exp.duplicate_flags || []).length
-        ? ` · ${exp.duplicate_flags.length} overlap flag(s)`
+        ? `<span class="book-exp-dup"><i class="bi bi-intersect"></i> ${exp.duplicate_flags.length} overlap${exp.duplicate_flags.length > 1 ? "s" : ""} detected</span>`
         : "";
     return `<div class="verdict-book-exposure">
-        <span class="verdict-face-label">Your book exposure</span>
-        <div class="book-exp-pills">${pills}</div>
-        ${_verdictTip({
-            title: "Look-through math",
-            body: "Each holding's sector/country weights × your allocation %, summed across the portfolio. Reveals hidden overlap (e.g. VOO + QQQ both loading US tech).",
-            icon: "bi-layers",
-        })}
-        ${dupNote ? `<span class="book-exp-dup">${escapeHtml(dupNote.trim())}</span>` : ""}
+        <div class="verdict-book-exposure-head">
+            <i class="bi bi-pie-chart-fill" aria-hidden="true"></i>
+            <span>Your whole portfolio — look-through</span>
+            ${_verdictTip({
+                title: "What you really own",
+                body: "Each ETF's sector weights × your allocation %, added up. So VOO + QQQ might mean more US tech than the ticker list alone suggests.",
+                icon: "bi-pie-chart-fill",
+            })}
+        </div>
+        <div class="book-exp-bar" role="img" aria-label="Portfolio sector exposure">${barSegments}</div>
+        <div class="book-exp-legend">${legend}</div>
+        ${dupNote}
     </div>`;
 }
 
@@ -3861,8 +4059,7 @@ function _renderFlipTriggers(verdict) {
     if (!flips?.add_price || !flips?.trim_price) return "";
     return `<div class="verdict-insight-row verdict-flip-line">
         <span class="verdict-row-icon"><i class="bi bi-signpost-split" aria-hidden="true"></i></span>
-        <span class="verdict-row-copy">
-            <span class="verdict-face-label">Could change near</span>
+        <span class="verdict-row-copy verdict-flip-copy">
             <span class="verdict-price-pair">
                 <span><i class="bi bi-arrow-up-right" aria-hidden="true"></i> Add near ${escapeHtml(formatCurrency(flips.add_price))}</span>
                 <span class="verdict-price-sep" aria-hidden="true"></span>
@@ -4006,16 +4203,20 @@ function _renderSignalMix(verdict) {
     </div>`;
 }
 
-function _renderQuip(quip) {
+function _renderQuip(quip, verdict) {
     if (!quip) return "";
-    const isLocal = isLocalIntelligenceMode();
-    if (isLocal) return "";
-    return `<div class="verdict-quote">
-        <span class="verdict-tea-label">FolioSense thinks:</span>
+    const isAi = verdict && _isAiVerdictActive(verdict);
+    const isLocal = isLocalIntelligenceMode() && !isAi;
+    const tipBody = isLocal
+        ? "A rotating one-liner from the same deterministic signals — no cloud, no API cost. Refreshes when you re-scan."
+        : "FolioSense writes this one line from the same signals — color commentary, not a separate recommendation. It's cached, so it costs almost nothing and only refreshes when the verdict or the market mood changes.";
+    return `<div class="verdict-quote${isLocal ? " is-local-quote" : ""}">
+        <span class="verdict-tea-label">${isLocal ? "Quick take:" : "FolioSense thinks:"}</span>
         ${_verdictTip({
-            title: "FolioSense's take",
-            body: "FolioSense writes this one line from the same signals — color commentary, not a separate recommendation. It's cached, so it costs almost nothing and only refreshes when the verdict or the market mood changes.",
-            variant: "ai",
+            title: isLocal ? "Local quip" : "FolioSense's take",
+            body: tipBody,
+            icon: isLocal ? "bi-chat-quote-fill" : "bi-stars",
+            variant: isLocal ? "local" : "ai",
         })}
         ${escapeHtml(quip)}
     </div>`;
@@ -4024,14 +4225,17 @@ function _renderQuip(quip) {
 function renderAiVerdictShimmer(section, ticker) {
     if (section._verdictShimmerTicker === ticker) return;
     section._verdictShimmerTicker = ticker;
+    const isLocal = isLocalIntelligenceMode();
     section.innerHTML = `
-        <div class="intel-label"><i class="bi bi-dice-5"></i> <span class="verdict-kicker-label">${escapeHtml(_verdictKickerLabel())}</span></div>
-        <div class="verdict-shimmer">
+        <div class="intel-label"><i class="bi ${_verdictIntelIcon()}"></i> <span class="verdict-kicker-label">${escapeHtml(_verdictKickerLabel())}</span></div>
+        <div class="verdict-shimmer${isLocal ? " is-local-shimmer" : ""}">
             <div style="display:flex;align-items:center;gap:.55rem;border-bottom:1px solid var(--hairline-soft);padding-bottom:.5rem;margin-bottom:.1rem">
                 <div class="shimmer-line" style="width:5px;height:5px;border-radius:50%;flex-shrink:0"></div>
-                <div class="shimmer-line" style="width:52px;height:8px;border-radius:3px"></div>
+                <div class="shimmer-line" style="width:${isLocal ? "88" : "52"}px;height:8px;border-radius:3px"></div>
+                <div class="shimmer-line" style="width:56px;height:8px;border-radius:999px;margin-left:.25rem"></div>
                 <div class="shimmer-line" style="width:36px;height:8px;border-radius:3px;margin-left:auto"></div>
             </div>
+            <div class="shimmer-line" style="width:100%;height:28px;border-radius:8px;margin-bottom:.35rem"></div>
             <div style="display:flex;align-items:center;gap:.7rem">
                 <div class="verdict-die is-tumbling" aria-hidden="true">
                     <img src="/static/img/brand/folio-orbit-icon.svg" alt="">
@@ -4045,7 +4249,8 @@ function renderAiVerdictShimmer(section, ticker) {
                     <div class="shimmer-line" style="width:52px;height:7px;border-radius:3px"></div>
                 </div>
             </div>
-            <div class="shimmer-line" style="width:100%;height:3px;border-radius:999px"></div>
+            <div class="shimmer-line" style="width:100%;height:3px;border-radius:999px;margin-top:.35rem"></div>
+            <div class="shimmer-line" style="width:100%;height:48px;border-radius:8px;margin-top:.35rem"></div>
             <div class="verdict-loading-line">${escapeHtml(_verdictLoadingLine(ticker))}</div>
         </div>`;
 }
@@ -4066,7 +4271,7 @@ function _animateConfidence(el, target, reducedMotion) {
 function renderAiVerdict(section, verdict, ticker) {
     if (!verdict) {
         section.innerHTML = `
-            <div class="intel-label"><i class="bi bi-dice-5"></i> <span class="verdict-kicker-label">${escapeHtml(_verdictKickerLabel())}</span></div>
+            <div class="intel-label"><i class="bi ${_verdictIntelIcon()}"></i> <span class="verdict-kicker-label">${escapeHtml(_verdictKickerLabel())}</span></div>
             <span class="intel-na">${escapeHtml(FOLIO_SENSE_VERDICT_COPY.unavailable)}</span>`;
         return;
     }
@@ -4089,7 +4294,8 @@ function renderAiVerdict(section, verdict, ticker) {
     const anchorPill = _renderAnchorPill(verdict, ticker);
     const horizonPill = _renderHorizonPill(verdict, ticker);
     const isAi = _isAiVerdictActive(verdict);
-    const aiClass = isAi ? " is-ai-enhanced" : "";
+    const isLocal = isLocalIntelligenceMode() && !isAi;
+    const modeClass = isAi ? " is-ai-enhanced" : (isLocal ? " is-local-enhanced" : "");
     const confDetail = verdict.confidence_detail || {};
     const displayConf = conf;
     const rangeHtml = _renderConfidenceRange(verdict, conf);
@@ -4117,23 +4323,26 @@ function renderAiVerdict(section, verdict, ticker) {
         .join("");
 
     section.innerHTML = `
-        <div class="intel-label"><i class="bi bi-dice-5"></i> <span class="verdict-kicker-label">${escapeHtml(brandCopy.kicker)}</span> ${_verdictInfoTip()}</div>
-        <div class="intel-verdict ${revealClass}${aiClass}" data-action="${escapeHtml(action)}"
+        <div class="intel-label"><i class="bi ${_verdictIntelIcon()}"></i> <span class="verdict-kicker-label">${escapeHtml(brandCopy.kicker)}</span> ${_verdictInfoTip()}</div>
+        <div class="intel-verdict ${revealClass}${modeClass}" data-action="${escapeHtml(action)}"
              aria-label="${escapeHtml(label)} verdict, ${conf}% confidence">
             <div class="verdict-header-bar">
                 <span class="verdict-status-dot" aria-hidden="true"></span>
-                <span class="verdict-header-label">${isLocalIntelligenceMode() ? "Local Intelligence Verdict" : (isAi ? "AI-Refined Verdict" : "AI Verdict")}</span>
-                ${isAi ? `<span class="verdict-ai-live-pill"><i class="bi bi-stars" aria-hidden="true"></i> Claude</span>` : ""}
+                <span class="verdict-header-label">${isLocal ? "Local Intelligence Verdict" : (isAi ? "AI-Refined Verdict" : "AI Verdict")}</span>
+                ${isAi ? `<span class="verdict-mode-pill is-ai"><i class="bi bi-stars" aria-hidden="true"></i> Claude</span>` : ""}
+                ${isLocal ? `<span class="verdict-mode-pill is-local"><i class="bi bi-cpu-fill" aria-hidden="true"></i> On-device</span>` : ""}
                 <span class="verdict-header-sep" aria-hidden="true">·</span>
                 <span class="verdict-header-ticker">${escapeHtml(ticker)}</span>
                 ${anchorPill}
                 ${horizonPill}
             </div>
-            <div class="verdict-context-row">
-                ${_renderMarketBackdropChip(verdict)}
-                ${_renderEventChip(verdict)}
+            <div class="verdict-context-strip">
+                <span class="verdict-context-strip-label"><i class="bi bi-binoculars"></i> Context</span>
+                <div class="verdict-context-row">
+                    ${_renderMarketBackdropChip(verdict)}
+                    ${_renderEventChip(verdict)}
+                </div>
             </div>
-            ${_renderBookExposureStrip()}
             <div class="verdict-hero">
                 <div class="verdict-die ${dieClass}" aria-hidden="true">
                     <img src="/static/img/brand/folio-orbit-icon.svg" alt="">
@@ -4145,10 +4354,10 @@ function renderAiVerdict(section, verdict, ticker) {
                         <i class="bi ${escapeHtml(icon)}"></i>
                         ${escapeHtml(label)}
                     </div>
-                    <div class="verdict-feels-line">${escapeHtml(brandCopy.feelsPrefix)} this could be a</div>
+                    <div class="verdict-feels-line">${escapeHtml(brandCopy.feelsPrefix)} this could be a <strong class="verdict-feels-action">${escapeHtml(label.toLowerCase())}</strong></div>
                 </div>
                 <div class="verdict-hero-conf">
-                    ${isAi ? _renderAiOrbital(conf) : ""}
+                    ${isAi ? _renderAiOrbital(conf) : (isLocal ? _renderLocalOrbital() : "")}
                     <span class="verdict-conf-pct" data-conf-target="${displayConf}">${initialConf}</span>
                     ${rangeHtml}
                     ${_renderAiDeltaBadge(verdict)}
@@ -4156,7 +4365,7 @@ function renderAiVerdict(section, verdict, ticker) {
                 </div>
             </div>
             <div class="verdict-meter-wrap">
-                <div class="verdict-meter${isAi ? " is-ai-meter" : ""}"
+                <div class="verdict-meter${isAi ? " is-ai-meter" : (isLocal ? " is-local-meter" : "")}"
                      role="meter"
                      aria-valuenow="${conf}"
                      aria-valuemin="0"
@@ -4165,9 +4374,10 @@ function renderAiVerdict(section, verdict, ticker) {
                     <div class="verdict-meter-fill" style="width:${meterWidth}"></div>
                 </div>
             </div>
-            ${_renderAiSynthesisPanel(verdict)}
+            ${_renderSynthesisPanel(verdict)}
             ${_renderClaudeTension(verdict)}
             ${_renderConfidenceStats(verdict)}
+            ${_renderBookExposureStrip(ticker)}
             ${_renderPeerRelativeLine(verdict)}
             ${_renderScenarios(verdict)}
             ${_renderVerdictSparkline(verdict, ticker)}
@@ -4175,9 +4385,15 @@ function renderAiVerdict(section, verdict, ticker) {
             ${_renderTimingLine(verdict)}
             ${metaChips ? `<div class="verdict-mini-chip-row">${metaChips}</div>` : ""}
             ${_renderSignalMix(verdict)}
-            ${_renderQuip(quip)}
-            ${reasonsHtml ? `<div class="intel-spec-rows verdict-spec-rows verdict-reasons-group">${reasonsHtml}</div>` : ""}
-            ${risksHtml ? `<div class="intel-spec-rows verdict-spec-rows verdict-risks-group">${risksHtml}</div>` : ""}
+            ${_renderQuip(quip, verdict)}
+            ${reasonsHtml ? `<div class="verdict-detail-block verdict-reasons-group">
+                <div class="verdict-detail-head"><i class="bi bi-check2-circle"></i> Why ${escapeHtml(label.toLowerCase())} ${_verdictTip({ title: "Supporting reasons", body: "The top deterministic reasons behind this call — from analyst data, price zone, trend, or quality.", icon: "bi-check2-circle" })}</div>
+                <div class="intel-spec-rows verdict-spec-rows">${reasonsHtml}</div>
+            </div>` : ""}
+            ${risksHtml ? `<div class="verdict-detail-block verdict-risks-group">
+                <div class="verdict-detail-head"><i class="bi bi-shield-exclamation"></i> Watch outs ${_verdictTip({ title: "Risks & caveats", body: "Things that could change the story — concentration, earnings, fading momentum, or data gaps.", icon: "bi-shield-exclamation" })}</div>
+                <div class="intel-spec-rows verdict-spec-rows">${risksHtml}</div>
+            </div>` : ""}
             ${_renderCalibrationFootnote(verdict)}
             ${disc ? `<div class="intel-meta-row">
                 <span class="fact-tag">${escapeHtml(disc)}</span>
@@ -4333,6 +4549,30 @@ function applyIntelligenceModeUi() {
     }
 
     updateHudPillSummary();
+}
+
+async function onIntelligenceModeChanged(local, { notify = false } = {}) {
+    applyIntelligenceModeUi();
+
+    if (latestHoldings.length) {
+        renderHoldings();
+    }
+
+    const hasVerdicts = Object.keys(cachedVerdicts).length > 0;
+    if (hasVerdicts || intelligenceLoaded || intelligenceLoading) {
+        await refreshAiVerdicts({ force: true });
+        if (latestHoldings.length) renderHoldings();
+    }
+
+    if (!notify) return;
+    if (local) {
+        showToast(
+            "Intelligence model is now local — calculations will run again. For more detailed and accurate analysis, enable Claude.",
+            "info",
+        );
+    } else {
+        showToast("Claude AI enabled — recalculating verdicts with AI refinement.", "info");
+    }
 }
 
 function applyClaudeApiStatus(claudeLive) {
@@ -4560,8 +4800,9 @@ function initDashboardPet() {
             modeToggle.title = local
                 ? "Switch back to Folio Sense × Claude"
                 : "Switch to Local Intelligence — skip Claude for this session";
+            animateToggle(modeToggle);
         }
-        applyIntelligenceModeUi();
+        void onIntelligenceModeChanged(local, { notify: announce });
         if (announce) {
             const msg = local
                 ? "Without my second half, I'm basic — but still running the numbers with quiet, deterministic dignity."
@@ -5407,6 +5648,7 @@ async function loadHoldingIntelligence(options = {}) {
             cachedPortfolioExposure = verdictData.portfolio_exposure || null;
             cachedMarketRegime = verdictData.regime || null;
             applyClaudeApiStatus(verdictData.claude_live ?? null);
+            repaintOpenVerdictSparklines();
         }
 
         await verifyAndRefreshIncompleteIntelligence();
@@ -5644,8 +5886,9 @@ async function updateHolding(holdingId) {
     }
 }
 
-async function refreshAiVerdicts() {
-    if (!Object.keys(cachedVerdicts).length && !intelligenceLoaded && !intelligenceLoading) return;
+async function refreshAiVerdicts(options = {}) {
+    const force = options.force === true;
+    if (!force && !Object.keys(cachedVerdicts).length && !intelligenceLoaded && !intelligenceLoading) return;
     try {
         const res = await fetch(`/api/ai/investment-signals/all${_forcedLocalMode ? "?force_local=true" : ""}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -5653,12 +5896,15 @@ async function refreshAiVerdicts() {
         Object.entries(data.signals || {}).forEach(([ticker, sig]) => {
             cachedVerdicts[ticker] = sig;
         });
+        cachedPortfolioExposure = data.portfolio_exposure || cachedPortfolioExposure;
+        cachedMarketRegime = data.regime || cachedMarketRegime;
         applyClaudeApiStatus(data.claude_live ?? null);
         document.querySelectorAll("tr[data-ticker]").forEach(mainRow => {
             const ticker = mainRow.dataset.ticker;
             const verdictSection = mainRow.nextElementSibling?.querySelector(".intel-verdict-section");
             if (verdictSection) renderAiVerdict(verdictSection, cachedVerdicts[ticker], ticker);
         });
+        repaintOpenVerdictSparklines();
     } catch (err) {
         console.warn("Unable to refresh verdicts:", err);
     }

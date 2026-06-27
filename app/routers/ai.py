@@ -712,16 +712,13 @@ async def get_all_intelligence(db: Session = Depends(get_db)):
 # ── Analyst Recommendation endpoints ─────────────────────────────────────────
 
 VERDICT_BRAND_KICKER = "Folio Sense \u00d7 Claude"
-VERDICT_BRAND_KICKER_LOCAL = "Folio Sense Local Intelligence"
+VERDICT_BRAND_KICKER_LOCAL = "Folio Sense Intelligence"
 VERDICT_FEELS_PREFIX = "Folio Sense feels"
 _VERDICT_DISCLAIMER = (
-    "Folio Sense Local Intelligence \u2014 a signal read, not "
+    "Folio Sense Intelligence \u2014 a signal read, not "
     "financial advice. Verify before you trade."
 )
-_AI_VERDICT_DISCLAIMER = (
-    "Folio Sense \u00d7 Claude \u2014 local signals plus a small AI refinement. "
-    "Not financial advice. Verify before you trade."
-)
+_AI_VERDICT_DISCLAIMER = _VERDICT_DISCLAIMER
 _PORTFOLIO_CACHE_TICKER = "BOOK"
 _ACTION_CACHE_CODE = {"add": "a", "hold": "h", "trim": "t", "needs-data": "n"}
 _MOOD_CACHE_CODE = {
