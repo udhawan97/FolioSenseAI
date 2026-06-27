@@ -14,7 +14,8 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
-import yfinance as yf
+from app.services.move_explainer import SECTOR_ETF_MAP
+from app.services.stock_service import get_ticker_info
 
 logger = logging.getLogger(__name__)
 
@@ -479,7 +480,7 @@ def _try_yfinance_enrichment(  # pylint: disable=too-many-branches
     countries: list[CountryWeight] = []
     top_holdings: list[TopHolding] = []
     try:
-        info = yf.Ticker(ticker).info
+        info = get_ticker_info(ticker)
 
         sw = info.get("sectorWeightings") or []
         for item in sw:
@@ -559,17 +560,20 @@ def get_holding_intelligence(
     data_quality = "static"
     data_sources = ["static_metadata"]
 
-    # Attempt live enrichment for ETFs that have Yahoo Finance composition data
+    # Attempt live enrichment for ETFs that expose composition data on Yahoo Finance.
+    # Skipped for individual equities and crypto ETFs (no holdings data available).
     if coverage_type not in ("equity", "etf-crypto"):
         live_s, live_c, live_h = _try_yfinance_enrichment(ticker)
+        got_live = bool(live_s or live_c or live_h)
         if live_s:
             raw_sectors = live_s[:6]
-            data_quality = "live"
-            data_sources.append("yfinance")
         if live_c and not raw_countries:
             raw_countries = live_c[:6]
         if live_h and len(live_h) > len(raw_holdings):
             raw_holdings = live_h
+        if got_live:
+            data_quality = "live"
+            data_sources.append("yfinance")
 
     return HoldingIntelligence(
         ticker=ticker,
@@ -607,8 +611,7 @@ def _derive_unknown(ticker: str, stock_data: Optional[dict]) -> HoldingIntellige
 
     live_s, live_c, live_h = _try_yfinance_enrichment(ticker)
 
-    # Derive benchmark from sector
-    from app.services.move_explainer import SECTOR_ETF_MAP
+    # Derive benchmark from the holding's sector using the sector→ETF map.
     sector_etf = SECTOR_ETF_MAP.get(sector)
     if sector_etf:
         benchmarks = [sector_etf, "SPY"]

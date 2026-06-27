@@ -988,6 +988,117 @@ function setAiChecking(active, message = "Reading positions", insightsReady = fa
 
 let _portfolioValuePromise = null;
 
+// Stale-while-revalidate: persist the last good portfolio payload so the
+// holdings table + summary cards paint instantly on the next load while fresh
+// prices fetch in the background.
+const PORTFOLIO_VALUE_CACHE_KEY = "foliosense-portfolio-value-v1";
+
+function persistPortfolioValueCache(data) {
+    try {
+        localStorage.setItem(
+            PORTFOLIO_VALUE_CACHE_KEY,
+            JSON.stringify({ ts: Date.now(), data })
+        );
+    } catch (_) { /* quota or private mode — caching is best-effort */ }
+}
+
+function readPortfolioValueCache() {
+    try {
+        const raw = localStorage.getItem(PORTFOLIO_VALUE_CACHE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || !parsed.data || !Array.isArray(parsed.data.holdings)) return null;
+        return parsed;
+    } catch (_) {
+        return null;
+    }
+}
+
+// Render a portfolio /value payload into the hero cards + holdings table.
+// Shared by the live fetch and the instant cache hydration path.
+function renderPortfolioValueData(data) {
+    document.getElementById("total-value").textContent =
+        formatCompact(data.total_value);
+    document.getElementById("holding-count").textContent =
+        data.holdings.filter(h => !h.is_watchlist).length;
+    latestPortfolioValueData = data;
+    renderHeroPnl(data);
+
+    renderTotalReturn(data);
+
+    latestPortfolioDailyChange = isFiniteNumber(data.total_daily_change)
+        ? Number(data.total_daily_change)
+        : null;
+    const prevTickers = (latestHoldings || []).map(h => h.ticker).sort().join(",");
+    latestHoldings = data.holdings;
+    updateHoldingsFilterCounts();
+
+    const tickers = data.holdings.map(h => h.ticker);
+    const trendPromise = tickers.length ? loadTrendData(tickers) : Promise.resolve({});
+
+    try {
+        renderAllocation();
+        renderPortfolioSnapshot();
+
+        if (data.best_performer) {
+            const el = document.getElementById("best-performer");
+            el.dataset.ticker = data.best_performer.ticker;
+            el.innerHTML = `${escapeHtml(data.best_performer.ticker)} <span style="font-size:.85em;opacity:.8">${formatPct(data.best_performer.day_change_pct)}</span>`;
+        }
+        if (data.worst_performer) {
+            const el = document.getElementById("worst-performer");
+            el.dataset.ticker = data.worst_performer.ticker;
+            el.innerHTML = `${escapeHtml(data.worst_performer.ticker)} <span style="font-size:.85em;opacity:.8">${formatPct(data.worst_performer.day_change_pct)}</span>`;
+        }
+        if (data.holdings.length) {
+            const largest = data.holdings.reduce((a, b) =>
+                a.current_value > b.current_value ? a : b);
+            const el = document.getElementById("largest-holding");
+            el.dataset.ticker = largest.ticker;
+            el.innerHTML = `${escapeHtml(largest.ticker)} <span style="font-size:.85em;opacity:.8">${formatCompact(largest.current_value)}</span>`;
+        }
+
+        // Show holdings immediately; sparklines fill in when trend data arrives.
+        renderHoldings();
+        trendPromise
+            .then((trendData) => {
+                latestTrendData = trendData || {};
+                renderHoldings();
+                scheduleAllocationFocusPanelRefresh();
+                repaintOpenVerdictSparklines();
+            })
+            .catch(() => {
+                latestTrendData = {};
+                scheduleAllocationFocusPanelRefresh();
+            });
+
+        const nextTickers = data.holdings.map(h => h.ticker).sort().join(",");
+        if (prevTickers !== nextTickers) {
+            latestProjectionData = null;
+            projectionLoadPromise = null;
+            if (dashboardZone === "analytics") ensureProjectionLoaded();
+        }
+    } catch (renderErr) {
+        console.warn("Portfolio render error (data is current):", renderErr);
+    }
+}
+
+// Paint cached holdings instantly on first load, before the network responds.
+function hydratePortfolioFromCache() {
+    if (_hasLoadedOnce) return false;
+    const cached = readPortfolioValueCache();
+    if (!cached) return false;
+    try {
+        renderPortfolioValueData(cached.data);
+        const subEl = document.getElementById("hud-pop-sync-sub");
+        if (subEl) subEl.textContent = "Showing last saved prices — refreshing…";
+        return true;
+    } catch (err) {
+        console.warn("Portfolio cache hydrate failed:", err);
+        return false;
+    }
+}
+
 async function loadPortfolioValue() {
     if (_portfolioValuePromise) return _portfolioValuePromise;
     _portfolioValuePromise = (async () => {
@@ -1023,71 +1134,8 @@ async function loadPortfolioValue() {
             });
         }
 
-        // Update summary cards
-        document.getElementById("total-value").textContent =
-            formatCompact(data.total_value);
-        document.getElementById("holding-count").textContent =
-            data.holdings.filter(h => !h.is_watchlist).length;
-        latestPortfolioValueData = data;
-        renderHeroPnl(data);
-
-        renderTotalReturn(data);
-
-        latestPortfolioDailyChange = isFiniteNumber(data.total_daily_change)
-            ? Number(data.total_daily_change)
-            : null;
-        const prevTickers = (latestHoldings || []).map(h => h.ticker).sort().join(",");
-        latestHoldings = data.holdings;
-        updateHoldingsFilterCounts();
-
-        const tickers = data.holdings.map(h => h.ticker);
-        const trendPromise = tickers.length ? loadTrendData(tickers) : Promise.resolve({});
-
-        try {
-            renderAllocation();
-            renderPortfolioSnapshot();
-
-            if (data.best_performer) {
-                const el = document.getElementById("best-performer");
-                el.dataset.ticker = data.best_performer.ticker;
-                el.innerHTML = `${escapeHtml(data.best_performer.ticker)} <span style="font-size:.85em;opacity:.8">${formatPct(data.best_performer.day_change_pct)}</span>`;
-            }
-            if (data.worst_performer) {
-                const el = document.getElementById("worst-performer");
-                el.dataset.ticker = data.worst_performer.ticker;
-                el.innerHTML = `${escapeHtml(data.worst_performer.ticker)} <span style="font-size:.85em;opacity:.8">${formatPct(data.worst_performer.day_change_pct)}</span>`;
-            }
-            if (data.holdings.length) {
-                const largest = data.holdings.reduce((a, b) =>
-                    a.current_value > b.current_value ? a : b);
-                const el = document.getElementById("largest-holding");
-                el.dataset.ticker = largest.ticker;
-                el.innerHTML = `${escapeHtml(largest.ticker)} <span style="font-size:.85em;opacity:.8">${formatCompact(largest.current_value)}</span>`;
-            }
-
-            // Show holdings immediately; sparklines fill in when trend data arrives.
-            renderHoldings();
-            trendPromise
-                .then((trendData) => {
-                    latestTrendData = trendData || {};
-                    renderHoldings();
-                    scheduleAllocationFocusPanelRefresh();
-                    repaintOpenVerdictSparklines();
-                })
-                .catch(() => {
-                    latestTrendData = {};
-                    scheduleAllocationFocusPanelRefresh();
-                });
-
-            const nextTickers = data.holdings.map(h => h.ticker).sort().join(",");
-            if (prevTickers !== nextTickers) {
-                latestProjectionData = null;
-                projectionLoadPromise = null;
-                if (dashboardZone === "analytics") ensureProjectionLoaded();
-            }
-        } catch (renderErr) {
-            console.warn("Portfolio render error (data is current):", renderErr);
-        }
+        renderPortfolioValueData(data);
+        persistPortfolioValueCache(data);
 
     } catch (err) {
         console.error("Error loading portfolio value:", err);
@@ -8237,6 +8285,10 @@ async function initDashboard() {
     initThemeToggle();
     initTextSizeToggle();
     initDashboardZones();
+
+    // Paint last-known holdings immediately so the table isn't blank while the
+    // live prices fetch; the network response below replaces this in place.
+    hydratePortfolioFromCache();
 
     // Kick off critical data before heavier UI setup.
     const criticalData = Promise.all([

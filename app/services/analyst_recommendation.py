@@ -17,6 +17,7 @@ from app.services.etf_price_signal import fetch_etf_price_signal
 from app.services.etf_quality import calculate_etf_quality_score
 from app.services.holding_intelligence import get_static_holding_metadata
 from app.services.security_type import SecurityType, classify_security
+from app.services.stock_service import get_ticker_info
 
 logger = logging.getLogger(__name__)
 
@@ -59,29 +60,15 @@ class AnalystRec:  # pylint: disable=too-many-instance-attributes
     price_signal: Optional[dict] = None
 
 
-def _normalize_expense_ratio(value) -> Optional[float]:
-    """
-    Ensure expense ratio is in decimal form (0.0003 = 0.03%).
-    yfinance netExpenseRatio comes back in percent form (0.03 = 0.03%),
-    while static metadata and annualReportExpenseRatio use decimal form.
-    """
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
 def _compute_fcf_yield(info: dict) -> Optional[float]:
-    """FCF yield = trailing free cash flow / market cap × 100. None if data unavailable."""
+    """FCF yield = trailing free cash flow / market cap × 100. Returns None if unavailable."""
     try:
         fcf = info.get("freeCashflow")
         cap = info.get("marketCap")
         if fcf is not None and cap and float(cap) > 0:
             return round(float(fcf) / float(cap) * 100, 2)
     except (TypeError, ValueError, ZeroDivisionError):
-        return None
+        pass
     return None
 
 
@@ -108,17 +95,24 @@ def _etf_quality_rec(
     closes: list[float] | None = None,
 ) -> AnalystRec:
     static = get_static_holding_metadata(ticker)
+
+    # Expense ratio: prefer prospectus/annual-report value (already decimal, e.g. 0.0003);
+    # netExpenseRatio from yfinance is in percent form (0.03 means 3 bps), so divide by 100;
+    # fall back to static metadata when live data is missing.
+    net_er = info.get("netExpenseRatio")
+    raw_er = (
+        info.get("annualReportExpenseRatio")
+        or info.get("expenseRatio")
+        or (net_er / 100 if net_er else None)
+        or static.get("expense_ratio")
+    )
+    expense_ratio = float(raw_er) if raw_er is not None else None
+
     data = {
         **static,
         **info,
         "ticker": ticker,
-        "expense_ratio": _normalize_expense_ratio(
-            info.get("annualReportExpenseRatio")
-            or info.get("expenseRatio")
-            # netExpenseRatio comes back in percent form (0.03 = 0.03%); convert to decimal
-            or (info.get("netExpenseRatio") and info.get("netExpenseRatio") / 100)
-            or static.get("expense_ratio")
-        ),
+        "expense_ratio": expense_ratio,
         "aum": info.get("totalAssets") or info.get("netAssets"),
         "average_volume": info.get("averageVolume") or info.get("averageVolume10days"),
         "current_price": (
@@ -176,12 +170,13 @@ def _fetch_from_yfinance(ticker: str, closes: list[float] | None = None) -> Anal
     Pull analyst consensus from Yahoo Finance.
     Returns ETF quality for ETFs and unavailable for missing stock analyst data.
     """
-    stock = yf.Ticker(ticker)
-    info = stock.info
+    # `.info` (the slow scrape) comes from the shared cache; the ETF price-zone
+    # path may still pull lightweight history off a lazily-built Ticker.
+    info = get_ticker_info(ticker)
 
     security_type = classify_security(ticker, info)
     if security_type == SecurityType.ETF:
-        return _etf_quality_rec(ticker, info, stock, closes=closes)
+        return _etf_quality_rec(ticker, info, yf.Ticker(ticker), closes=closes)
 
     quote_type = str(info.get("quoteType") or "").lower()
     if quote_type in _NO_ANALYST_COVERAGE_TYPES or security_type in {

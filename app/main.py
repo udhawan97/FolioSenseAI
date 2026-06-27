@@ -1,3 +1,5 @@
+import logging
+import threading
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,6 +11,37 @@ from app.config import settings
 from app.database import engine, ensure_startup_migrations
 from app import models
 
+logger = logging.getLogger(__name__)
+
+
+def _run_startup_warmup() -> None:
+    """
+    Pre-fetch quotes, history, and world markets for the active holdings so the
+    first dashboard load hits warm caches instead of waiting on cold Yahoo
+    requests. Runs in a background thread; any failure is logged and ignored.
+    """
+    try:
+        from app.database import SessionLocal
+        from app.models import Holding
+        from app.services.stock_service import DEFAULT_HOLDINGS, warm_caches
+        from app.services.timing_signal import get_batched_history_closes
+        from app.routers.stocks import _get_world_markets_cached
+
+        with SessionLocal() as db:
+            tickers = [
+                str(row[0]).upper()
+                for row in db.query(Holding.ticker)
+                .filter(Holding.is_active.is_(True))
+                .all()
+            ] or list(DEFAULT_HOLDINGS)
+
+        warm_caches(tickers)
+        get_batched_history_closes(tickers)
+        _get_world_markets_cached()
+        logger.info("Startup cache warmup complete for %d tickers", len(tickers))
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.warning("Startup cache warmup failed; exception_type=%s", type(exc).__name__)
+
 
 # lifespan runs once when the server starts up.
 # We use it to create all database tables before the app begins accepting requests.
@@ -16,6 +49,8 @@ from app import models
 async def lifespan(_app: FastAPI):
     models.Base.metadata.create_all(bind=engine)
     ensure_startup_migrations()
+    # Warm caches off the main thread so startup isn't blocked on Yahoo.
+    threading.Thread(target=_run_startup_warmup, daemon=True).start()
     yield  # The app runs while we're "inside" this yield
 
 # Create the FastAPI application instance
@@ -25,7 +60,7 @@ app = FastAPI(
         "FolioSenseAI helps explain portfolio movement by surfacing "
         "market context and AI-generated insights for holdings."
     ),
-    version="3.0.0",
+    version="3.1.0",
     lifespan=lifespan,
 )
 

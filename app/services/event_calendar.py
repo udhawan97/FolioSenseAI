@@ -35,8 +35,8 @@ def _parse_earnings_date(info: dict) -> Optional[date]:
 def fetch_next_earnings(ticker: str) -> Optional[date]:
     """Fetch next earnings date from yfinance info (cached per call site)."""
     try:
-        import yfinance as yf
-        info = yf.Ticker(ticker.upper()).info or {}
+        from app.services.stock_service import get_ticker_info
+        info = get_ticker_info(ticker)
         return _parse_earnings_date(info)
     except Exception as exc:
         logger.debug("Earnings fetch failed for %s: %s", ticker, type(exc).__name__)

@@ -2,6 +2,7 @@
 Tests for app/services/analyst_recommendation.py
 No real network calls — yfinance is mocked throughout.
 """
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 from app.services.analyst_recommendation import (
@@ -31,11 +32,25 @@ def _make_info(**kwargs):
     return {**defaults, **kwargs}
 
 
+@contextmanager
 def _patch_yf(info_dict):
-    """Context manager that patches yf.Ticker(...).info with info_dict."""
+    """
+    Patch the data sources used by get_analyst_recommendation.
+
+    `.info` now comes from the shared stock_service cache (get_ticker_info),
+    while the ETF price-zone path still builds a yf.Ticker for history — so we
+    stub both to keep the test fully offline.
+    """
     mock_ticker = MagicMock()
     mock_ticker.info = info_dict
-    return patch("app.services.analyst_recommendation.yf.Ticker", return_value=mock_ticker)
+    with patch(
+        "app.services.analyst_recommendation.get_ticker_info",
+        return_value=info_dict,
+    ), patch(
+        "app.services.analyst_recommendation.yf.Ticker",
+        return_value=mock_ticker,
+    ):
+        yield
 
 
 # ── _build_subtext ────────────────────────────────────────────────────────────
@@ -172,7 +187,7 @@ class TestNotRatedFallbacks:
         assert rec.label == "Unavailable"
 
     def test_yfinance_exception_returns_not_rated(self):
-        with patch("app.services.analyst_recommendation.yf.Ticker",
+        with patch("app.services.analyst_recommendation.get_ticker_info",
                    side_effect=RuntimeError("network error")):
             rec = get_analyst_recommendation("NOW")
         assert rec.action == "unavailable"

@@ -16508,62 +16508,80 @@ svg.signal-radar {
 .portfolio-outlook {
     display: flex;
     flex-direction: column;
-    gap: 0.85rem;
+    gap: 1rem;
     padding: 0.15rem 0.1rem 0.2rem;
 }
 
 .verdict-mix-bar {
     display: flex;
     width: 100%;
-    height: 12px;
+    height: 18px;
+    gap: 2px;
     border-radius: 999px;
     overflow: hidden;
     background: var(--control-bg);
     border: 1px solid var(--hairline-soft);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.22);
 }
 
 .verdict-mix-seg {
-    min-width: 2px;
+    min-width: 3px;
     height: 100%;
-    transition: width 0.45s ease;
+    border-radius: 2px;
+    transition: width 0.45s var(--ease);
+}
+
+.verdict-mix-seg:first-child {
+    border-top-left-radius: 999px;
+    border-bottom-left-radius: 999px;
+}
+
+.verdict-mix-seg:last-child {
+    border-top-right-radius: 999px;
+    border-bottom-right-radius: 999px;
 }
 
 .verdict-mix-legend {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem 1rem;
+    gap: 0.5rem 1.1rem;
 }
 
 .verdict-mix-legend-item {
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
-    font-size: 0.68rem;
+    gap: 0.4rem;
+    font-size: 0.8rem;
     color: var(--text-secondary);
 }
 
 .verdict-mix-legend-item strong {
     color: var(--text-primary);
     font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
 }
 
 .verdict-mix-swatch {
     display: inline-block;
-    width: 0.55rem;
-    height: 0.55rem;
-    border-radius: 3px;
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 4px;
     flex-shrink: 0;
 }
 
 .verdict-mix-stats {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.5rem;
+    gap: 0.6rem;
 }
 
 .verdict-mix-stat {
-    padding: 0.55rem 0.65rem;
-    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding: 0.8rem 0.75rem;
+    border-radius: 14px;
     background: var(--surface);
     border: 1px solid var(--hairline-soft);
     text-align: center;
@@ -16571,18 +16589,21 @@ svg.signal-radar {
 
 .verdict-mix-stat-label {
     display: block;
-    font-size: 0.58rem;
+    font-size: 0.66rem;
+    font-weight: 600;
     color: var(--text-tertiary);
     text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin-bottom: 0.2rem;
+    letter-spacing: 0.06em;
 }
 
 .verdict-mix-stat-value {
     display: block;
-    font-size: 0.82rem;
-    font-weight: 600;
+    font-size: 1.15rem;
+    font-weight: 700;
     color: var(--text-primary);
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
 }
 
 .portfolio-outlook-quip {
@@ -16908,8 +16929,8 @@ svg.signal-radar {
 
 .signal-board-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
-    gap: 0.5rem;
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    gap: 0.6rem;
     min-height: 120px;
 }
 
@@ -16918,31 +16939,40 @@ svg.signal-radar {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.2rem;
-    padding: 0.55rem 0.35rem;
-    border-radius: 12px;
+    gap: 0.35rem;
+    min-height: 72px;
+    padding: 0.7rem 0.5rem;
+    border-radius: 14px;
     border: 1px solid var(--hairline-soft);
     background: var(--surface);
     text-align: center;
-    transition: transform 0.2s ease;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease), border-color 0.2s var(--ease);
+    will-change: transform;
 }
 
 .signal-board-tile:hover {
-    transform: translateY(-1px);
+    transform: translateY(-2px);
+    border-color: var(--hairline);
+    box-shadow: var(--shadow-card);
 }
 
 .signal-board-ticker {
-    font-size: 0.72rem;
+    font-size: 0.95rem;
     font-weight: 700;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
     color: var(--text-primary);
+    line-height: 1.1;
 }
 
 .signal-board-action {
-    font-size: 0.58rem;
+    font-size: 0.66rem;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.06em;
     color: var(--text-secondary);
+    line-height: 1;
 }
 
 .markets-tape-wrap {
@@ -17958,126 +17988,157 @@ svg.signal-radar {
 /* ── Confidence spectrum ──────────────────────────────────────── */
 .confidence-spectrum-bar {
     display: flex;
-    height: 0.8rem;
+    gap: 2px;
+    height: 0.9rem;
     border-radius: 999px;
     overflow: hidden;
     background: var(--hairline-soft);
-    margin-bottom: 0.85rem;
+    margin: 0.25rem 0 1.2rem;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.28);
 }
 
 .confidence-spectrum-seg {
-    min-width: 2px;
-    transition: width 0.35s ease;
+    min-width: 3px;
+    border-radius: 999px;
+    transition: width 0.45s var(--ease, ease);
 }
 
 /* band rows */
 .cs-bands {
     display: flex;
     flex-direction: column;
-    gap: 0.55rem;
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.4rem;
 }
 
 .cs-band {
     display: flex;
     flex-direction: column;
-    gap: 0.18rem;
+    gap: 0.34rem;
+    padding: 0.78rem 0;
+    border-bottom: 1px solid var(--hairline-soft);
+}
+
+.cs-band:first-child {
+    padding-top: 0.25rem;
+}
+
+.cs-band:last-child {
+    border-bottom: none;
+    padding-bottom: 0.25rem;
 }
 
 .cs-band-empty {
-    opacity: 0.38;
+    opacity: 0.42;
 }
 
 .cs-band-header {
     display: flex;
     align-items: center;
-    gap: 0.4rem;
+    gap: 0.6rem;
 }
 
 .cs-band-dot {
-    width: 0.5rem;
-    height: 0.5rem;
+    width: 0.62rem;
+    height: 0.62rem;
     border-radius: 50%;
     flex-shrink: 0;
 }
 
 .cs-band-range {
-    font-size: 0.68rem;
+    font-size: 0.95rem;
     font-weight: 700;
-    min-width: 3rem;
+    letter-spacing: -0.01em;
     color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
 }
 
 .cs-band-name {
-    font-size: 0.66rem;
+    font-size: 0.85rem;
+    font-weight: 500;
     color: var(--text-secondary);
 }
 
 .cs-band-pct {
-    font-size: 0.72rem;
+    font-size: 1.05rem;
     font-weight: 700;
+    letter-spacing: -0.02em;
     margin-left: auto;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
 }
 
 .cs-band-hint {
-    font-size: 0.63rem;
+    font-size: 0.78rem;
     color: var(--text-tertiary);
-    padding-left: 0.9rem;
-    line-height: 1.3;
+    padding-left: 1.22rem;
+    line-height: 1.4;
 }
 
 .cs-band-tickers {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.22rem;
-    padding-left: 0.9rem;
-    padding-top: 0.1rem;
+    gap: 0.35rem;
+    padding-left: 1.22rem;
+    padding-top: 0.2rem;
 }
 
 .cs-ticker-pill {
-    font-size: 0.6rem;
+    font-size: 0.74rem;
     font-weight: 600;
-    padding: 0.08rem 0.38rem;
-    border-radius: 4px;
+    padding: 0.16rem 0.5rem;
+    border-radius: 6px;
     background: var(--hairline-soft);
     color: var(--text-secondary);
     cursor: default;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.01em;
+    font-variant-numeric: tabular-nums;
+    transition: background 0.2s var(--ease, ease), color 0.2s var(--ease, ease);
+}
+
+.cs-ticker-pill:hover {
+    background: color-mix(in srgb, var(--text-secondary) 16%, transparent);
+    color: var(--text-primary);
 }
 
 .cs-ticker-more {
-    font-size: 0.6rem;
+    font-size: 0.74rem;
+    font-weight: 600;
     color: var(--text-tertiary);
-    padding: 0.08rem 0.2rem;
+    padding: 0.16rem 0.32rem;
     align-self: center;
 }
 
 /* avg row */
 .cs-avg-row {
     display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding-top: 0.55rem;
+    align-items: baseline;
+    gap: 0.6rem;
+    padding-top: 0.9rem;
+    margin-top: 0.2rem;
     border-top: 1px solid var(--hairline-soft);
 }
 
 .cs-avg-label {
-    font-size: 0.67rem;
+    font-size: 0.82rem;
+    font-weight: 500;
     color: var(--text-secondary);
 }
 
 .cs-avg-value {
-    font-size: 0.82rem;
+    font-size: 1.15rem;
     font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
 }
 
 .cs-avg-note {
-    font-size: 0.62rem;
+    font-size: 0.74rem;
     color: var(--text-tertiary);
     margin-left: auto;
     text-align: right;
-    max-width: 11rem;
-    line-height: 1.3;
+    max-width: 13rem;
+    line-height: 1.4;
 }
 
 /* ── Markets 2×2 layout ───────────────────────────────────────── */

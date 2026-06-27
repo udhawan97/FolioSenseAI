@@ -1,15 +1,17 @@
 """
 ETF price-zone signal from current price and historical yfinance data.
 
-This is intentionally price-history based rather than analyst-target based:
+Intentionally price-history based rather than analyst-target based:
 ETFs rarely have useful target prices, but yfinance reliably exposes quote
-history and common moving-average/range fields for most funds.
+history and moving-average / range fields for most funds.
 """
 from __future__ import annotations
 
 import logging
 import math
 from typing import Any, Iterable, Mapping
+
+import yfinance as yf
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +156,9 @@ def calculate_etf_price_signal(
 
     data_warnings = _build_data_warnings(current, close_values, basis)
 
+    # range_position is always returned as a supplementary metric regardless of the
+    # primary signal basis.  When basis == "52W range", range_position == percentile
+    # by construction, which is intentional — the UI displays them independently.
     range_position = None
     if current is not None and low_52 is not None and high_52 is not None and high_52 > low_52:
         range_position = round(max(0, min(100, (current - low_52) / (high_52 - low_52) * 100)), 1)
@@ -209,13 +214,15 @@ def calculate_etf_price_signal(
 def fetch_etf_price_signal(
     ticker: str,
     info: Mapping[str, Any],
-    stock: Any,
+    stock: Any = None,
     closes: Iterable[Any] | None = None,
 ) -> dict[str, Any]:
     """Fetch yfinance history defensively, then calculate the ETF price-zone signal."""
     close_values = _clean_numbers(closes if closes is not None else [])
     if closes is None:
         try:
+            if stock is None:
+                stock = yf.Ticker(ticker)
             history = stock.history(period="1y", auto_adjust=True)
             close_values = history_closes(history)
         except Exception as exc:

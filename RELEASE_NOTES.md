@@ -1,3 +1,94 @@
+# FolioSenseAI v3.1 Release Notes
+
+**Release date:** June 27, 2026
+
+---
+
+## ✦ Instant On, Zero Redundant Scrapes
+
+> *v3.1 is the release where the dashboard stopped making Yahoo Finance explain itself three times per load. One shared cache, one warm-up thread, one instant paint from localStorage — the data was already there; we just stopped throwing it away.*
+
+The holdings table now appears immediately from the last saved snapshot while fresh prices reload in the background. Behind the scenes every service that previously made its own `.info` network call now draws from a single shared cache with market-hours-aware TTLs. On startup a background thread pre-warms all caches so the first real fetch hits warm data. The Analytics Signals pane got an O(n) → O(1) rewrite in two hot paths. And a polish pass tightened up the verdict mix bar, signal board tiles, and confidence spectrum.
+
+---
+
+## What's New
+
+### Performance
+
+- **Shared `.info` cache** (`stock_service.get_ticker_info`) — quotes, analyst recs, holding intelligence, earnings calendar, move explainer, and ETF price-zone signal all draw from one cached blob per ticker instead of each triggering their own Yahoo scrape. TTL is 5 min while the market is open, 1 hr while closed.
+- **Background startup warmup** — on server start a daemon thread pre-fetches quotes, 1-year history closes, and world market data for all active holdings so the first dashboard load sees warm caches.
+- **Stale-while-revalidate portfolio cache** — `localStorage` snapshot of the last good `/api/portfolio/value` response; the holdings table and summary cards paint instantly on page load while fresh prices fetch in the background. The cache key is `foliosense-portfolio-value-v1`.
+- **Analytics Signals O(1) lookups** — watchlist filtering and allocation-weight accumulation now use a pre-built `Set` and `Map` respectively instead of `Array.find` inside hot loops.
+
+### UI Polish
+
+- **Verdict mix bar** — taller (12 → 18 px), segment gaps with individually rounded end-caps, inset shadow for depth.
+- **Signal board tiles** — wider minimum (88 → 104 px), taller (min-height 72 px), bigger ticker label (0.72 → 0.95 rem), smoother lift-on-hover with `will-change: transform`.
+- **Confidence spectrum** — band rows separated by hairlines, dot enlarged with a glow ring via `color-mix`, ticker pills now show a hover state, average confidence value enlarged (0.82 → 1.15 rem), `+N more` badge simplified.
+
+### Code Quality
+
+- Removed misleading `_normalize_expense_ratio` helper in `analyst_recommendation.py`; expense-ratio normalization is now inline with an explanatory comment.
+- Simplified `_compute_fcf_yield` — single exit point, no redundant `return None` inside the except block.
+- Fixed `data_quality` field in `holding_intelligence.py` — previously stayed `"static"` when only live country weights or top holdings were fetched (no live sectors). Now correctly set to `"live"` whenever any live data is returned.
+- Moved buried local imports in `holding_intelligence.py` to module top; neither creates a circular dependency.
+- `etf_price_signal.py`: `yfinance` import promoted to module level; added clarifying comment on the intentional `range_position` / `percentile` equality when the 52W-range fallback is active.
+- Removed dead `holdingAllocPct()` function in `analytics-charts.js` — superseded by the `allocByTicker` Map.
+- `stock_service.py` restructured: module docstring added, constants and helpers now appear before the functions that reference them, `_parallel_fetch()` extracted to deduplicate `get_all_quotes` / `get_portfolio_quotes`, `_r()` closure promoted to module-level `_round_or_none()`.
+
+---
+
+## Developer Notes
+
+- FastAPI metadata version **`3.1.0`**
+- Static cache keys: `style.css?v=97`, `dashboard.js?v=90`, `analytics-charts.js?v=13`
+- No database schema changes — no migration required.
+- No `.env` changes required.
+- **`297 tests passing`**
+
+---
+
+## Install & Upgrade
+
+### Fresh install
+
+**Mac / Linux**
+
+```bash
+curl -L -o FolioSenseAI-v3.1.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v3.1.zip
+unzip FolioSenseAI-v3.1.zip
+cd FolioSenseAI-release-v3.1
+./scripts/setup.sh
+```
+
+**Windows PowerShell**
+
+```powershell
+Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v3.1.zip" -OutFile "FolioSenseAI-v3.1.zip"
+Expand-Archive -Path "FolioSenseAI-v3.1.zip" -DestinationPath .
+cd FolioSenseAI-release-v3.1
+.\scripts\setup.ps1
+```
+
+### Upgrade from v3.0
+
+1. Stop the app (`Ctrl+C`).
+2. Back up `database/` and `.env`.
+3. Download v3.1 into a **new folder** — do not overwrite in place.
+4. Copy `database/` and `.env` into the new tree.
+5. Run setup once, then `start.sh` / `start.ps1` going forward.
+
+No database migration or `.env` change required.
+
+---
+
+## Final Word
+
+v3.1 is still not financial advice. It is just faster at telling you things you probably already suspected.
+
+---
+
 # FolioSenseAI v3.0 Release Notes
 
 **Release date:** June 27, 2026

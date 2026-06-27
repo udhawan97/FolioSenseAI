@@ -116,7 +116,8 @@ class HoldingMoveSummary:  # pylint: disable=too-many-instance-attributes
 
 def _day_change_pct(ticker: str) -> float:
     try:
-        info = yf.Ticker(ticker).info
+        from app.services.stock_service import get_ticker_info
+        info = get_ticker_info(ticker)
         current = (
             info.get("currentPrice")
             or info.get("regularMarketPrice")

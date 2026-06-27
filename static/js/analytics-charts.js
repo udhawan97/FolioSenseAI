@@ -504,11 +504,6 @@ const AnalyticsCharts = (() => {
         return "unknown";
     }
 
-    function holdingAllocPct(ticker) {
-        const h = (latestHoldings || []).find(x => x.ticker === ticker && !x.is_watchlist);
-        return Number(h?.allocation_pct) || 0;
-    }
-
     function verdictBucketLabel(bucket) {
         return { add: "Add / buy", hold: "Hold", trim: "Trim / sell", unknown: "Unclear" }[bucket] || bucket;
     }
@@ -1939,16 +1934,17 @@ const AnalyticsCharts = (() => {
 
         const bandRows = buckets.map(b => {
             const meta = CS_BAND_META[b.key] || { label: b.band, hint: "" };
+            const c = colors[b.key] || colors.mid;
             const tickers = grouped[b.key] || [];
             const tickerHtml = tickers.length
                 ? `<div class="cs-band-tickers">${
                     tickers.slice(0, 6).map(t =>
                         `<span class="cs-ticker-pill" title="${t.ticker}: ${t.confidence}% confidence · ${t.allocation_pct}% of portfolio">${escapeHtml(t.ticker)}</span>`
-                    ).join("")}${tickers.length > 6 ? `<span class="cs-ticker-more">+${tickers.length - 6} more</span>` : ""}</div>`
+                    ).join("")}${tickers.length > 6 ? `<span class="cs-ticker-more">+${tickers.length - 6}</span>` : ""}</div>`
                 : "";
             return `<div class="cs-band${b.weight_pct === 0 ? " cs-band-empty" : ""}">
                 <div class="cs-band-header">
-                    <span class="cs-band-dot" style="background:${colors[b.key]}"></span>
+                    <span class="cs-band-dot" style="background:${c};box-shadow:0 0 0 4px color-mix(in srgb, ${c} 16%, transparent)"></span>
                     <span class="cs-band-range">${escapeHtml(b.band)}</span>
                     <span class="cs-band-name">${meta.label}</span>
                     <span class="cs-band-pct">${b.weight_pct}%</span>
@@ -2572,10 +2568,11 @@ const AnalyticsCharts = (() => {
         if (!grid) return;
 
         const signals = data?.signals || {};
-        const tickers = Object.keys(signals).filter(t => {
-            const h = latestHoldings.find(x => x.ticker === t);
-            return !h?.is_watchlist;
-        });
+        // O(1) watchlist lookup — avoids Array.find inside the filter callback.
+        const watchlistTickers = new Set(
+            (latestHoldings || []).filter(h => h.is_watchlist).map(h => h.ticker)
+        );
+        const tickers = Object.keys(signals).filter(t => !watchlistTickers.has(t));
 
         if (!tickers.length) {
             showEmpty("signal-board-empty", true);
@@ -2614,8 +2611,14 @@ const AnalyticsCharts = (() => {
         let confWeighted = 0;
         let weightTotal = 0;
 
+        // Pre-build allocation Map for O(1) lookups inside the forEach below.
+        const allocByTicker = new Map();
+        (latestHoldings || []).forEach(h => {
+            if (!h.is_watchlist) allocByTicker.set(h.ticker, Number(h.allocation_pct) || 0);
+        });
+
         Object.entries(signals).forEach(([ticker, sig]) => {
-            const w = holdingAllocPct(ticker);
+            const w = allocByTicker.get(ticker) || 0;
             if (w <= 0) return;
             const bucket = normSignalBucket(sig.action);
             buckets[bucket] += w;
