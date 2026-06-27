@@ -716,6 +716,10 @@ def test_confidence_detail_has_range_and_scenarios():
     assert "base" in detail["scenarios"]
     assert "bull" in detail["scenarios"]
     assert "bear" in detail["scenarios"]
+    forecast = detail["scenarios"].get("forecast") or {}
+    assert forecast.get("likely") in ("base", "bull", "bear")
+    probs = forecast.get("probabilities") or {}
+    assert sum(probs.values()) == 100
 
 
 def test_horizon_trade_weights_momentum_heavier():

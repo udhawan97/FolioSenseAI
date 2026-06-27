@@ -133,9 +133,14 @@ def generate_verdict_ai_bundles(signals: list[dict]) -> dict[str, dict]:
         "  agrees: boolean — true if you agree with local action/confidence\n"
         "  tension: short phrase when inputs conflict (empty string if none)\n"
         "  flip_if: optional {metric, direction} when a specific change would flip the call\n"
+        "  likely: base|bull|bear — your best guess for the most probable near-term path\n"
+        "  sc_p: array of 3 integers [base%, bull%, bear%] summing to 100 (rough split)\n"
+        "  sc_w: ≤22 words explaining why you picked that likely path (plain English)\n"
         "Rules: never invent prices or percentages; only set n/cn when tension is non-empty "
         "OR agrees is false — otherwise n=0 and cn=[0,0,0,0]; "
-        "hold calls usually stay near local score; BOOK ticker gets q only (no n/cn/h/t/w). "
+        "sc_p must sum to 100 and likely should match your highest bucket (or explain in sc_w); "
+        "base usually 35–55% unless trend is strong; "
+        "hold calls usually stay near local score; BOOK ticker gets q only (no n/cn/h/t/w/sc_*). "
         "Return ONLY JSON."
     )
 

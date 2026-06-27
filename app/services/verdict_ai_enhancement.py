@@ -10,7 +10,13 @@ import json
 import re
 from typing import Any
 
-from app.services.investment_signal import _clamp, _confidence_level, _confidence_summary, _weighted_score
+from app.services.investment_signal import (
+    _clamp,
+    _confidence_level,
+    _confidence_summary,
+    _normalize_scenario_probs,
+    _weighted_score,
+)
 
 _COMPONENT_KEYS = ("analyst", "valuation", "momentum", "quality")
 _MAX_OVERALL_NUDGE = 12
@@ -80,6 +86,16 @@ def normalize_ai_bundle(raw: dict | None) -> dict | None:
         cn.append(0)
     cn = [_int_nudge(v, -_MAX_COMPONENT_NUDGE, _MAX_COMPONENT_NUDGE) for v in cn[:4]]
 
+    likely_raw = str(raw.get("likely") or raw.get("likely_scenario") or "").strip().lower()
+    likely = likely_raw if likely_raw in ("base", "bull", "bear") else None
+
+    sc_p_raw = raw.get("sc_p") or raw.get("scenario_probs")
+    scenario_probs = None
+    if sc_p_raw is not None:
+        scenario_probs = _normalize_scenario_probs(sc_p_raw)
+
+    scenario_note = str(raw.get("sc_w") or raw.get("scenario_note") or "").strip()[:120]
+
     return {
         "headline": str(raw.get("h") or raw.get("headline") or "").strip()[:80],
         "overall_nudge": _int_nudge(
@@ -93,6 +109,9 @@ def normalize_ai_bundle(raw: dict | None) -> dict | None:
         "agrees": raw.get("agrees") if raw.get("agrees") is not None else True,
         "tension": str(raw.get("tension") or "").strip()[:120],
         "flip_if": raw.get("flip_if") if isinstance(raw.get("flip_if"), dict) else None,
+        "likely_scenario": likely,
+        "scenario_probs": scenario_probs,
+        "scenario_note": scenario_note,
     }
 
 
@@ -162,6 +181,24 @@ def apply_ai_enhancement(sig_dict: dict, ai_raw: dict | None) -> dict:
     })
     detail["modifiers"] = modifiers
 
+    scenarios = dict(detail.get("scenarios") or {})
+    local_forecast = dict((scenarios.get("forecast") or {}))
+    if ai.get("scenario_probs") or ai.get("likely_scenario") or ai.get("scenario_note"):
+        probs = ai["scenario_probs"] or _normalize_scenario_probs(
+            local_forecast.get("probabilities"),
+        )
+        likely = ai.get("likely_scenario") or max(probs, key=probs.get)
+        if likely not in ("base", "bull", "bear"):
+            likely = max(probs, key=probs.get)
+        note = ai.get("scenario_note") or local_forecast.get("note") or ""
+        scenarios["forecast"] = {
+            "likely": likely,
+            "probabilities": probs,
+            "note": note,
+            "source": "claude",
+        }
+        detail["scenarios"] = scenarios
+
     sig_dict["confidence"] = final
     sig_dict["confidence_detail"] = detail
     sig_dict["ai_enhancement"] = {
@@ -177,6 +214,9 @@ def apply_ai_enhancement(sig_dict: dict, ai_raw: dict | None) -> dict:
         "tension": ai.get("tension", ""),
         "flip_if": ai.get("flip_if"),
         "nudge_applied": apply_nudge,
+        "likely_scenario": ai.get("likely_scenario"),
+        "scenario_probs": ai.get("scenario_probs"),
+        "scenario_note": ai.get("scenario_note"),
     }
     return sig_dict
 

@@ -412,6 +412,7 @@ let cachedVerdicts = {};         // ticker → verdict object from /api/ai/inves
 let cachedPortfolioExposure = null;
 let cachedMarketRegime = null;
 const cachedDeepIntel = {};      // ticker → deep read payload
+const deepIntelLoadingTickers = new Set();
 let aiCheckInterval = null;
 
 const AI_CHECK_MESSAGES = [
@@ -463,29 +464,20 @@ function nextClaudeScanMessage() {
     return message;
 }
 
-const INTEL_BUTTON_READY_HTML = `
-    <span class="btn-intel-frame">
+function _intelButtonHtml(loading = false) {
+    const local = isLocalIntelligenceMode();
+    const label = loading ? "Scanning" : "Holding Intel";
+    const badgeLabel = local ? "Local" : "AI";
+    return `<span class="btn-intel-frame">
         <span class="btn-intel-glyph">
             <img class="btn-intel-logo btn-intel-icon" src="/static/img/brand/folio-orbit-icon.svg" alt="">
         </span>
         <span class="btn-intel-text">
-            <span class="btn-intel-command">Holding Intel</span>
+            <span class="btn-intel-command">${label}</span>
         </span>
-        <span class="btn-intel-badge">AI</span>
-    </span>
-`;
-
-const INTEL_BUTTON_LOADING_HTML = `
-    <span class="btn-intel-frame">
-        <span class="btn-intel-glyph">
-            <img class="btn-intel-logo btn-intel-icon" src="/static/img/brand/folio-orbit-icon.svg" alt="">
-        </span>
-        <span class="btn-intel-text">
-            <span class="btn-intel-command">Scanning</span>
-        </span>
-        <span class="btn-intel-badge">AI</span>
-    </span>
-`;
+        <span class="btn-intel-badge">${badgeLabel}</span>
+    </span>`;
+}
 
 const INTELLIGENCE_MAX_RETRIES = 3;
 const INTELLIGENCE_RETRY_BASE_DELAY_MS = 900;
@@ -2252,10 +2244,8 @@ function toggleSummaryRow(mainRow) {
         const ticker = mainRow.dataset.ticker;
         if (ticker) {
             setTimeout(() => {
-                loadDeepIntelligence(ticker).then(data => {
-                    const coverage = expandRow.querySelector(".intel-coverage-section");
-                    if (coverage && data) _injectDeepIntelSection(coverage, data);
-                });
+                const coverage = expandRow.querySelector(".intel-coverage-section");
+                if (coverage) requestDeepIntel(ticker, coverage);
             }, 400);
         }
     }
@@ -3047,6 +3037,9 @@ function renderHoldingCoverage(section, data) {
             ${marketPulseHtml}
             <div class="intel-meta-row">${factTag}${pulseStatusHtml}</div>
         </div>`;
+    if (data.ticker && _isCoverageRowOpen(section)) {
+        _syncDeepIntelSection(section, data.ticker);
+    }
 }
 
 function injectSummaryRows(tbody) {
@@ -3487,12 +3480,13 @@ function _renderSynthesisPanel(verdict) {
 
 function _verdictTip({ title, body, hint = "", icon = "bi-info-circle-fill", variant = "" }) {
     return `<button class="tip-trigger target-tip-trigger" type="button"
+        aria-label="${escapeHtml(title)}"
         data-tip-title="${escapeHtml(title)}"
         data-tip-body="${escapeHtml(body)}"
         ${hint ? `data-tip-hint="${escapeHtml(hint)}"` : ""}
         data-tip-icon="${escapeHtml(icon)}"
         ${variant ? `data-tip-variant="${escapeHtml(variant)}"` : ""}>
-        <i class="bi bi-info-circle"></i>
+        <i class="bi bi-info-circle" aria-hidden="true"></i>
     </button>`;
 }
 
@@ -3845,21 +3839,223 @@ function _shouldShowBookExposure(ticker) {
     return top.ticker === ticker;
 }
 
-function _renderMarketBackdropChip(verdict) {
-    const regime = verdict?.regime_context || cachedMarketRegime;
-    if (!regime?.label) return "";
-    const riskKey = regime.risk_regime || "neutral";
-    const chipClass = _REGIME_CHIP_CLASS[riskKey] || "is-neutral";
-    return `<span class="verdict-context-chip verdict-regime-chip ${chipClass}">
-        <i class="bi bi-globe-americas" aria-hidden="true"></i>
-        <span class="chip-label">Market</span>
-        <span class="chip-value">${escapeHtml(regime.label)}</span>
+function _renderContextChip(chip) {
+    if (!chip?.value) return "";
+    return `<span class="verdict-context-chip ${escapeHtml(chip.cls || "")}">
+        <i class="bi ${escapeHtml(chip.icon)}" aria-hidden="true"></i>
+        <span class="chip-label">${escapeHtml(chip.label)}</span>
+        <span class="chip-value">${escapeHtml(chip.value)}</span>
         ${_verdictTip({
-            title: regime.tip_title || "Market backdrop",
-            body: regime.tip_body || "The big-picture mood — risk appetite, rates, and the dollar — shifts how much each signal counts on your verdict.",
-            icon: "bi-globe-americas",
+            title: chip.tipTitle || chip.label,
+            body: chip.tipBody || "",
+            icon: chip.icon,
         })}
     </span>`;
+}
+
+function _sectorFlags(intel) {
+    const names = (intel?.sectors || []).map(s => String(s.name || "").toLowerCase());
+    const theme = String(intel?.theme || "").toLowerCase();
+    const coverage = String(intel?.coverage_type || "").toLowerCase();
+    const blob = [...names, theme, coverage].join(" ");
+    return {
+        isGrowth: /tech|growth|discretionary|communication|semiconductor|innovation|nasdaq/.test(blob),
+        isDefensive: /util|staple|health|consumer defensive|bond|treasury|dividend/.test(blob),
+        isRateSensitive: /real estate|reit|utility|financial|bond|treasury|mortgage/.test(blob),
+        isIntl: /international|emerging|global|europe|japan|china|fx|ex-us/.test(blob),
+        topSector: intel?.sectors?.[0]?.name || null,
+    };
+}
+
+function _holdingMacroContextChip(ticker, verdict, intel) {
+    const regime = verdict?.regime_context || cachedMarketRegime;
+    if (!regime?.label) return null;
+    const risk = regime.risk_regime || "neutral";
+    const rates = regime.rates_regime || "rates_flat";
+    const vix = regime.vix_band || "normal";
+    const usd = regime.usd_regime || "usd_neutral";
+    const flags = _sectorFlags(intel);
+    const toneCls = _REGIME_CHIP_CLASS[risk] || "is-neutral";
+    let value = "";
+    let tipBody = "";
+
+    if (vix === "elevated") {
+        value = "Vol high · wider swings";
+        tipBody = `Fear gauge is elevated. ${ticker} may gap more on headlines — momentum weighs less in this verdict.`;
+    } else if (risk === "risk_off" && flags.isGrowth) {
+        value = "Risk-off · hits growth";
+        tipBody = `Risk appetite is cooling. Growth-heavy exposure like ${ticker} usually scores weaker on momentum right now.`;
+    } else if (risk === "risk_off" && flags.isDefensive) {
+        value = "Risk-off · favors defensive";
+        tipBody = `Defensive exposure like ${ticker} tends to hold up better when SPY is soft — quality gets a boost.`;
+    } else if (risk === "risk_on" && flags.isGrowth) {
+        value = "Risk-on · growth tailwind";
+        tipBody = `Risk appetite is improving. Growth beta in ${ticker} gets a friendlier momentum read.`;
+    } else if (rates === "rates_rising" && flags.isRateSensitive) {
+        value = "Rates up · sensitivity";
+        tipBody = `Bond yields are rising. Rate-sensitive exposure like ${ticker} faces a tougher valuation read.`;
+    } else if (rates === "rates_falling" && (flags.isGrowth || flags.isRateSensitive)) {
+        value = "Rates easing · helps duration";
+        tipBody = `Falling rates ease pressure on longer-duration assets — a modest tailwind for ${ticker}.`;
+    } else if (usd === "usd_strong" && flags.isIntl) {
+        value = "Strong USD · intl drag";
+        tipBody = `A strong dollar often pressures international earnings — relevant for ${ticker}'s geographic mix.`;
+    } else if (usd === "usd_weak" && flags.isIntl) {
+        value = "Weak USD · helps intl";
+        tipBody = `A softer dollar tends to help non-US revenue — a small tailwind for ${ticker}.`;
+    } else if (flags.topSector && risk !== "neutral") {
+        const adj = regime.component_adjustments || {};
+        const layman = { analyst: "analyst views", valuation: "valuation", momentum: "trend", quality: "quality" };
+        const boosts = Object.entries(adj).filter(([, v]) => v > 0).map(([k]) => layman[k] || k);
+        if (boosts.length) {
+            value = `Macro tilts ${boosts[0]}`;
+            tipBody = `Today's backdrop boosts ${boosts.join(" & ")} for ${ticker} — ${flags.topSector} is the live sector read.`;
+        }
+    }
+
+    if (!value) return null;
+    return {
+        label: "Macro",
+        value,
+        icon: "bi-globe-americas",
+        tipTitle: `${ticker} macro read`,
+        tipBody: tipBody || regime.tip_body,
+        cls: `verdict-regime-chip ${toneCls}`,
+    };
+}
+
+function _collectVerdictContextChips(verdict, ticker) {
+    const chips = [];
+    const intel = cachedIntelligence[ticker];
+    const holding = latestHoldings.find(h => h.ticker === ticker);
+
+    const ev = verdict?.events;
+    if (ev?.label) {
+        chips.push({
+            label: "Event",
+            value: ev.label,
+            icon: "bi-calendar-event",
+            tipTitle: ev.tip_title || "Upcoming event",
+            tipBody: ev.tip_body || "Earnings and other events add uncertainty.",
+            cls: "verdict-event-chip",
+        });
+    }
+
+    const exp = verdict?.exposure_context;
+    if (exp?.sector_already_heavy?.name) {
+        const sec = exp.sector_already_heavy;
+        chips.push({
+            label: "Book",
+            value: `${sec.name} ${Math.round(sec.weight_pct)}%`,
+            icon: "bi-pie-chart",
+            tipTitle: "Portfolio overlap",
+            tipBody: `You already have ${Number(sec.weight_pct).toFixed(0)}% in ${sec.name}. Adding ${ticker} stacks that same bet.`,
+            cls: "verdict-exposure-chip",
+        });
+    } else if (exp?.crowded_themes?.[0]) {
+        const theme = exp.crowded_themes[0];
+        chips.push({
+            label: "Overlap",
+            value: theme.label || theme.theme || "Crowded theme",
+            icon: "bi-intersect",
+            tipTitle: "Theme overlap",
+            tipBody: exp.add_penalty_reason
+                ? `Your book already leans ${exp.add_penalty_reason}.`
+                : "This holding overlaps a crowded theme in your portfolio.",
+            cls: "verdict-exposure-chip",
+        });
+    }
+
+    const peer = verdict?.peer_relative;
+    const rec = cachedRecommendations[ticker];
+    const zone = rec?.price_signal?.priceZoneLabel;
+    const hasPeerCard = Boolean(peer?.vs_own_range || (peer?.peer_comparison && peer.peer_comparison !== "unavailable"));
+    if (!hasPeerCard && zone && zone !== "Unavailable" && rec?.price_signal?.percentile != null) {
+        chips.push({
+            label: "Price zone",
+            value: `${zone} · ${formatPercentilePct(rec.price_signal.percentile)}`,
+            icon: "bi-activity",
+            tipTitle: "Price vs history",
+            tipBody: `Trading at ${formatPercentilePct(rec.price_signal.percentile)} of its 1-year range — ${zone.toLowerCase()} zone.`,
+            cls: "verdict-valuation-chip",
+        });
+    }
+
+    const timing = verdict?.timing;
+    const trendLabels = {
+        trend_intact: "Trend intact",
+        stabilizing: "Stabilizing",
+        rolling_over: "Rolling over",
+        weakening: "Below averages",
+        neutral: "No clear trend",
+    };
+    if (timing?.available && timing.momentum_state) {
+        let trendValue = trendLabels[timing.momentum_state] || timing.momentum_state;
+        if (Number.isFinite(timing.vs50d_pct)) {
+            const sign = timing.vs50d_pct >= 0 ? "+" : "";
+            trendValue = `${trendValue} · ${sign}${timing.vs50d_pct.toFixed(1)}% vs 50D`;
+        }
+        chips.push({
+            label: "Trend",
+            value: trendValue,
+            icon: "bi-graph-up-arrow",
+            tipTitle: "Recent price action",
+            tipBody: _timingLaymanCopy(timing) || "How the last few weeks of price action read.",
+            cls: "verdict-trend-chip",
+        });
+    }
+
+    if (verdict?.hold_class === "anchor") {
+        chips.push({
+            label: "Role",
+            value: "Anchor · trim muted",
+            icon: "bi-anchor",
+            tipTitle: "Anchor holding",
+            tipBody: "You marked this as a core anchor — trim calls are suppressed unless risk is extreme.",
+            cls: "verdict-position-chip",
+        });
+    } else if (holding && !holding.is_watchlist) {
+        const alloc = Number(holding.allocation_pct);
+        if (alloc >= 12) {
+            chips.push({
+                label: "Weight",
+                value: `${alloc.toFixed(0)}% of book`,
+                icon: "bi-pie-chart-fill",
+                tipTitle: "Position size",
+                tipBody: `At ${alloc.toFixed(1)}% of the portfolio, moves here affect the whole book more than a small line item.`,
+                cls: "verdict-position-chip",
+            });
+        }
+    }
+
+    if (chips.length < 3) {
+        const macro = _holdingMacroContextChip(ticker, verdict, intel);
+        if (macro) chips.push(macro);
+    }
+
+    if (!chips.length) {
+        const regime = verdict?.regime_context || cachedMarketRegime;
+        if (regime?.label) {
+            const riskKey = regime.risk_regime || "neutral";
+            chips.push({
+                label: "Macro",
+                value: regime.label,
+                icon: "bi-globe-americas",
+                tipTitle: regime.tip_title || "Market backdrop",
+                tipBody: regime.tip_body || "",
+                cls: `verdict-regime-chip ${_REGIME_CHIP_CLASS[riskKey] || "is-neutral"}`,
+            });
+        }
+    }
+
+    return chips.slice(0, 3);
+}
+
+function _renderVerdictContextChips(verdict, ticker) {
+    return _collectVerdictContextChips(verdict, ticker)
+        .map(_renderContextChip)
+        .filter(Boolean)
+        .join("");
 }
 
 function _renderPeerRelativeLine(verdict) {
@@ -3884,21 +4080,6 @@ function _renderPeerRelativeLine(verdict) {
     </div>`;
 }
 
-function _renderEventChip(verdict) {
-    const ev = verdict?.events;
-    if (!ev?.label) return "";
-    return `<span class="verdict-context-chip verdict-event-chip">
-        <i class="bi bi-calendar-event" aria-hidden="true"></i>
-        <span class="chip-label">Event</span>
-        <span class="chip-value">${escapeHtml(ev.label)}</span>
-        ${_verdictTip({
-            title: ev.tip_title || "Upcoming event",
-            body: ev.tip_body || "Earnings and other events add uncertainty — confidence may be capped until the news lands.",
-            icon: "bi-calendar-event",
-        })}
-    </span>`;
-}
-
 function _renderConfidenceRange(verdict, conf) {
     const detail = verdict?.confidence_detail;
     const low = detail?.range_low;
@@ -3918,28 +4099,65 @@ function _renderConfidenceRange(verdict, conf) {
 function _renderScenarios(verdict) {
     const scenarios = verdict?.confidence_detail?.scenarios;
     if (!scenarios?.base) return "";
+    const forecast = scenarios.forecast || {};
+    const probs = forecast.probabilities || {};
+    const likely = forecast.likely || null;
+    const isClaude = forecast.source === "claude" && _isAiVerdictActive(verdict);
+    const guessBadge = isClaude ? "Claude's read" : "Signal read";
     const pills = [
         { key: "base", label: "Base", icon: "bi-signpost-fill", cls: "is-base", text: scenarios.base },
         { key: "bull", label: "Bull", icon: "bi-graph-up-arrow", cls: "is-bull", text: scenarios.bull },
         { key: "bear", label: "Bear", icon: "bi-graph-down-arrow", cls: "is-bear", text: scenarios.bear },
     ];
+    const probBar = ["base", "bull", "bear"].map(key => {
+        const pct = Number(probs[key]) || 0;
+        if (pct <= 0) return "";
+        return `<span class="verdict-scenario-seg is-${key}${likely === key ? " is-likely-seg" : ""}"
+            style="width:${pct}%" title="${escapeHtml(key)} ${pct}%"></span>`;
+    }).join("");
+    const probLegend = pills.map(p => {
+        const pct = Number(probs[p.key]);
+        if (!Number.isFinite(pct)) return "";
+        return `<span class="verdict-scenario-prob is-${p.key}${likely === p.key ? " is-likely-prob" : ""}">
+            ${escapeHtml(p.label)} <strong>${pct}%</strong>
+        </span>`;
+    }).join("");
+    const guessLine = forecast.note
+        ? `<div class="verdict-scenario-guess${isClaude ? " is-claude-guess" : ""}">
+            <span class="verdict-scenario-guess-badge">${escapeHtml(guessBadge)}</span>
+            ${likely ? `<span class="verdict-scenario-guess-likely">Likely <strong>${escapeHtml(likely.charAt(0).toUpperCase() + likely.slice(1))}</strong></span>` : ""}
+            <span class="verdict-scenario-guess-note">${escapeHtml(forecast.note)}</span>
+        </div>`
+        : "";
     return `<div class="verdict-scenarios-block">
         <div class="verdict-scenarios-head">
             <i class="bi bi-signpost-split" aria-hidden="true"></i>
             <span>What could happen next</span>
             ${_verdictTip({
                 title: "Three simple futures",
-                body: "Plain-English outcomes if things stay similar (Base), improve (Bull), or worsen (Bear). Tap each pill for the one-sentence story — not predictions, just context.",
+                body: isClaude
+                    ? "Claude assigns rough odds to Base, Bull, and Bear paths from the same signals you see above — a guess, not a forecast. Tap each pill for the one-sentence story."
+                    : "Plain-English outcomes if things stay similar (Base), improve (Bull), or worsen (Bear). Tap each pill for details — local signal read, not a prediction.",
                 icon: "bi-signpost-split",
+                variant: isClaude ? "ai" : "",
             })}
         </div>
+        ${probBar ? `<div class="verdict-scenario-prob-bar" role="img" aria-label="Scenario probability split">${probBar}</div>` : ""}
+        ${probLegend ? `<div class="verdict-scenario-prob-legend">${probLegend}</div>` : ""}
+        ${guessLine}
         <div class="verdict-scenarios-row">
-            ${pills.map(p => `<button class="verdict-scenario-pill tip-trigger ${p.cls}" type="button"
-                data-tip-title="${escapeHtml(p.label)} case"
+            ${pills.map(p => {
+                const pct = Number(probs[p.key]);
+                const pctLabel = Number.isFinite(pct) ? ` <span class="verdict-scenario-pct">${pct}%</span>` : "";
+                const likelyCls = likely === p.key ? " is-likely" : "";
+                return `<button class="verdict-scenario-pill tip-trigger ${p.cls}${likelyCls}" type="button"
+                data-tip-title="${escapeHtml(p.label)} case${likely === p.key ? " — most likely" : ""}"
                 data-tip-body="${escapeHtml(p.text)}"
                 data-tip-icon="${p.icon}">
-                <i class="bi ${p.icon}" aria-hidden="true"></i> ${escapeHtml(p.label)}
-            </button>`).join("")}
+                <i class="bi ${p.icon}" aria-hidden="true"></i> ${escapeHtml(p.label)}${pctLabel}
+                ${likely === p.key ? `<span class="verdict-scenario-pick">${isClaude ? "Claude pick" : "Likely"}</span>` : ""}
+            </button>`;
+            }).join("")}
         </div>
     </div>`;
 }
@@ -3967,6 +4185,7 @@ function _renderCalibrationFootnote(verdict) {
     const note = verdict?.calibration_footnote;
     if (!note?.text) return "";
     return `<div class="verdict-calibration-footnote">
+        <i class="bi bi-graph-up-arrow" aria-hidden="true"></i>
         <span class="verdict-cal-footnote-text">${escapeHtml(note.text)}</span>
         ${_verdictTip({
             title: note.tip_title || "Calibration",
@@ -4027,27 +4246,142 @@ async function loadDeepIntelligence(ticker) {
     }
 }
 
+function _isCoverageRowOpen(section) {
+    const expandRow = section?.closest(".summary-expand-row");
+    const mainRow = expandRow?.previousElementSibling;
+    return Boolean(mainRow?.classList.contains("summary-open"));
+}
+
+function _renderDeepIntelShimmer() {
+    return `<div class="intel-deep-section intel-deep-loading" aria-busy="true" aria-label="Loading extra detail">
+        <div class="intel-label intel-deep-label">
+            <i class="bi bi-zoom-in" aria-hidden="true"></i>
+            <span>Extra detail</span>
+        </div>
+        <div class="deep-peer-card is-neutral">
+            <div class="shimmer-line" style="height:10px;width:55%;border-radius:4px;margin-bottom:0.45rem"></div>
+            <div class="shimmer-line" style="height:6px;width:100%;border-radius:999px;margin-bottom:0.45rem"></div>
+            <div class="shimmer-line" style="height:6px;width:100%;border-radius:999px"></div>
+        </div>
+    </div>`;
+}
+
+function _syncDeepIntelSection(section, ticker) {
+    if (!section || !ticker) return;
+    const host = section.querySelector(".intel-coverage") || section;
+    host.querySelector(".intel-deep-section")?.remove();
+    if (cachedDeepIntel[ticker]) {
+        _injectDeepIntelSection(section, cachedDeepIntel[ticker]);
+        return;
+    }
+    if (deepIntelLoadingTickers.has(ticker)) {
+        host.insertAdjacentHTML("beforeend", _renderDeepIntelShimmer());
+    }
+}
+
+async function requestDeepIntel(ticker, coverageSection) {
+    if (!coverageSection || !ticker) return;
+    if (cachedDeepIntel[ticker]) {
+        _syncDeepIntelSection(coverageSection, ticker);
+        return;
+    }
+    deepIntelLoadingTickers.add(ticker);
+    _syncDeepIntelSection(coverageSection, ticker);
+    await loadDeepIntelligence(ticker);
+    deepIntelLoadingTickers.delete(ticker);
+    if (coverageSection.isConnected && _isCoverageRowOpen(coverageSection)) {
+        _syncDeepIntelSection(coverageSection, ticker);
+    }
+}
+
+function _deepRangeBand(pct) {
+    if (pct == null) return "";
+    if (pct <= 25) return "Low in range";
+    if (pct >= 75) return "High in range";
+    return "Mid-range";
+}
+
+function _renderDeepRangeRow(label, pct) {
+    if (pct == null) return "";
+    const clamped = Math.max(0, Math.min(100, Number(pct)));
+    const pctLabel = formatPercentilePct(pct);
+    const band = _deepRangeBand(pct);
+    return `<div class="deep-range-row">
+        <div class="deep-range-head">
+            <span class="deep-range-label">${escapeHtml(label)}</span>
+            <span class="deep-range-pct">${escapeHtml(pctLabel)}</span>
+        </div>
+        <div class="deep-range-track" role="img" aria-label="${escapeHtml(label)} at ${escapeHtml(pctLabel)} of its 1-year range, ${escapeHtml(band.toLowerCase())}">
+            <span class="deep-range-fill" style="width:${clamped}%"></span>
+            <span class="deep-range-marker" style="left:${clamped}%"></span>
+        </div>
+    </div>`;
+}
+
+function _renderDeepPeerBlock(peer) {
+    if (!peer?.vs_own_range && peer?.peer_comparison === "unavailable") return "";
+    const peerTickers = (peer.peer_tickers || []).slice(0, 3);
+    const peerNote = peerTickers.length
+        ? `Peers: ${peerTickers.join(", ")}`
+        : (peer.peer_label || "").replace(/^vs\s*/i, "").trim();
+    const rangeRows = [
+        _renderDeepRangeRow("This holding", peer.vs_own_range),
+        _renderDeepRangeRow("Typical peer", peer.vs_peer_median),
+    ].filter(Boolean).join("");
+    return `<div class="deep-peer-card">
+        <div class="deep-peer-card-head deep-peer-card-head--simple">
+            <div class="deep-peer-head-copy">
+                <span class="deep-peer-kicker">1-year price range</span>
+                ${peerNote ? `<span class="deep-peer-vs">${escapeHtml(peerNote)}</span>` : ""}
+            </div>
+            ${_verdictTip({
+                title: "Range comparison",
+                body: "0% = near the low of the last year, 100% = near the high. The verdict column summarizes how this holding compares to its peers.",
+                icon: "bi-bar-chart-steps",
+            })}
+        </div>
+        <div class="deep-range-stack">${rangeRows}</div>
+    </div>`;
+}
+
+function _renderDeepFundRow(label, value) {
+    return `<div class="deep-fund-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
+}
+
+function _renderDeepFundamentalsBlock(deep) {
+    if (deep.eps_forward == null) return "";
+    return `<div class="deep-fund-card">
+        <div class="deep-fund-head">Stock fundamentals</div>
+        <div class="deep-fund-rows">${_renderDeepFundRow("Forward EPS", Number(deep.eps_forward).toFixed(2))}</div>
+    </div>`;
+}
+
 function _injectDeepIntelSection(section, deepData) {
-    if (!deepData?.deep || section.querySelector(".intel-deep-section")) return;
+    if (!deepData?.deep) return;
     const deep = deepData.deep;
-    const peer = deep.peer_relative;
-    const rows = [];
-    if (peer?.vs_peer_median != null) {
-        rows.push(`Peer median percentile: ${peer.vs_peer_median}%`);
-    }
-    if (deep.revenue_growth != null) {
-        rows.push(`Revenue growth: ${(deep.revenue_growth * 100).toFixed(1)}%`);
-    }
-    if (deep.eps_forward != null) {
-        rows.push(`Forward EPS: ${Number(deep.eps_forward).toFixed(2)}`);
-    }
-    if (!rows.length) return;
+    const peerBlock = _renderDeepPeerBlock(deep.peer_relative);
+    const fundBlock = _renderDeepFundamentalsBlock(deep);
+    if (!peerBlock && !fundBlock) return;
+    const host = section.querySelector(".intel-coverage") || section;
+    host.querySelector(".intel-deep-section")?.remove();
     const wrap = document.createElement("div");
     wrap.className = "intel-deep-section";
-    wrap.innerHTML = `<div class="intel-label"><i class="bi bi-zoom-in"></i> Deep read</div>
-        ${rows.map(r => `<div class="intel-spec-row"><span>${escapeHtml(r)}</span></div>`).join("")}`;
-    const coverage = section.closest(".intel-grid")?.querySelector(".intel-coverage-section");
-    if (coverage) coverage.appendChild(wrap);
+    const safeTicker = String(deep.ticker || "").replace(/[^a-zA-Z0-9_-]/g, "").toLowerCase();
+    const sectionId = safeTicker ? `intel-deep-${safeTicker}` : `intel-deep-${Date.now()}`;
+    wrap.id = sectionId;
+    wrap.setAttribute("aria-labelledby", `${sectionId}-label`);
+    wrap.innerHTML = `<div class="intel-label intel-deep-label" id="${sectionId}-label">
+            <i class="bi bi-zoom-in" aria-hidden="true"></i>
+            <span>Extra detail</span>
+            ${_verdictTip({
+                title: "What loads here",
+                body: "A second data pass when you expand — range comparison vs peers and any stock fundamentals not shown above.",
+                icon: "bi-zoom-in",
+            })}
+        </div>
+        ${peerBlock}
+        ${fundBlock}`;
+    host.appendChild(wrap);
 }
 
 function _renderAnchorPill(verdict, ticker) {
@@ -4331,6 +4665,7 @@ function renderAiVerdict(section, verdict, ticker) {
     const metaChips = [_renderSinceLastScan(verdict), _renderFreshness(verdict)]
         .filter(Boolean)
         .join("");
+    const contextChipsHtml = _renderVerdictContextChips(verdict, ticker);
 
     section.innerHTML = `
         <div class="intel-label"><i class="bi ${_verdictIntelIcon()}"></i> <span class="verdict-kicker-label">${escapeHtml(brandCopy.kicker)}</span> ${_verdictInfoTip()}</div>
@@ -4346,13 +4681,10 @@ function renderAiVerdict(section, verdict, ticker) {
                 ${anchorPill}
                 ${horizonPill}
             </div>
-            <div class="verdict-context-strip">
+            ${contextChipsHtml ? `<div class="verdict-context-strip">
                 <span class="verdict-context-strip-label"><i class="bi bi-binoculars"></i> Context</span>
-                <div class="verdict-context-row">
-                    ${_renderMarketBackdropChip(verdict)}
-                    ${_renderEventChip(verdict)}
-                </div>
-            </div>
+                <div class="verdict-context-row">${contextChipsHtml}</div>
+            </div>` : ""}
             <div class="verdict-hero">
                 <div class="verdict-die ${dieClass}" aria-hidden="true">
                     <img src="/static/img/brand/folio-orbit-icon.svg" alt="">
@@ -4404,10 +4736,10 @@ function renderAiVerdict(section, verdict, ticker) {
                 <div class="verdict-detail-head"><i class="bi bi-shield-exclamation"></i> Watch outs ${_verdictTip({ title: "Risks & caveats", body: "Things that could change the story — concentration, earnings, fading momentum, or data gaps.", icon: "bi-shield-exclamation" })}</div>
                 <div class="intel-spec-rows verdict-spec-rows">${risksHtml}</div>
             </div>` : ""}
-            ${_renderCalibrationFootnote(verdict)}
-            ${disc ? `<div class="intel-meta-row">
+            ${disc ? `<div class="intel-meta-row verdict-disc-row">
                 <span class="fact-tag">${escapeHtml(disc)}</span>
             </div>` : ""}
+            ${_renderCalibrationFootnote(verdict)}
         </div>`;
 
     const confEl = section.querySelector(".verdict-conf-pct");
@@ -4559,6 +4891,17 @@ function applyIntelligenceModeUi() {
     }
 
     updateHudPillSummary();
+
+    document.querySelectorAll(".btn-holding-intel").forEach(btn => {
+        if (!btn.disabled) {
+            btn.innerHTML = _intelButtonHtml(false);
+        }
+        btn.dataset.tipVariant = "ai";
+        btn.dataset.tipIcon = "bi-stars";
+        btn.dataset.tipBody = local
+            ? "Show what each holding covers and why it moved — on-device signals, benchmarks, sectors, and drivers (no cloud)."
+            : "Show what each holding covers and why it moved — holding-specific benchmarks, sectors, countries, and drivers";
+    });
 }
 
 async function onIntelligenceModeChanged(local, { notify = false } = {}) {
@@ -5621,7 +5964,7 @@ async function loadHoldingIntelligence(options = {}) {
     setAiChecking(true, "Reading positions");
     injectSummaryRows(tbody);
     if (btn) {
-        btn.innerHTML = INTEL_BUTTON_LOADING_HTML;
+        btn.innerHTML = _intelButtonHtml(true);
         btn.disabled = true;
     }
 
@@ -5703,7 +6046,7 @@ async function loadHoldingIntelligence(options = {}) {
     } finally {
         if (intelligenceLoading) setAiChecking(false, "Watching holdings", false);
         if (btn) {
-            btn.innerHTML = INTEL_BUTTON_READY_HTML;
+            btn.innerHTML = _intelButtonHtml(false);
             btn.disabled = false;
         }
     }

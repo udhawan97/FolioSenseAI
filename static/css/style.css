@@ -10249,6 +10249,30 @@ svg.signal-radar {
 }
 .verdict-event-chip .chip-value { color: #ff9f0a; }
 
+.verdict-exposure-chip {
+    border-color: color-mix(in srgb, var(--accent-purple, #bf5af2) 28%, transparent);
+    background: color-mix(in srgb, var(--accent-purple, #bf5af2) 8%, transparent);
+}
+.verdict-exposure-chip .chip-value { color: color-mix(in srgb, var(--accent-purple, #bf5af2) 88%, var(--text-primary)); }
+
+.verdict-valuation-chip {
+    border-color: color-mix(in srgb, var(--accent-cyan) 28%, transparent);
+    background: color-mix(in srgb, var(--accent-cyan) 8%, transparent);
+}
+.verdict-valuation-chip .chip-value { color: var(--accent-cyan); }
+
+.verdict-trend-chip {
+    border-color: color-mix(in srgb, var(--accent-green) 26%, transparent);
+    background: color-mix(in srgb, var(--accent-green) 7%, transparent);
+}
+.verdict-trend-chip .chip-value { color: var(--accent-green); }
+
+.verdict-position-chip {
+    border-color: color-mix(in srgb, var(--accent-yellow) 28%, transparent);
+    background: color-mix(in srgb, var(--accent-yellow) 8%, transparent);
+}
+.verdict-position-chip .chip-value { color: var(--accent-yellow); }
+
 .verdict-horizon-pill {
     font-size: 0.65rem;
     padding: 0.1rem 0.4rem;
@@ -10401,6 +10425,137 @@ svg.signal-radar {
 .verdict-scenario-pill.is-bull { border-color: color-mix(in srgb, var(--accent-green) 30%, transparent); color: var(--accent-green); }
 .verdict-scenario-pill.is-bear { border-color: color-mix(in srgb, var(--accent-red) 28%, transparent); color: var(--accent-red); }
 
+.verdict-scenario-prob-bar {
+    display: flex;
+    height: 6px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--text-tertiary) 12%, transparent);
+    margin-bottom: 0.45rem;
+}
+
+.verdict-scenario-seg {
+    display: block;
+    height: 100%;
+    min-width: 2px;
+    transition: opacity 0.15s ease;
+}
+
+.verdict-scenario-seg.is-base { background: color-mix(in srgb, var(--accent-cyan) 55%, var(--text-tertiary)); }
+.verdict-scenario-seg.is-bull { background: var(--accent-green); }
+.verdict-scenario-seg.is-bear { background: var(--accent-red); }
+.verdict-scenario-seg.is-likely-seg { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35); }
+
+.verdict-scenario-prob-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem 0.75rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.62rem;
+    color: var(--text-tertiary);
+}
+
+.verdict-scenario-prob strong {
+    color: var(--text-primary);
+    font-weight: 780;
+    font-variant-numeric: tabular-nums;
+}
+
+.verdict-scenario-prob.is-likely-prob strong {
+    color: var(--accent-cyan);
+}
+
+.verdict-scenario-guess {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.35rem 0.5rem;
+    margin-bottom: 0.55rem;
+    padding: 0.45rem 0.55rem;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--text-secondary) 6%, transparent);
+    border: 1px solid color-mix(in srgb, var(--text-secondary) 10%, transparent);
+    font-size: 0.68rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+}
+
+.verdict-scenario-guess.is-claude-guess {
+    background: color-mix(in srgb, var(--accent-cyan) 6%, transparent);
+    border-color: color-mix(in srgb, var(--accent-cyan) 16%, transparent);
+}
+
+.verdict-scenario-guess-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    font-size: 0.56rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+}
+
+.verdict-scenario-guess.is-claude-guess .verdict-scenario-guess-badge {
+    color: var(--accent-cyan);
+}
+
+.verdict-scenario-guess-likely {
+    font-weight: 650;
+    color: var(--text-primary);
+}
+
+.verdict-scenario-guess-likely strong {
+    color: var(--accent-cyan);
+}
+
+.verdict-scenario-pill.is-likely {
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-cyan) 35%, transparent),
+        0 0 14px -4px color-mix(in srgb, var(--accent-cyan) 40%, transparent);
+}
+
+.verdict-scenario-pill.is-likely.is-bull {
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-green) 40%, transparent),
+        0 0 14px -4px color-mix(in srgb, var(--accent-green) 35%, transparent);
+}
+
+.verdict-scenario-pill.is-likely.is-bear {
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-red) 40%, transparent),
+        0 0 14px -4px color-mix(in srgb, var(--accent-red) 35%, transparent);
+}
+
+.verdict-scenario-pct {
+    font-size: 0.58rem;
+    font-weight: 750;
+    opacity: 0.85;
+    font-variant-numeric: tabular-nums;
+}
+
+.verdict-scenario-pick {
+    font-size: 0.52rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 0.06rem 0.32rem;
+    border-radius: 999px;
+    margin-left: 0.15rem;
+    color: var(--accent-cyan);
+    background: color-mix(in srgb, var(--accent-cyan) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-cyan) 24%, transparent);
+}
+
+.verdict-scenario-pill.is-bull.is-likely .verdict-scenario-pick {
+    color: var(--accent-green);
+    background: color-mix(in srgb, var(--accent-green) 14%, transparent);
+    border-color: color-mix(in srgb, var(--accent-green) 24%, transparent);
+}
+
+.verdict-scenario-pill.is-bear.is-likely .verdict-scenario-pick {
+    color: var(--accent-red);
+    background: color-mix(in srgb, var(--accent-red) 14%, transparent);
+    border-color: color-mix(in srgb, var(--accent-red) 24%, transparent);
+}
+
 .verdict-tension-row {
     display: flex;
     align-items: flex-start;
@@ -10417,12 +10572,39 @@ svg.signal-radar {
 .verdict-tension-copy { color: var(--text-secondary); flex: 1; line-height: 1.4; }
 
 .verdict-calibration-footnote {
-    font-size: 0.65rem;
-    color: var(--text-tertiary);
-    padding: 0.35rem 0 0;
     display: flex;
-    align-items: center;
-    gap: 0.25rem;
+    align-items: flex-start;
+    gap: 0.4rem;
+    margin: 0 var(--verdict-inner-x, 0.9rem);
+    padding: 0.5rem 0.65rem;
+    border-radius: 8px;
+    font-size: 0.62rem;
+    line-height: 1.45;
+    color: var(--text-tertiary);
+    background: color-mix(in srgb, var(--text-secondary) 4%, transparent);
+    border: 1px solid color-mix(in srgb, var(--text-secondary) 8%, transparent);
+}
+
+.verdict-calibration-footnote > i {
+    flex-shrink: 0;
+    margin-top: 0.08rem;
+    font-size: 0.68rem;
+    color: var(--text-tertiary);
+    opacity: 0.75;
+}
+
+.verdict-cal-footnote-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.verdict-calibration-footnote .tip-trigger {
+    margin-left: 0;
+    flex-shrink: 0;
+}
+
+.verdict-disc-row {
+    margin: 0 var(--verdict-inner-x, 0.9rem);
 }
 
 .verdict-book-exposure {
@@ -10501,9 +10683,249 @@ svg.signal-radar {
 }
 
 .intel-deep-section {
-    margin-top: 0.75rem;
-    padding-top: 0.5rem;
-    border-top: 1px dashed color-mix(in srgb, var(--text-secondary) 15%, transparent);
+    margin-top: var(--intel-section-gap);
+    padding-top: var(--intel-section-gap);
+    border-top: 1px solid var(--hairline-soft);
+}
+
+.intel-deep-label {
+    margin-top: 0;
+    margin-bottom: 0.55rem;
+}
+
+.intel-deep-label > span {
+    flex: 0 1 auto;
+}
+
+.intel-deep-label .tip-trigger {
+    margin-left: auto;
+}
+
+/* Peer comparison card — mirrors verdict-insight-card rhythm */
+.deep-peer-card {
+    display: grid;
+    gap: 0.62rem;
+    padding: 0.68rem 0.72rem;
+    margin-bottom: 0.55rem;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--text-secondary) 5%, transparent);
+    border: 1px solid color-mix(in srgb, var(--text-secondary) 10%, transparent);
+}
+
+.deep-peer-card.is-cheaper {
+    border-color: color-mix(in srgb, var(--accent-green) 22%, transparent);
+    background: color-mix(in srgb, var(--accent-green) 5%, transparent);
+}
+
+.deep-peer-card.is-richer {
+    border-color: color-mix(in srgb, var(--accent-red) 20%, transparent);
+    background: color-mix(in srgb, var(--accent-red) 4%, transparent);
+}
+
+.deep-peer-card.is-inline {
+    border-color: color-mix(in srgb, var(--accent-cyan) 20%, transparent);
+    background: color-mix(in srgb, var(--accent-cyan) 4%, transparent);
+}
+
+.deep-peer-card-head {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) 18px;
+    gap: 0.55rem;
+    align-items: center;
+}
+
+.deep-peer-card-head--simple {
+    grid-template-columns: minmax(0, 1fr) 18px;
+}
+
+.deep-peer-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+    color: var(--text-secondary);
+    background: color-mix(in srgb, var(--text-secondary) 10%, transparent);
+}
+
+.deep-peer-card.is-cheaper .deep-peer-icon {
+    color: var(--accent-green);
+    background: color-mix(in srgb, var(--accent-green) 14%, transparent);
+}
+
+.deep-peer-card.is-richer .deep-peer-icon {
+    color: var(--accent-red);
+    background: color-mix(in srgb, var(--accent-red) 14%, transparent);
+}
+
+.deep-peer-card.is-inline .deep-peer-icon {
+    color: var(--accent-cyan);
+    background: color-mix(in srgb, var(--accent-cyan) 12%, transparent);
+}
+
+.deep-peer-head-copy {
+    display: grid;
+    gap: 0.08rem;
+    min-width: 0;
+}
+
+.deep-peer-kicker {
+    font-size: 0.58rem;
+    font-weight: 750;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    line-height: 1.2;
+}
+
+.deep-peer-verdict {
+    font-size: 0.72rem;
+    font-weight: 720;
+    color: var(--text-primary);
+    line-height: 1.35;
+}
+
+.deep-peer-vs {
+    display: block;
+    margin-top: 0.12rem;
+    font-size: 0.58rem;
+    font-weight: 600;
+    color: var(--text-tertiary);
+}
+
+.deep-peer-card-head .tip-trigger {
+    margin-left: 0;
+    justify-self: end;
+}
+
+.deep-range-stack {
+    display: grid;
+    gap: 0.55rem;
+}
+
+.deep-range-row {
+    display: grid;
+    gap: 0.22rem;
+}
+
+.deep-range-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.deep-range-label {
+    font-size: 0.66rem;
+    font-weight: 650;
+    color: var(--text-secondary);
+}
+
+.deep-range-pct {
+    font-size: 0.68rem;
+    font-weight: 780;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+.deep-range-track {
+    position: relative;
+    height: 6px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--text-tertiary) 14%, transparent);
+    overflow: visible;
+}
+
+.deep-range-fill {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--brand-periwinkle), var(--brand-cyan));
+    opacity: 0.55;
+}
+
+.deep-range-marker {
+    position: absolute;
+    top: 50%;
+    width: 8px;
+    height: 8px;
+    margin-left: -4px;
+    border-radius: 50%;
+    background: var(--text-primary);
+    border: 1.5px solid var(--accent-cyan);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-cyan) 18%, transparent);
+    transform: translateY(-50%);
+}
+
+.intel-deep-loading .deep-peer-card {
+    pointer-events: none;
+}
+
+/* Fundamentals sub-card */
+.deep-fund-card {
+    padding: 0.62rem 0.72rem;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--text-secondary) 4%, transparent);
+    border: 1px solid color-mix(in srgb, var(--text-secondary) 8%, transparent);
+}
+
+.deep-fund-head {
+    margin-bottom: 0.42rem;
+    font-size: 0.58rem;
+    font-weight: 750;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+}
+
+.deep-fund-rows {
+    display: grid;
+    gap: 0.32rem;
+}
+
+.deep-fund-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.2rem 0;
+    border-bottom: 1px solid var(--hairline-soft);
+    font-size: 0.68rem;
+}
+
+.deep-fund-row:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+}
+
+.deep-fund-row > span {
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.deep-fund-row > strong {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+    text-align: right;
+}
+
+[data-bs-theme="light"] .deep-peer-card,
+[data-bs-theme="light"] .deep-fund-card {
+    background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+    border-color: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+[data-bs-theme="light"] .deep-range-track {
+    background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+[data-bs-theme="light"] .deep-range-marker {
+    background: var(--surface-elevated, #fff);
 }
 
 .conf-agreement-label {

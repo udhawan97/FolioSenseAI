@@ -395,6 +395,95 @@ def _build_scenarios(
     return {"base": phrases["base"], "bull": phrases["bull"], "bear": phrases["bear"]}
 
 
+def _normalize_scenario_probs(raw: dict | list | None) -> dict[str, int]:
+    """Ensure base/bull/bear percentages sum to 100."""
+    probs = {"base": 40, "bull": 30, "bear": 30}
+    if isinstance(raw, list) and len(raw) >= 3:
+        keys = ("base", "bull", "bear")
+        for idx, key in enumerate(keys):
+            try:
+                probs[key] = max(0, int(round(float(raw[idx]))))
+            except (TypeError, ValueError):
+                pass
+    elif isinstance(raw, dict):
+        for key in ("base", "bull", "bear"):
+            try:
+                probs[key] = max(0, int(round(float(raw.get(key, probs[key])))))
+            except (TypeError, ValueError):
+                pass
+
+    total = sum(probs.values()) or 1
+    if total != 100:
+        scaled = {k: max(0, int(round(probs[k] * 100 / total))) for k in probs}
+        drift = 100 - sum(scaled.values())
+        if drift:
+            likely_key = max(scaled, key=scaled.get)
+            scaled[likely_key] = _clamp(scaled[likely_key] + drift, 0, 100)
+        probs = scaled
+    return probs
+
+
+def _infer_scenario_forecast(
+    action: str,
+    market_mood: str,
+    final_score: int,
+    agreement: dict | None,
+) -> dict:
+    """Deterministic probability split + likely path from mood, action, and agreement."""
+    probs = {"base": 42, "bull": 29, "bear": 29}
+
+    mood_shift = {
+        "hot": {"bull": 14, "bear": -9, "base": -5},
+        "warm": {"bull": 10, "bear": -5, "base": -5},
+        "neutral": {"bull": 0, "bear": 0, "base": 0},
+        "cooling": {"bull": -6, "bear": 10, "base": -4},
+        "cold": {"bull": -10, "bear": 14, "base": -4},
+    }.get(market_mood, {"bull": 0, "bear": 0, "base": 0})
+    for key, delta in mood_shift.items():
+        probs[key] += delta
+
+    if action == "add":
+        probs["bull"] += 8 if final_score >= 58 else 4
+        probs["bear"] -= 4
+    elif action == "trim":
+        probs["bear"] += 8 if final_score <= 55 else 4
+        probs["bull"] -= 4
+    else:
+        probs["base"] += 6
+
+    agree = agreement or {}
+    support = int(agree.get("supporting") or 0)
+    oppose = int(agree.get("opposing") or 0)
+    if support > oppose:
+        probs["bull"] += 5
+        probs["bear"] -= 3
+    elif oppose > support:
+        probs["bear"] += 5
+        probs["bull"] -= 3
+
+    probs = _normalize_scenario_probs(probs)
+    likely = max(probs, key=probs.get)
+    likely_label = {"base": "Base", "bull": "Bull", "bear": "Bear"}[likely]
+    note = {
+        "base": "Signals look balanced — no strong push either way yet.",
+        "bull": "Momentum and supporting inputs lean toward an upside path.",
+        "bear": "Weak trend or opposing signals tilt toward a softer outcome.",
+    }[likely]
+    if action == "add" and likely == "bull":
+        note = "Add case looks strongest if trend and mood cooperate."
+    elif action == "trim" and likely == "bear":
+        note = "Trim thesis aligns with the path that validates taking risk off."
+    elif action == "hold" and likely == "base":
+        note = f"Mixed read at ~{final_score}% — waiting for a clearer signal."
+
+    return {
+        "likely": likely,
+        "probabilities": probs,
+        "note": note,
+        "source": "local",
+    }
+
+
 def _apply_user_grounding(
     sig: InvestmentSignal,
     *,
@@ -748,6 +837,9 @@ def _attach_confidence_detail(
 
     range_low, range_high = _compute_confidence_range(components, modifiers, final)
     scenarios = _build_scenarios(sig.action, zone, sig.market_mood, final)
+    scenarios["forecast"] = _infer_scenario_forecast(
+        sig.action, sig.market_mood, final, agreement,
+    )
 
     sig.confidence_detail = {
         "score": final,

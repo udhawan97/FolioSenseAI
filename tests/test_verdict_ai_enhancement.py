@@ -81,3 +81,33 @@ def test_parse_ai_bundle_response():
     parsed = parse_ai_bundle_response(raw, {"VOO"})
     assert parsed["VOO"]["quip"] == "Hold steady."
     assert parsed["VOO"]["ai"]["overall_nudge"] == 3
+
+
+def test_normalize_ai_bundle_scenario_forecast():
+    ai = normalize_ai_bundle({
+        "likely": "bull",
+        "sc_p": [35, 45, 20],
+        "sc_w": "Momentum warming while valuation still fair.",
+    })
+    assert ai["likely_scenario"] == "bull"
+    assert ai["scenario_probs"]["bull"] == 45
+    assert ai["scenario_note"].startswith("Momentum")
+
+
+def test_apply_ai_enhancement_merges_scenario_forecast():
+    sig = build_investment_signal(_etf_rec("Fair"))
+    sig_dict = signal_to_dict(sig)
+    apply_ai_enhancement(sig_dict, {
+        "n": 0,
+        "cn": [0, 0, 0, 0],
+        "agrees": True,
+        "tension": "",
+        "likely": "bear",
+        "sc_p": [30, 25, 45],
+        "sc_w": "Cooling trend could pressure the hold case.",
+    })
+    forecast = sig_dict["confidence_detail"]["scenarios"]["forecast"]
+    assert forecast["source"] == "claude"
+    assert forecast["likely"] == "bear"
+    assert forecast["probabilities"]["bear"] == 45
+    assert "Cooling" in forecast["note"]
