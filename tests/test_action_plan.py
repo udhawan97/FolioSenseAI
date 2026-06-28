@@ -319,6 +319,74 @@ class TestActionPlanFallback:
             pytest.fail(f"get_action_plan raised unexpectedly: {exc}")
 
 
+# ── Tests — force_local (local intelligence mode) ─────────────────────────────
+
+
+class TestActionPlanForceLocal:
+    """Verify force_local=True skips Claude and returns a deterministic local plan."""
+
+    def test_force_local_returns_local_source(self, monkeypatch):
+        db = _make_db()
+        _patch_core(monkeypatch)
+        _patch_compute_portfolio(monkeypatch)
+
+        # Claude must NOT be called at all
+        claude_calls = []
+        monkeypatch.setattr(
+            ai_router,
+            "generate_action_plan",
+            lambda snapshot: (claude_calls.append(snapshot), _AI_ACTION_PLAN_RESPONSE)[1],
+        )
+
+        result = asyncio.run(ai_router.get_action_plan(force_local=True, db=db))
+        assert result.get("source") == "local-fallback", (
+            "force_local=True must return a local-fallback plan"
+        )
+        assert not claude_calls, "Claude was called despite force_local=True"
+
+    def test_force_local_has_required_keys(self, monkeypatch):
+        db = _make_db()
+        _patch_core(monkeypatch)
+        _patch_compute_portfolio(monkeypatch)
+
+        result = asyncio.run(ai_router.get_action_plan(force_local=True, db=db))
+        for key in ("headline", "thesis", "buckets", "priority_moves", "best_return_note",
+                    "regime", "disclaimer"):
+            assert key in result, f"force_local plan missing key: {key}"
+
+    def test_force_local_has_four_buckets(self, monkeypatch):
+        db = _make_db()
+        _patch_core(monkeypatch)
+        _patch_compute_portfolio(monkeypatch)
+
+        result = asyncio.run(ai_router.get_action_plan(force_local=True, db=db))
+        for key in ("hold", "add", "trim", "exit"):
+            assert key in result["buckets"], f"force_local buckets missing key: {key}"
+
+    def test_force_local_only_active_tickers(self, monkeypatch):
+        db = _make_db()
+        _patch_core(monkeypatch)
+        _patch_compute_portfolio(monkeypatch)
+
+        result = asyncio.run(ai_router.get_action_plan(force_local=True, db=db))
+        active = set(_ACTIVE_TICKERS)
+        for bucket_name, items in result["buckets"].items():
+            for item in items:
+                ticker = item.get("ticker", "")
+                assert ticker in active, (
+                    f"force_local bucket '{bucket_name}' has ticker '{ticker}' "
+                    f"not in active portfolio {active}"
+                )
+
+    def test_force_local_regime_included(self, monkeypatch):
+        db = _make_db()
+        _patch_core(monkeypatch)
+        _patch_compute_portfolio(monkeypatch)
+
+        result = asyncio.run(ai_router.get_action_plan(force_local=True, db=db))
+        assert isinstance(result.get("regime"), dict), "regime must be a dict in local plan"
+
+
 # ── Tests — caching ────────────────────────────────────────────────────────────
 
 

@@ -10,7 +10,7 @@
 <p align="center"><em>Your folio, finally making sense.</em></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/release-v3.1-brightgreen?style=flat-square" alt="Release v3.1"/>
+  <img src="https://img.shields.io/badge/release-v4.0-brightgreen?style=flat-square" alt="Release v4.0"/>
   <img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/FastAPI-0.136.3-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI"/>
   <img src="https://img.shields.io/badge/Claude-optional-D4A853?style=flat-square&logo=anthropic&logoColor=white" alt="Claude optional"/>
@@ -27,7 +27,7 @@
 
 ---
 
-> **v3.1** — FolioSenseAI turns a local portfolio into a live analytics cockpit: prices, P&L, exposure overlap, risk, market regime, AI/local verdicts, and scenario thinking. Now with a shared data cache that stops Yahoo Finance from explaining itself three times per load, an instant-paint holdings table from localStorage, and a background warmup thread so the first real fetch hits warm data. Still not financial advice. Slightly faster at the side-eye.
+> **v4.0** — FolioSenseAI now knows what happened, what to do about it, and what the headlines say. A new Portfolio Action Plan breaks your book into Hold / Add / Trim / Exit buckets with a Claude thesis and regime-aware context — or a deterministic local plan when you'd rather not involve the AI. A new News tab pulls live headlines for every holding and clusters them by cross-portfolio theme, with a Claude-narrated portfolio briefing on top. The cockpit now has four zones. Still not financial advice. Now significantly harder to ignore.
 
 <p align="center">
   <img src="docs/dashboard.png" alt="FolioSenseAI dashboard" width="860"/>
@@ -40,7 +40,7 @@
 ## Contents
 
 - [Why It Exists](#-why-it-exists)
-- [v3 Highlights](#-v3-highlights)
+- [v4 Highlights](#-v4-highlights)
 - [Tech Stack](#️-tech-stack)
 - [Install, Run, Update](#-install-run-update)
 - [Developer Notes](#-developer-notes)
@@ -53,33 +53,38 @@
 
 ## ⚡ Why It Exists
 
-FolioSenseAI is a self-hosted FastAPI dashboard for investors who want more than "line went down." It explains portfolio movement, tracks allocation and risk, and generates Add / Hold / Trim style intelligence using either **Anthropic Claude** or a deterministic **Local Intelligence** engine.
+FolioSenseAI is a self-hosted FastAPI dashboard for investors who want more than "line went down." It explains portfolio movement, tracks allocation and risk, and generates Add / Hold / Trim / Exit intelligence using either **Anthropic Claude** or a deterministic **Local Intelligence** engine.
 
-- **For Investors:** live market context, portfolio diagnostics, and enough witty copy to make volatility feel personally curated.
+- **For Investors:** live market context, portfolio diagnostics, a prioritized action plan, and enough witty copy to make volatility feel personally curated.
 - **For Developers:** a Python + FastAPI + SQLite project with modular services, vanilla JS charts, mocked external-service tests, and no frontend framework tax. React was not harmed because it was never invited.
 - **For Portfolio Builders:** a polished full-stack AI/data product demonstrating local-first privacy, API design, analytics UX, response caching, CI, and security hygiene.
 
 ---
 
-## 🧠 v3.1 Highlights
+## 🧠 v4 Highlights
 
-**New in v3.1**
+**New in v4.0**
 
-- **Instant holdings table** — `localStorage` snapshot of the last good portfolio response paints the table immediately on load; fresh prices replace it in place as they arrive
-- **Shared `.info` cache** — all services (quotes, analyst recs, holding intelligence, earnings calendar, move explainer, ETF price signal) draw from one cached Yahoo Finance scrape per ticker instead of each making their own network call
-- **Background startup warmup** — a daemon thread pre-fetches quotes, price history, and world markets for active holdings so the first real request hits warm caches
-- **Analytics Signals O(1) lookups** — watchlist filter and allocation-weight accumulation use a `Set` and `Map` respectively instead of repeated `Array.find` calls
+- **Portfolio Action Plan** — Claude reads your full book and returns a prioritized Hold / Add / Trim / Exit bucket plan with a thesis and top moves per bucket. Cached 24 h with portfolio-state drift invalidation so it stays fresh without re-billing you every refresh. Falls back to a deterministic local plan instantly when Claude is unavailable or when you'd prefer the quiet.
+- **Regime-aware context** — the Action Plan surfaces the current market regime (risk-on / risk-off / neutral) alongside the Claude thesis so bucket decisions have macro backdrop, not just holding-level math.
+- **News tab** — a fourth dashboard zone pulls live headlines for every active holding via yfinance, deduped, cached, and grouped by ticker. Claude-mode adds a portfolio-wide briefing and cross-holding theme clusters (one Haiku call) so you can see which macro story is hitting three positions at once.
+- **356 tests** — up from 297 in v3.1, covering the full action-plan pipeline (Claude path, local fallback, cache invalidation, regime injection) and news service (fetch, dedup, theme snapshot).
+
+**From v3.1**
+
+- **Instant holdings table** — `localStorage` snapshot paints the table before the first network request leaves the building; live prices replace it in place
+- **Shared `.info` cache** — one cached Yahoo Finance scrape per ticker shared across quotes, analyst recs, intelligence, earnings calendar, move explainer, and ETF price signals
+- **Background startup warmup** — a daemon thread pre-fetches quotes, history, and world markets for active holdings on server start
 
 **From v3.0**
 
-- **Overview / Holdings / Analytics zones** with persistent tab state and cleaner navigation
+- **Overview / Holdings / Analytics zones** with persistent tab state
 - **Portfolio briefing card** powered by Claude or Local Intelligence
 - **Add / Hold / Trim verdicts** with confidence ranges, time horizons, peer context, earnings flags, and Claude-vs-local tension
 - **Look-through exposure** for sector, country, and theme overlap; duplicate holdings; and concentration risk
-- **Market regime chip** using SPY, TLT, VIX, and UUP context — the macro mood ring has receipts
-- **Base / Bull / Bear scenarios** with probability bars and "most likely" context
+- **Market regime chip** using SPY, TLT, VIX, and UUP context
+- **Base / Bull / Bear scenarios** with probability bars
 - **Analytics tab** covering performance, risk, exposure, signals, and markets
-- **Local-first storage** with SQLite, git-ignored `.env`, and optional Claude API usage
 
 <details>
 <summary>📊 Analytics widgets</summary>
@@ -145,9 +150,9 @@ FolioSenseAI runs locally at [`http://localhost:8000`](http://localhost:8000). Y
 <summary>🍎 Mac / Linux</summary>
 
 ```bash
-curl -L -o FolioSenseAI-v3.1.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v3.1.zip
-unzip FolioSenseAI-v3.1.zip
-cd FolioSenseAI-release-v3.1
+curl -L -o FolioSenseAI-v4.0.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v4.0.zip
+unzip FolioSenseAI-v4.0.zip
+cd FolioSenseAI-release-v4.0
 ./scripts/setup.sh
 ```
 
@@ -157,9 +162,9 @@ cd FolioSenseAI-release-v3.1
 <summary>🪟 Windows PowerShell</summary>
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v3.1.zip" -OutFile "FolioSenseAI-v3.1.zip"
-Expand-Archive -Path "FolioSenseAI-v3.1.zip" -DestinationPath .
-cd FolioSenseAI-release-v3.1
+Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v4.0.zip" -OutFile "FolioSenseAI-v4.0.zip"
+Expand-Archive -Path "FolioSenseAI-v4.0.zip" -DestinationPath .
+cd FolioSenseAI-release-v4.0
 .\scripts\setup.ps1
 ```
 
@@ -218,7 +223,7 @@ git pull --ff-only
 
 </details>
 
-v3.1 has no database schema changes and no new `.env` fields — drop in your existing `database/` and `.env` and start. The `verdict_snapshots` table from v3.0 carries over as-is.
+v4.0 has no database schema changes and no new `.env` fields — drop in your existing `database/` and `.env` and start. All tables from v3.x carry over as-is.
 
 <details>
 <summary>🤖 Claude API setup (optional)</summary>
@@ -229,7 +234,7 @@ Add to `.env`, then restart:
 ANTHROPIC_API_KEY=sk-ant-your-real-key-goes-here
 ```
 
-Claude API usage is billed separately from Claude Pro. Responses are cached aggressively — billing anxiety is a design smell.
+Claude API usage is billed separately from Claude Pro. Action Plan responses are cached 24 hours; news themes cache by headline signature. Billing anxiety is a design smell.
 
 </details>
 
@@ -275,14 +280,14 @@ app/
 ├── main.py          — FastAPI app, middleware, static serving, startup migrations
 ├── models.py        — SQLAlchemy ORM models
 ├── schemas.py       — Pydantic request/response contracts
-├── routers/         — API routes (stocks, portfolio, AI intelligence)
-└── services/        — market data, analytics, exposure, regime, projections, verdicts
+├── routers/         — API routes (stocks, portfolio, AI intelligence, news)
+└── services/        — market data, analytics, exposure, regime, projections, verdicts, news
 templates/
-└── index.html       — single-page dashboard shell
+└── index.html       — single-page dashboard shell (four zones: Overview, Holdings, Analytics, News)
 static/
 ├── js/              — dashboard interactions and analytics charts
 └── css/style.css    — design system, layout, responsive states
-tests/               — mocked external services, analytics coverage, UI behavior checks
+tests/               — mocked external services, analytics coverage, action plan, news service
 scripts/             — setup and start scripts for Mac/Linux and Windows
 ```
 
@@ -296,7 +301,8 @@ scripts/             — setup and start scripts for Mac/Linux and Windows
 | **Market data** | `/api/stocks/prices`, `/api/stocks/history/{ticker}`, `/api/stocks/world-markets`, `/api/stocks/market-status` |
 | **Portfolio** | `/api/portfolio/holdings`, `/api/portfolio/value`, `/api/portfolio/pnl`, `/api/portfolio/projection`, `/api/portfolio/risk-metrics`, `/api/portfolio/correlation` |
 | **Analytics** | `/api/portfolio/drawdown`, `/api/portfolio/beta`, `/api/portfolio/rolling-volatility`, `/api/portfolio/sector-tilt`, `/api/portfolio/conviction-gaps`, `/api/portfolio/market-context` |
-| **AI / Intelligence** | `/api/ai/investment-signals/all`, `/api/ai/portfolio-summary`, `/api/ai/portfolio-exposure`, `/api/ai/verdict-calibration`, `/api/ai/analytics-insights`, `/api/ai/intelligence/{ticker}/deep` |
+| **AI / Intelligence** | `/api/ai/investment-signals/all`, `/api/ai/portfolio-summary`, `/api/ai/portfolio-exposure`, `/api/ai/verdict-calibration`, `/api/ai/analytics-insights`, `/api/ai/intelligence/{ticker}/deep`, `/api/ai/action-plan` |
+| **News** | `/api/news/feed`, `/api/news/themes` |
 
 Open [`/docs`](http://localhost:8000/docs) locally for the full interactive FastAPI reference.
 
@@ -332,7 +338,6 @@ GitHub CI runs all checks on Python 3.11 and 3.12. Additional workflows cover Py
 
 - [ ] CSV import / export
 - [ ] Transaction history views
-- [ ] News section
 - [ ] Calibration reporting once verdict snapshots have enough history to stop being anecdotal
 
 ---

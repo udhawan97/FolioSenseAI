@@ -1,3 +1,96 @@
+# FolioSenseAI v4.0 Release Notes
+
+**Release date:** June 27, 2026
+
+---
+
+## ✦ The Portfolio Finally Has Opinions
+
+> *v4.0 is the release where the dashboard stopped watching your book and started reading it. Now it tells you what to do with it — and what the market is saying about it while you decide.*
+
+Your portfolio now has an **Action Plan**. Claude reads the full book — signals, regime, concentration, earnings risk — and comes back with a prioritized Hold / Add / Trim / Exit breakdown, a thesis for each bucket, and the macro mood ring right on the card. No Claude key? The local fallback runs the same buckets deterministically, no API call, no wait. Either way, the plan is cached for 24 hours and invalidates itself when your portfolio's dominant action or concentration meaningfully shifts.
+
+Your portfolio also has a **News tab** now — a fourth zone alongside Overview, Holdings, and Analytics. It pulls live headlines for every active holding, dedupes and caches them, and groups them by ticker. In Claude mode it adds a portfolio-wide briefing and a set of cross-holding theme clusters, so you can see which macro story is quietly working three of your positions at once.
+
+v4.0 is the release where "what does this mean?" gets a partner: "what should I actually do about it?"
+
+---
+
+## What's New
+
+### Portfolio Action Plan
+
+- **`/api/ai/action-plan`** — Claude reads the full portfolio signal snapshot and returns a prioritized bucket plan: Hold / Add / Trim / Exit. Each bucket carries a thesis, top moves, and supporting context. Falls back deterministically when Claude is unavailable or `force_local=true`.
+- **Regime-aware context** — the plan surfaces the current market regime (risk-on / risk-off / neutral) alongside the thesis so bucket decisions have macro backdrop, not just holding-level math.
+- **24 h cache with drift invalidation** — cached in `AISummary` (ticker=`BOOK`, type=`action_plan`). Invalidates automatically when the portfolio's dominant action or concentration signature changes — stale plans don't linger after you rebalance.
+- **Hold / Add / Trim / Exit UI** — bucketed cards with regime chip, mode badge (Claude vs Local), and per-bucket thesis. Skeleton loading state and a refresh button for when you want a fresh read without waiting for the 24 h window.
+
+### News Tab
+
+- **`/api/news/feed`** — always available (no API key needed). Fetches and caches yfinance headlines for every active holding and watchlist ticker. Normalized, deduped, and sorted by recency. Holdings with no news still appear so the feed never silently drops a position.
+- **`/api/news/themes`** — Claude mode only. One Haiku call per unique headline signature: portfolio-wide briefing (second-person read of what today's news means for the book) plus cross-holding theme clusters showing which macro narrative is hitting multiple positions at once.
+- **`news_service.py`** — new service handling fetch, TTL caching (5 min market hours / 1 h closed), normalization, and concurrent multi-ticker fetching.
+
+### Test Coverage
+
+- **356 tests** — up from 297 in v3.1. Additions cover the full action-plan pipeline (Claude path, local fallback, cache hit/miss, drift invalidation, regime injection, bucket structure) and news service (fetch, dedup, theme snapshot building, empty-portfolio edge cases).
+
+---
+
+## Developer Notes
+
+- FastAPI metadata version **`4.0.0`**
+- New router: `app/routers/news.py` — mounted at `/api/news`
+- New service: `app/services/news_service.py`
+- New AI service function: `generate_news_themes()` in `ai_service.py`
+- New AI router function: `generate_action_plan()` — `_collect_portfolio_signals_core()` shared between `/investment-signals/all` and `/action-plan` to avoid duplicate signal computation
+- Static cache keys: `style.css?v=97`, `dashboard.js?v=90`, `analytics-charts.js?v=13`
+- No database schema changes — no migration required.
+- No `.env` changes required.
+- **356 tests passing**
+
+---
+
+## Install & Upgrade
+
+### Fresh install
+
+**Mac / Linux**
+
+```bash
+curl -L -o FolioSenseAI-v4.0.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v4.0.zip
+unzip FolioSenseAI-v4.0.zip
+cd FolioSenseAI-release-v4.0
+./scripts/setup.sh
+```
+
+**Windows PowerShell**
+
+```powershell
+Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v4.0.zip" -OutFile "FolioSenseAI-v4.0.zip"
+Expand-Archive -Path "FolioSenseAI-v4.0.zip" -DestinationPath .
+cd FolioSenseAI-release-v4.0
+.\scripts\setup.ps1
+```
+
+### Upgrade from v3.x
+
+1. Stop the app (`Ctrl+C`).
+2. Back up `database/` and `.env`.
+3. Download v4.0 into a **new folder** — do not overwrite in place.
+4. Copy `database/` and `.env` into the new tree.
+5. Run setup once, then use `start.sh` / `start.ps1` going forward.
+
+No schema migration or `.env` change required. All v3.x tables carry over as-is.
+
+---
+
+## Final Word
+
+v4.0 is still not financial advice. It is just the first version that will tell you, with a thesis and a regime chip, what it thinks you should probably do about it.
+
+---
+
 # FolioSenseAI v3.1 Release Notes
 
 **Release date:** June 27, 2026
