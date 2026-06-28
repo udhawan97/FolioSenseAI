@@ -160,16 +160,24 @@ def fetch_portfolio_news(tickers: list[str]) -> dict[str, list[dict]]:
     results: dict[str, list[dict]] = {}
     with ThreadPoolExecutor(max_workers=min(_MAX_WORKERS, len(safe_tickers))) as pool:
         futures = {pool.submit(fetch_ticker_news, t): t for t in safe_tickers}
-        for future in as_completed(futures, timeout=_FETCH_TIMEOUT):
-            ticker = futures[future]
-            try:
-                results[ticker] = future.result()
-            except Exception as exc:  # pylint: disable=broad-except
-                logger.debug(
-                    "news_service: portfolio future exception; ticker=%s exception_type=%s",
-                    ticker, type(exc).__name__,
-                )
-                results[ticker] = []
+        try:
+            for future in as_completed(futures, timeout=_FETCH_TIMEOUT):
+                ticker = futures[future]
+                try:
+                    results[ticker] = future.result()
+                except Exception as exc:  # pylint: disable=broad-except
+                    logger.debug(
+                        "news_service: portfolio future exception; ticker=%s exception_type=%s",
+                        ticker, type(exc).__name__,
+                    )
+                    results[ticker] = []
+        except TimeoutError:
+            logger.warning(
+                "news_service: portfolio fetch timed out after %ss; %d/%d tickers completed",
+                _FETCH_TIMEOUT, len(results), len(safe_tickers),
+            )
+            for t in safe_tickers:
+                results.setdefault(t, [])
 
     # Global dedup: if the same article appears under multiple tickers keep only
     # the first occurrence (in the order tickers were supplied) and drop the rest.
