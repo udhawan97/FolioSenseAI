@@ -236,6 +236,7 @@ Run the install command again — it detects your existing `database/` and `.env
 | `Python not found` | Install from [python.org](https://www.python.org/downloads/) and open a **new** terminal window. |
 | Windows: `winget` fails | Install Python manually, check "Add to PATH", re-run the command. |
 | Mac: `curl: command not found` | `xcode-select --install` — this shouldn't happen on modern macOS. |
+| Mac: `bash: scripts/setup.sh: No such file or directory` | Your Desktop shortcut is outdated. Re-run the one-line install command above — it replaces the shortcut automatically. |
 | Browser doesn't open | Navigate to [http://localhost:8000](http://localhost:8000) manually. |
 | `localhost:8000` won't load | The terminal window must stay open — it is the server. |
 | Port 8000 is busy | Stop the other app on that port, or change the port in `run.py`. |
