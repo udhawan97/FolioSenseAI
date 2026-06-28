@@ -1463,11 +1463,8 @@ table tbody tr:hover {
     position: relative;
     z-index: 2;
     padding: 0 0.15rem 0.2rem;
-    min-height: clamp(520px, 64vh, 860px);
     overflow-anchor: none;
     transition: opacity 0.18s var(--ease);
-    content-visibility: auto;
-    contain-intrinsic-size: 0 760px;
 }
 
 #holdings-card.is-ai-checking .table-responsive {
