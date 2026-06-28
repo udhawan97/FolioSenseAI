@@ -135,20 +135,20 @@ const AnalyticsCharts = (() => {
 
     /** Apple-style sector palette + Bootstrap icon per GICS-style sector. */
     const SECTOR_THEMES = [
-        { match: /tech/i,                        color: "#007AFF", icon: "bi-cpu-fill" },
-        { match: /health/i,                      color: "#FF2D55", icon: "bi-heart-pulse-fill" },
-        { match: /financ/i,                      color: "#5856D6", icon: "bi-bank" },
-        { match: /energy/i,                      color: "#FF9500", icon: "bi-lightning-charge-fill" },
-        { match: /industri/i,                    color: "#00C7BE", icon: "bi-gear-wide-connected" },
-        { match: /consumer disc|discretionary/i, color: "#FF6B35", icon: "bi-bag-fill" },
-        { match: /consumer stap|staples/i,       color: "#34C759", icon: "bi-cart-fill" },
-        { match: /real estate|reit/i,            color: "#AC8E68", icon: "bi-building" },
-        { match: /utilit/i,                      color: "#FFD60A", icon: "bi-plug-fill" },
-        { match: /material/i,                    color: "#BF5AF2", icon: "bi-box-seam" },
-        { match: /communi/i,                     color: "#5AC8FA", icon: "bi-broadcast" },
-        { match: /aero|defense|defence/i,        color: "#06D6A0", icon: "bi-airplane-fill" },
+        { match: /tech/i,                        color: "#2F6FB0", icon: "bi-cpu-fill" },
+        { match: /health/i,                      color: "#B23A55", icon: "bi-heart-pulse-fill" },
+        { match: /financ/i,                      color: "#4B49A0", icon: "bi-bank" },
+        { match: /energy/i,                      color: "#C07628", icon: "bi-lightning-charge-fill" },
+        { match: /industri/i,                    color: "#2A8C84", icon: "bi-gear-wide-connected" },
+        { match: /consumer disc|discretionary/i, color: "#BD5232", icon: "bi-bag-fill" },
+        { match: /consumer stap|staples/i,       color: "#3C8C58", icon: "bi-cart-fill" },
+        { match: /real estate|reit/i,            color: "#8A6B4A", icon: "bi-building" },
+        { match: /utilit/i,                      color: "#B58A1E", icon: "bi-plug-fill" },
+        { match: /material/i,                    color: "#8A4FA8", icon: "bi-box-seam" },
+        { match: /communi/i,                     color: "#3681A6", icon: "bi-broadcast" },
+        { match: /aero|defense|defence/i,        color: "#1F8A72", icon: "bi-airplane-fill" },
     ];
-    const SECTOR_THEME_DEFAULT = { color: "#8E8E93", icon: "bi-diagram-3" };
+    const SECTOR_THEME_DEFAULT = { color: "#5C5C66", icon: "bi-diagram-3" };
 
     function sectorTheme(name) {
         const n = (name || "").toLowerCase();

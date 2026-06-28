@@ -441,19 +441,21 @@ function renderHeroPnl(data = latestPortfolioValueData) {
          </span>`;
 }
 
-// Apple-inspired vivid palette: high-chroma hues with enough separation for quick scanning.
-// Badges use these at full opacity; the doughnut gets a slight glass softening below.
+// Deep, muted jewel-tone palette: richer and darker than the old neon set, with
+// enough hue separation between adjacent segments for quick scanning. Tuned to
+// match the sector map. Badges use these at full opacity; the doughnut gets a
+// slight glass softening below.
 const CHART_COLORS = [
-    "rgba(0, 122, 255, 1)",       // system blue
-    "rgba(48, 209, 88, 1)",       // system green
-    "rgba(255, 149, 0, 1)",       // system orange
-    "rgba(191, 90, 242, 1)",      // system purple
-    "rgba(90, 200, 250, 1)",      // system cyan
-    "rgba(255, 45, 85, 1)",       // system pink
-    "rgba(255, 204, 0, 1)",       // system yellow
-    "rgba(88, 86, 214, 1)",       // system indigo
-    "rgba(0, 199, 190, 1)",       // system teal
-    "rgba(175, 82, 222, 1)",      // system violet
+    "rgba(47, 111, 176, 1)",      // deep ocean blue
+    "rgba(192, 118, 40, 1)",      // burnt amber
+    "rgba(60, 140, 88, 1)",       // forest green
+    "rgba(178, 58, 85, 1)",       // muted crimson rose
+    "rgba(138, 79, 168, 1)",      // muted plum
+    "rgba(42, 140, 132, 1)",      // deep teal
+    "rgba(181, 138, 30, 1)",      // deep gold
+    "rgba(75, 73, 160, 1)",       // deep indigo
+    "rgba(189, 82, 50, 1)",       // terracotta
+    "rgba(54, 129, 166, 1)",      // steel blue
 ];
 // Wrap around the palette so portfolios with >10 holdings still get colors.
 const chartColor = (i) => CHART_COLORS[i % CHART_COLORS.length];
@@ -461,6 +463,78 @@ const chartColor = (i) => CHART_COLORS[i % CHART_COLORS.length];
 // Glass-opacity version for doughnut segments; keeps the palette vivid with material depth.
 const allocColor = (i) => chartColor(i).replace(/[\d.]+\)$/, "0.94)");
 const withAlpha = (rgba, alpha) => rgba.replace(/[\d.]+\)$/, `${alpha})`);
+
+// Multiply a color toward black (factor < 1) or white (factor > 1) and stamp an alpha.
+// The building block for the doughnut's dimensional ring shading.
+function shadeRGBA(color, factor, alpha) {
+    const m = String(color).match(/-?\d+(?:\.\d+)?/g);
+    if (!m || m.length < 3) return color;
+    let r = +m[0], g = +m[1], b = +m[2];
+    if (factor <= 1) {
+        r *= factor; g *= factor; b *= factor;
+    } else {
+        const t = Math.min(factor - 1, 1);
+        r += (255 - r) * t; g += (255 - g) * t; b += (255 - b) * t;
+    }
+    const clamp = (v) => Math.round(Math.min(255, Math.max(0, v)));
+    const a = alpha == null ? (m[3] != null ? +m[3] : 1) : alpha;
+    return `rgba(${clamp(r)}, ${clamp(g)}, ${clamp(b)}, ${a})`;
+}
+
+// A glossy "tube" shade across the ring band: a bright inner lip lit by the center
+// glow, falling into a deep, dark outer rim. Darker overall than a flat fill, with
+// genuine dimensionality. `dim` builds the muted variant for non-focused segments.
+function makeRingGradient(ctx, cx, cy, innerR, outerR, base, dim) {
+    const g = ctx.createRadialGradient(cx, cy, Math.max(0, innerR - 1), cx, cy, outerR + 1);
+    if (dim) {
+        g.addColorStop(0,    shadeRGBA(base, 0.74, 0.9));
+        g.addColorStop(0.5,  shadeRGBA(base, 0.54, 0.9));
+        g.addColorStop(1,    shadeRGBA(base, 0.34, 0.9));
+    } else {
+        g.addColorStop(0,    shadeRGBA(base, 1.06, 1));
+        g.addColorStop(0.5,  shadeRGBA(base, 0.82, 1));
+        g.addColorStop(1,    shadeRGBA(base, 0.5,  1));
+    }
+    return g;
+}
+
+// Builds (once per geometry/theme) the base + dimmed radial gradients for every
+// segment, cached on the chart instance. The center-halo redraw loop and hover
+// recolors reuse these objects, so they are created once per layout — never per
+// frame. Returns null before the chart has laid out (callers fall back to flats).
+function allocGradients(chart, baseColors) {
+    const area = chart.chartArea;
+    if (!area || area.width <= 0 || area.height <= 0) return null;
+    const cx = (area.left + area.right) / 2;
+    const cy = (area.top + area.bottom) / 2;
+    const ctrl = chart.getDatasetMeta(0)?.controller;
+    let outerR = ctrl?.outerRadius;
+    let innerR = ctrl?.innerRadius;
+    if (!(outerR > 0)) {
+        // Pre-controller fallback: derive the ring band from chartArea + cutout.
+        outerR = Math.min(area.width, area.height) / 2;
+        innerR = outerR * 0.68;
+    }
+    const key = `${Math.round(cx)}:${Math.round(cy)}:${Math.round(innerR)}:${Math.round(outerR)}:${currentTheme()}`;
+    const cache = chart.$allocFillCache;
+    if (cache && cache.key === key && cache.src === baseColors) return cache;
+    const ctx = chart.ctx;
+    const out = { key, src: baseColors, base: [], dim: [] };
+    for (let i = 0; i < baseColors.length; i++) {
+        out.base[i] = makeRingGradient(ctx, cx, cy, innerR, outerR, baseColors[i], false);
+        out.dim[i]  = makeRingGradient(ctx, cx, cy, innerR, outerR, baseColors[i], true);
+    }
+    chart.$allocFillCache = out;
+    return out;
+}
+
+// Active/selected segment index, used to keep focus shading after a relayout.
+function currentAllocActiveIndex(chart) {
+    const active = chart.getActiveElements?.()[0];
+    if (Number.isInteger(active?.index)) return active.index;
+    if (selectedAllocationTicker) return chart.data.labels.indexOf(selectedAllocationTicker);
+    return -1;
+}
 
 // Background-matching border for clean segment separation — works in both themes.
 const allocBorderColor = () =>
@@ -1400,9 +1474,18 @@ function setAllocationFocus(chart, activeIndex = -1) {
     if (!chart?.data?.datasets?.[0]) return;
     const dataset = chart.data.datasets[0];
     const baseColors = dataset.$baseColors || dataset.backgroundColor || [];
-    dataset.backgroundColor = baseColors.map((color, index) =>
-        activeIndex >= 0 && index !== activeIndex ? withAlpha(color, 0.80) : withAlpha(color, 0.96)
-    );
+    const grads = allocGradients(chart, baseColors);
+    if (grads) {
+        dataset.backgroundColor = baseColors.map((_, index) =>
+            activeIndex >= 0 && index !== activeIndex ? grads.dim[index] : grads.base[index]
+        );
+        chart.$allocFillApplied = grads; // mark so the fill plugin won't redundantly reapply
+    } else {
+        // Pre-layout fallback: flat tints, upgraded to gradients once geometry exists.
+        dataset.backgroundColor = baseColors.map((color, index) =>
+            activeIndex >= 0 && index !== activeIndex ? withAlpha(color, 0.80) : withAlpha(color, 0.96)
+        );
+    }
 }
 
 function allocationFocusDefaultTicker(sorted = null) {
@@ -1772,7 +1855,7 @@ function renderAllocation() {
 	                    }
 	                }
             },
-            plugins: [segmentGlowPlugin, centerHaloPlugin, centerTotalPlugin],
+            plugins: [allocFillPlugin, segmentGlowPlugin, centerHaloPlugin, centerTotalPlugin],
         });
         // If we booted into a non-Overview zone, keep the halo paused until shown.
         if (dashboardZone !== "overview") allocationChart.$haloPause?.();
@@ -1781,32 +1864,32 @@ function renderAllocation() {
 }
 
 const SNAPSHOT_SECTOR_THEMES = [
-    { match: /tech/i,                        color: "#007AFF", icon: "bi-cpu-fill",
+    { match: /tech/i,                        color: "#2F6FB0", icon: "bi-cpu-fill",
       blurb: "Think software, semiconductors, cloud, hardware, and IT services — the folks who quietly run the world and never let you forget it." },
-    { match: /health/i,                      color: "#FF2D55", icon: "bi-heart-pulse-fill",
+    { match: /health/i,                      color: "#B23A55", icon: "bi-heart-pulse-fill",
       blurb: "Likely pharma, biotech, medical devices, hospitals, and health insurers — the people keeping you alive and the bill alive too." },
-    { match: /financ/i,                      color: "#5856D6", icon: "bi-bank",
+    { match: /financ/i,                      color: "#4B49A0", icon: "bi-bank",
       blurb: "Probably banks, insurers, asset managers, payment networks, and exchanges — they make money making money. Cute, right?" },
-    { match: /energy/i,                      color: "#FF9500", icon: "bi-lightning-charge-fill",
+    { match: /energy/i,                      color: "#C07628", icon: "bi-lightning-charge-fill",
       blurb: "Mostly oil & gas, drillers, refiners, pipelines, and oilfield services — the stuff that powers your portfolio and your road trips." },
-    { match: /industri/i,                    color: "#00C7BE", icon: "bi-gear-wide-connected",
+    { match: /industri/i,                    color: "#2A8C84", icon: "bi-gear-wide-connected",
       blurb: "Machinery, airlines, railroads, logistics, and construction — the unglamorous gears that keep the economy from seizing up." },
-    { match: /consumer disc|discretionary/i, color: "#FF6B35", icon: "bi-bag-fill",
+    { match: /consumer disc|discretionary/i, color: "#BD5232", icon: "bi-bag-fill",
       blurb: "Retail, autos, restaurants, travel, and luxury — basically everything you buy when you're feeling optimistic (or impulsive)." },
-    { match: /consumer stap|staples/i,       color: "#34C759", icon: "bi-cart-fill",
+    { match: /consumer stap|staples/i,       color: "#3C8C58", icon: "bi-cart-fill",
       blurb: "Food, beverages, household goods, and groceries — the stuff people buy in a boom, a bust, and a zombie apocalypse." },
-    { match: /real estate|reit/i,            color: "#AC8E68", icon: "bi-building",
+    { match: /real estate|reit/i,            color: "#8A6B4A", icon: "bi-building",
       blurb: "REITs, property landlords, and developers — they own the building you're standing in and rent it back to you." },
-    { match: /utilit/i,                      color: "#FFD60A", icon: "bi-plug-fill",
+    { match: /utilit/i,                      color: "#B58A1E", icon: "bi-plug-fill",
       blurb: "Electric, gas, and water utilities — boring, reliable, and the reason your lights turn on. The dependable friend of the market." },
-    { match: /material/i,                    color: "#BF5AF2", icon: "bi-box-seam",
+    { match: /material/i,                    color: "#8A4FA8", icon: "bi-box-seam",
       blurb: "Chemicals, metals & mining, packaging, and paper — the raw ingredients everything else is literally made out of." },
-    { match: /communi/i,                     color: "#5AC8FA", icon: "bi-broadcast",
+    { match: /communi/i,                     color: "#3681A6", icon: "bi-broadcast",
       blurb: "Telecom, media, streaming, social, gaming, and advertising — where your attention goes to get sold to the highest bidder." },
-    { match: /aero|defense|defence/i,        color: "#06D6A0", icon: "bi-airplane-fill",
+    { match: /aero|defense|defence/i,        color: "#1F8A72", icon: "bi-airplane-fill",
       blurb: "Aircraft makers and defense contractors — they build the things that fly, and occasionally the things that go boom." },
 ];
-const SNAPSHOT_SECTOR_FALLBACK = { color: "#8E8E93", icon: "bi-diagram-3",
+const SNAPSHOT_SECTOR_FALLBACK = { color: "#5C5C66", icon: "bi-diagram-3",
     blurb: "The mystery box. Could be anything we haven't sorted into a tidy sector yet — odds, ends, and the occasional surprise. Industry-level detail is on the way." };
 
 function snapshotSectorTheme(name) {
@@ -2128,8 +2211,9 @@ function allocationCenterColor(chart) {
     if (idx < 0 && selectedAllocationTicker) {
         idx = chart.data.labels.indexOf(selectedAllocationTicker);
     }
-    return idx >= 0
-        ? chart.data.datasets[0].backgroundColor[idx]
+    const baseColors = chart.data.datasets[0].$baseColors || chart.data.datasets[0].backgroundColor;
+    return idx >= 0 && typeof baseColors?.[idx] === "string"
+        ? baseColors[idx]
         : "rgba(100, 210, 255, 0.86)";
 }
 
@@ -2433,8 +2517,9 @@ const segmentGlowPlugin = {
         const { datasetIndex, index } = active[0];
         const meta = chart.getDatasetMeta(datasetIndex);
         const arc = meta.data[index];
-        const raw = chart.data.datasets[datasetIndex].backgroundColor[index];
-        const glow = raw.replace(/[\d.]+\)$/, "0.80)");
+        const ds = chart.data.datasets[datasetIndex];
+        const raw = ds.$baseColors?.[index] || ds.backgroundColor?.[index] || "rgba(111,214,240,1)";
+        const glow = withAlpha(raw, 0.80);
         ctx.save();
         ctx.shadowBlur = 36;
         ctx.shadowColor = glow;
@@ -2443,6 +2528,25 @@ const segmentGlowPlugin = {
         ctx.shadowColor = glow;
         arc.draw(ctx);
         ctx.restore();
+    },
+};
+
+// Upgrades the doughnut's flat segment fills to the cached radial "tube" gradients
+// once the chart has laid out (and rebuilds them after a resize or theme change).
+// It applies at most once per geometry — the repaint it triggers re-enters here,
+// finds the same cached gradients already applied, and bails, so there is no loop
+// and no per-frame cost.
+const allocFillPlugin = {
+    id: "allocFill",
+    afterDraw(chart) {
+        if (chart.config.type !== "doughnut") return;
+        const ds = chart.data?.datasets?.[0];
+        const baseColors = ds?.$baseColors;
+        if (!baseColors?.length) return;
+        const grads = allocGradients(chart, baseColors);
+        if (!grads || chart.$allocFillApplied === grads) return;
+        setAllocationFocus(chart, currentAllocActiveIndex(chart));
+        chart.draw();
     },
 };
 

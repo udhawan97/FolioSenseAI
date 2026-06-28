@@ -3444,15 +3444,16 @@ body > .portfolio-manager-popover.is-visible .portfolio-manager-panel {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.15rem;
+    gap: 0.18rem;
     flex: 1;
-    min-height: 48px;
-    padding: 0.38rem 0.2rem;
+    min-width: 56px;
+    min-height: 50px;
+    padding: 0.42rem 0.45rem;
     border-radius: 9px;
     border: none;
     background: transparent;
     color: var(--text-tertiary);
-    font-size: 0.595rem;
+    font-size: 0.615rem;
     font-weight: 600;
     line-height: 1.2;
     text-align: center;
@@ -3464,7 +3465,7 @@ body > .portfolio-manager-popover.is-visible .portfolio-manager-panel {
 }
 
 .manage-hold-mode-box i {
-    font-size: 0.88rem;
+    font-size: 0.92rem;
     opacity: 0.45;
     transition: opacity 0.2s var(--ease), transform 0.22s var(--spring);
 }
@@ -3570,8 +3571,10 @@ body > .portfolio-manager-popover.is-visible .portfolio-manager-panel {
 
 @media (max-width: 420px) {
     .manage-hold-mode-box {
-        font-size: 0.55rem;
-        min-height: 44px;
+        font-size: 0.57rem;
+        min-width: 48px;
+        min-height: 46px;
+        padding: 0.38rem 0.32rem;
     }
 }
 
@@ -14364,8 +14367,7 @@ svg.signal-radar {
 .verdict-horizon-pill.tip-trigger i,
 .verdict-anchor-pill.tip-trigger i,
 .hold-mode-seg.tip-trigger i,
-.briefing-verdict-pill.tip-trigger i,
-.manage-hold-mode-box.tip-trigger i {
+.briefing-verdict-pill.tip-trigger i {
     font-size: 0.72rem;
     flex-shrink: 0;
 }
@@ -14375,11 +14377,20 @@ svg.signal-radar {
 }
 
 .manage-hold-mode-box.tip-trigger {
+    display: flex;
+    flex-direction: column;
     width: 100%;
     height: auto;
     margin-left: 0;
-    border-radius: 10px;
+    border-radius: 9px;
     justify-content: center;
+    align-items: center;
+}
+
+/* Restore full icon size — don't let the group .tip-trigger i rule shrink it */
+.manage-hold-mode-box.tip-trigger i {
+    font-size: 0.92rem;
+    flex-shrink: 0;
 }
 
 .verdict-scenario-pill:hover {
