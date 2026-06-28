@@ -3936,9 +3936,174 @@ function animateMoveHeroNumber(el, targetText) {
     requestAnimationFrame(tick);
 }
 
+// ── Why It Moved enrichment — Block 1/2/3 builders ───────────────────────────
+
+function _buildMarketBackdropBlock(regime, coverageData) {
+    if (!regime || typeof regime !== "object") return "";
+    const riskRegime  = regime.risk_regime  || "";
+    const ratesRegime = regime.rates_regime || "";
+    const vixBand     = regime.vix_band     || "";
+    const usdRegime   = regime.usd_regime   || "";
+    if (!riskRegime && !ratesRegime && !vixBand && !usdRegime) return "";
+
+    const items = [];
+    if (riskRegime) {
+        items.push(riskRegime === "risk_on"
+            ? { icon: "bi-graph-up-arrow",   label: "Risk mood",   value: "Risk-on",  detail: "Markets chasing growth",           tone: "positive" }
+            : riskRegime === "risk_off"
+            ? { icon: "bi-graph-down-arrow", label: "Risk mood",   value: "Risk-off", detail: "Investors playing it safe",         tone: "negative" }
+            : { icon: "bi-dash-circle",      label: "Risk mood",   value: "Mixed",    detail: "No clear directional bias",        tone: "neutral"  });
+    }
+    if (ratesRegime) {
+        items.push(ratesRegime === "rates_rising"
+            ? { icon: "bi-bank", label: "Rates", value: "Rising", detail: "Borrowing costs climbing",      tone: "gold" }
+            : ratesRegime === "rates_falling"
+            ? { icon: "bi-bank", label: "Rates", value: "Easing", detail: "Borrowing costs coming down",  tone: "cyan" }
+            : { icon: "bi-bank", label: "Rates", value: "Steady", detail: "Rates holding near current level", tone: "blue" });
+    }
+    if (vixBand) {
+        items.push(vixBand === "elevated"
+            ? { icon: "bi-activity", label: "Fear gauge", value: "Jittery", detail: "Volatility above normal",         tone: "negative" }
+            : vixBand === "low"
+            ? { icon: "bi-activity", label: "Fear gauge", value: "Calm",    detail: "Markets relaxed \u2014 low volatility", tone: "positive" }
+            : { icon: "bi-activity", label: "Fear gauge", value: "Normal",  detail: "Volatility in usual range",       tone: "blue"     });
+    }
+    if (usdRegime) {
+        items.push(usdRegime === "usd_strong"
+            ? { icon: "bi-currency-exchange", label: "Dollar", value: "Strong USD", detail: "US dollar rising vs peers",   tone: "cyan"    }
+            : usdRegime === "usd_weak"
+            ? { icon: "bi-currency-exchange", label: "Dollar", value: "Weak USD",   detail: "Dollar declining vs peers",   tone: "gold"    }
+            : { icon: "bi-currency-exchange", label: "Dollar", value: "Steady USD", detail: "Dollar near its recent range", tone: "neutral" });
+    }
+    if (items.length === 0) return "";
+
+    const pulseHtml = `<div class="market-pulse-strip" aria-label="Market backdrop">
+        ${items.map((item, i) => `<div class="market-pulse-card ${escapeHtml(item.tone)}" style="--pulse-index:${i}">
+            <i class="bi ${escapeHtml(item.icon)} pulse-icon" aria-hidden="true"></i>
+            <span class="pulse-copy">
+                <span class="pulse-label">${escapeHtml(item.label)}</span>
+                <strong>${escapeHtml(item.value)}</strong>
+                <span class="pulse-detail">${escapeHtml(item.detail)}</span>
+            </span>
+        </div>`).join("")}
+    </div>`;
+
+    const moodWord = riskRegime === "risk_on" ? "risk-on" : riskRegime === "risk_off" ? "risk-off" : "mixed";
+    const vixWord  = vixBand === "elevated" ? "jittery fear gauge" : vixBand === "low" ? "calm fear gauge" : "normal fear gauge";
+
+    const sectors    = (coverageData?.sectors || []).map(s => (s.name || "").toLowerCase());
+    const theme      = (coverageData?.theme   || "").toLowerCase();
+    const isGrowth   = sectors.some(s => /tech|software|growth|consumer discret/.test(s)) || /growth|tech/.test(theme);
+    const isDefensive = sectors.some(s => /util|health|consumer stap|real estate/.test(s)) || /defensive|dividend/.test(theme);
+
+    let tailClause;
+    if (riskRegime === "risk_off" && vixBand === "elevated") {
+        tailClause = isDefensive ? " \u2014 defensive pockets stayed more resilient than growth today."
+            : isGrowth            ? " \u2014 growth and risk assets typically face the most pressure."
+            :                       " \u2014 investors shifted toward safer ground today.";
+    } else if (riskRegime === "risk_on" && vixBand === "low") {
+        tailClause = isGrowth     ? " \u2014 growth and tech usually benefit the most."
+            : isDefensive         ? " \u2014 even defensive holdings tend to find buyers in this backdrop."
+            :                       " \u2014 a broad tailwind for most holdings today.";
+    } else if (riskRegime === "risk_off") {
+        tailClause = " \u2014 defensive corners held up better than growth today.";
+    } else if (riskRegime === "risk_on") {
+        tailClause = " \u2014 broad market conditions support most holdings.";
+    } else {
+        tailClause = " \u2014 no clear directional push from the broader market today.";
+    }
+
+    const summary = `Broad market leaning ${moodWord} with a ${vixWord}${tailClause}`;
+    return `
+        <div class="intel-label"><i class="bi bi-globe-americas"></i> Market backdrop</div>
+        ${pulseHtml}
+        <p class="move-explanation-text">${escapeHtml(summary)}</p>`;
+}
+
+function _buildTodayInContextBlock(timing, data) {
+    const sparkline = timing.sparkline_30d;
+    if (!Array.isArray(sparkline) || sparkline.length < 5) return "";
+    const pts = sparkline.filter(v => Number.isFinite(v));
+    if (pts.length < 5) return "";
+
+    const deltas = [];
+    for (let i = 1; i < pts.length; i++) deltas.push(pts[i] - pts[i - 1]);
+    if (deltas.length < 2) return "";
+
+    const mean     = deltas.reduce((s, v) => s + v, 0) / deltas.length;
+    const variance = deltas.reduce((s, v) => s + (v - mean) ** 2, 0) / deltas.length;
+    let typicalSwing = Math.sqrt(variance);
+    if (!Number.isFinite(typicalSwing) || typicalSwing < 0.01) {
+        typicalSwing = deltas.reduce((s, v) => s + Math.abs(v), 0) / deltas.length;
+    }
+    typicalSwing = Math.round(typicalSwing * 10) / 10 || 0.1;
+
+    const today          = Math.abs(data.day_change_pct || 0);
+    const classification = today <= typicalSwing       ? "Routine day"
+        : today <= 2 * typicalSwing                    ? "Notable day"
+        :                                                "Big day";
+    const tone           = today <= typicalSwing       ? "positive"
+        : today <= 2 * typicalSwing                    ? "gold"
+        :                                                "negative";
+    const detail         = `within its usual \xB1${typicalSwing.toFixed(1)}% daily swing`;
+
+    return `
+        <div class="intel-label"><i class="bi bi-rulers"></i> Today in context</div>
+        <div class="market-pulse-strip">
+            <div class="market-pulse-card ${escapeHtml(tone)}" style="--pulse-index:0">
+                <i class="bi bi-bar-chart-line pulse-icon" aria-hidden="true"></i>
+                <span class="pulse-copy">
+                    <span class="pulse-label">Daily range</span>
+                    <strong>${escapeHtml(classification)}</strong>
+                    <span class="pulse-detail">${escapeHtml(detail)}</span>
+                </span>
+            </div>
+        </div>
+        <div class="verdict-sparkline-wrap why-it-moved-sparkline-wrap">
+            <canvas class="move-context-sparkline" width="280" height="56"></canvas>
+        </div>`;
+}
+
+function _buildTrendContextBlock(timing) {
+    if (timing.available === false) return "";
+    if (timing.vs50d_pct == null && timing.vs200d_pct == null && timing.momentum_state == null) return "";
+
+    const momentumMap = {
+        trend_intact:  "Still on track",
+        stabilizing:   "Finding its footing",
+        rolling_over:  "Trend fading",
+        weakening:     "Below key averages",
+        neutral:       "No clear trend",
+    };
+
+    const rows = [];
+    if (timing.vs50d_pct != null && Number.isFinite(Number(timing.vs50d_pct))) {
+        rows.push(`<div class="intel-spec-row"><span>vs 50-day avg</span><strong>${escapeHtml(formatPct(Number(timing.vs50d_pct)))}</strong></div>`);
+    }
+    if (timing.vs200d_pct != null && Number.isFinite(Number(timing.vs200d_pct))) {
+        rows.push(`<div class="intel-spec-row"><span>vs 200-day avg</span><strong>${escapeHtml(formatPct(Number(timing.vs200d_pct)))}</strong></div>`);
+    }
+    if (timing.momentum_state) {
+        const mWord = momentumMap[timing.momentum_state] || timing.momentum_state;
+        rows.push(`<div class="intel-spec-row"><span>Momentum</span><strong>${escapeHtml(mWord)}</strong></div>`);
+    }
+    const dd = Number(timing.drawdown_from_52w_high_pct);
+    if (Number.isFinite(dd) && dd >= 3) {
+        rows.push(`<div class="intel-spec-row"><span>Off its 1-yr high</span><strong>-${Math.abs(dd).toFixed(1)}%</strong></div>`);
+    }
+    if (rows.length === 0) return "";
+
+    return `
+        <div class="intel-label"><i class="bi bi-compass"></i> Where today sits in the trend</div>
+        <div class="intel-spec-rows">${rows.join("")}</div>`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 function renderMoveExplainer(section, data, coverageData = null) {
     if (!data) { renderMoveExplainerFallback(section); return; }
 
+    const ticker = coverageData?.ticker || data.ticker || "";
     const drivers = data.drivers || [];
     const macro   = data.macro_context;
     const isPos      = (data.day_change_pct || 0) >= 0;
@@ -3993,6 +4158,14 @@ function renderMoveExplainer(section, data, coverageData = null) {
         coverageData?.holdings_estimated
     );
 
+    const verdict = cachedVerdicts[ticker] || {};
+    const timing  = verdict.timing || {};
+    const regime  = verdict.regime_context || verdict.regime || cachedMarketRegime || {};
+
+    const backdropHtml = _buildMarketBackdropBlock(regime, coverageData);
+    const contextHtml  = _buildTodayInContextBlock(timing, data);
+    const trendHtml    = _buildTrendContextBlock(timing);
+
     section.innerHTML = `
         <div class="intel-move">
             <div class="intel-label">
@@ -4011,9 +4184,14 @@ function renderMoveExplainer(section, data, coverageData = null) {
             ${keyDriversHtml}
             ${moveStatStripHtml}
             ${contributionHtml}
+            ${backdropHtml}
+            ${contextHtml}
+            ${trendHtml}
         </div>`;
-    const heroEl = section.querySelector('.move-hero-number');
+    const heroEl = section.querySelector(".move-hero-number");
     if (heroEl) animateMoveHeroNumber(heroEl, heroEl.textContent);
+    const ctxCanvas = section.querySelector("canvas.move-context-sparkline");
+    if (ctxCanvas && Array.isArray(timing.sparkline_30d)) _drawPctSparkline(ctxCanvas, timing.sparkline_30d);
 }
 
 // ── Holding Coverage ("What It Covers") ──────────────────────────────────────

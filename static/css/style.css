@@ -18348,3 +18348,10 @@ body > .correlation-cell-tip {
         width: 100%;
     }
 }
+
+/* Why It Moved enrichment — extra top spacing for the 30-day context sparkline */
+.why-it-moved-sparkline-wrap {
+    margin-top: 0.5rem;
+    margin-left: 0;
+    margin-right: 0;
+}
