@@ -872,6 +872,15 @@ const AnalyticsCharts = (() => {
         const canvas = $("correlation-chart");
         if (!canvas) return;
         _correlationEventsBound = true;
+        // Re-parent the fixed-position tooltip to <body>. Analytics cards keep a
+        // residual transform from the `cardIn` animation (fill-mode: both), and a
+        // transformed ancestor becomes the containing block for position:fixed —
+        // which would place the tooltip relative to the card instead of the
+        // viewport and push it off-screen. Anchoring it to <body> avoids that.
+        const tip = $("correlation-cell-tip");
+        if (tip && tip.parentElement !== document.body) {
+            document.body.appendChild(tip);
+        }
         canvas.addEventListener("mousemove", onCorrelationHover);
         canvas.addEventListener("mouseleave", onCorrelationLeave);
         bindCorrelationScroll();

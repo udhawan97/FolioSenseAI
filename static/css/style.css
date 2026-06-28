@@ -16843,7 +16843,8 @@ svg.signal-radar {
     background: color-mix(in srgb, var(--surface) 55%, transparent);
 }
 
-.correlation-cell-tip {
+.correlation-cell-tip,
+body > .correlation-cell-tip {
     position: fixed;
     z-index: 9999;
     pointer-events: none;
