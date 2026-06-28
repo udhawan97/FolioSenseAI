@@ -26,6 +26,14 @@ _HEARTBEAT_TTL = 120  # seconds — matches frontend poll interval
 _TOKEN_USAGE: dict[str, int] = {"total_in": 0, "total_out": 0}
 
 
+def reinitialize_client(new_key: str) -> None:
+    """Swap in a new API key at runtime without restarting the server."""
+    global client, _HEARTBEAT_CACHE  # pylint: disable=global-statement
+    settings.ANTHROPIC_API_KEY = new_key
+    client = anthropic.Anthropic(api_key=new_key)
+    _HEARTBEAT_CACHE = None  # force next poll to do a live check
+
+
 def _track_usage(model: str, usage) -> None:  # noqa: ARG001
     _TOKEN_USAGE["total_in"] += getattr(usage, "input_tokens", 0) or 0
     _TOKEN_USAGE["total_out"] += getattr(usage, "output_tokens", 0) or 0
@@ -570,15 +578,33 @@ _ACTION_PLAN_SYSTEM = (
     '"exit":[{"ticker","reason":≤16w}]'
     "}\n"
     '"priority_moves":[≤18w each, highest-impact-first, max 3].\n'
-    '"best_return_note":≤28w gap-to-optimal note.\n'
+    '"best_return_note": One crisp executive sentence ≤20w — '
+    "the single clearest gap or opportunity in plain English. "
+    "No internal labels: write 'large holds' not 'heavy_hold', "
+    "'oversized position' not 'large_trim', 'underweight' not 'small_add'.\n"
     "Rules: use ONLY supplied numbers; never invent prices or targets; "
-    "plain conversational English only — no snake_case, underscores, or ALL-CAPS "
-    "except for ticker symbols (e.g. write 'now' not 'NOW', 'large hold' not 'heavy_hold'); "
+    "plain English only — NEVER use snake_case or underscores in prose "
+    "(heavy_hold large_trim small_add uncertain_hold are FORBIDDEN); "
+    "no ALL-CAPS except ticker symbols; "
     "advisory voice only — consider/may want, no buy/sell orders; "
     "respect each holding's existing action as the prior — only escalate "
     "trim→exit when watchlist=true or clearly deteriorating; "
     "portfolio-level stance, not a wall of per-stock text. JSON only."
 )
+
+
+_INTERNAL_TERM_MAP = [
+    (re.compile(r"\bheavy[_\s]hold\b", re.IGNORECASE), "large hold"),
+    (re.compile(r"\blarge[_\s]trim\b", re.IGNORECASE), "oversized position"),
+    (re.compile(r"\bsmall[_\s]add\b", re.IGNORECASE), "underweight position"),
+    (re.compile(r"\buncertain[_\s]hold\b", re.IGNORECASE), "low-conviction hold"),
+]
+
+
+def _sanitize_plan_text(text: str) -> str:
+    for pattern, replacement in _INTERNAL_TERM_MAP:
+        text = pattern.sub(replacement, text)
+    return text
 
 
 def generate_action_plan(snapshot: dict) -> dict:
@@ -607,11 +633,11 @@ def generate_action_plan(snapshot: dict) -> dict:
     if not isinstance(data, dict):
         raise ValueError("Action plan response is not a JSON object")
 
-    headline = str(data.get("headline") or "").strip()
+    headline = _sanitize_plan_text(str(data.get("headline") or "").strip())
     if not headline:
         raise ValueError("Action plan response missing 'headline'")
 
-    thesis = str(data.get("thesis") or "").strip()
+    thesis = _sanitize_plan_text(str(data.get("thesis") or "").strip())
 
     raw_buckets = data.get("buckets") or {}
     if not isinstance(raw_buckets, dict):
@@ -627,7 +653,7 @@ def generate_action_plan(snapshot: dict) -> dict:
             ticker = str(item.get("ticker") or "").upper().strip()
             reason = str(item.get("reason") or "").strip()
             if ticker:
-                result.append({"ticker": ticker, "reason": reason})
+                result.append({"ticker": ticker, "reason": _sanitize_plan_text(reason)})
         return result
 
     buckets = {
@@ -639,11 +665,11 @@ def generate_action_plan(snapshot: dict) -> dict:
 
     raw_pm = data.get("priority_moves")
     priority_moves = (
-        [str(m).strip() for m in raw_pm[:3] if m]
+        [_sanitize_plan_text(str(m).strip()) for m in raw_pm[:3] if m]
         if isinstance(raw_pm, list) else []
     )
 
-    best_return_note = str(data.get("best_return_note") or "").strip()
+    best_return_note = _sanitize_plan_text(str(data.get("best_return_note") or "").strip())
 
     return {
         "headline": headline,

@@ -5,9 +5,12 @@ AI-powered summary endpoints using Claude, plus move-explanation endpoints.
 # pylint: disable=too-many-lines
 import json
 import logging
+import re
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -24,6 +27,7 @@ from app.services.ai_service import (
     generate_action_plan,
     generate_stock_summary,
     next_briefing_canned_quote,
+    reinitialize_client,
 )
 from app.services.move_explainer import (
     HoldingMoveSummary,
@@ -80,6 +84,10 @@ from app.services.verdict_calibration import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/ai", tags=["ai"])
+
+# Only accept the canonical Anthropic key format: sk-ant-<variant>-<chars>
+# This guards against prompt injection via the key field and nonsense values.
+_API_KEY_RE = re.compile(r"^sk-ant-[A-Za-z0-9_\-]{20,300}$")
 
 CACHE_TTL = timedelta(hours=24)
 PRICE_DRIFT_THRESHOLD = 0.08  # stock summaries only; verdicts key off action + market mood
@@ -403,6 +411,65 @@ def get_claude_heartbeat():
         "checked_at": datetime.now(timezone.utc).isoformat(),
         "model": MODEL,
     }
+
+
+class _ApiKeyBody(BaseModel):
+    api_key: str
+
+
+def _update_env_file(key: str, value: str) -> None:
+    """Write or overwrite a single KEY=value line in the local .env file."""
+    env_path = Path(".env")
+    if env_path.exists():
+        lines = env_path.read_text(encoding="utf-8").splitlines(keepends=True)
+    else:
+        lines = []
+
+    new_line = f"{key}={value}\n"
+    pattern = re.compile(rf"^\s*{re.escape(key)}\s*=")
+    replaced = False
+    for i, line in enumerate(lines):
+        if pattern.match(line):
+            lines[i] = new_line
+            replaced = True
+            break
+
+    if not replaced:
+        lines.append(new_line)
+
+    env_path.write_text("".join(lines), encoding="utf-8")
+
+
+@router.post("/configure-key")
+def configure_api_key(body: _ApiKeyBody):
+    """
+    Validate, persist, and hot-reload a new Anthropic API key.
+    The key is written to the local .env file only — never returned or logged.
+    """
+    raw = body.api_key.strip()
+
+    # Reject anything that doesn't look like a real Anthropic key
+    if not _API_KEY_RE.match(raw):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "That doesn't look like a valid Anthropic API key. "
+                "Keys start with sk-ant- and are fairly long. "
+                "Double-check you copied the whole thing."
+            ),
+        )
+
+    try:
+        _update_env_file("ANTHROPIC_API_KEY", raw)
+    except OSError as exc:
+        logger.error("Failed to write API key to .env: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Could not save key to disk.") from exc
+
+    # Swap the live client so AI endpoints work immediately (no restart needed)
+    reinitialize_client(raw)
+
+    logger.info("Anthropic API key updated via dashboard (key not logged)")
+    return {"success": True, "message": "API key saved and connected. AI features are now live."}
 
 
 @router.get("/summary/{ticker}")
@@ -1858,7 +1925,7 @@ async def get_analytics_insights(
 
 # ── Portfolio Action Plan endpoint ────────────────────────────────────────────
 
-_ACTION_PLAN_CACHE_TYPE = "action_plan"
+_ACTION_PLAN_CACHE_TYPE = "action_plan_v2"
 
 _GAP_TYPE_LABEL: dict[str, str] = {
     "heavy_hold":    "large position on hold",

@@ -20,7 +20,7 @@
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="/static/css/style.css?v=98" rel="stylesheet">
+    <link href="/static/css/style.css?v=99" rel="stylesheet">
 </head>
 <body>
 
@@ -47,6 +47,65 @@
                     <span class="brand-intro-kicker">FolioSenseAI</span>
                     <span class="brand-intro-title">Portfolio butler, at your service</span>
                     <span class="brand-intro-copy">FolioSense and Claude keep things quiet: clean signals, sharper context, and just enough mystery to make the risk model sit up straight. Now, let's keep those bags of money behaving like a portfolio.</span>
+                </div>
+
+                <!-- ── API Key dropdown — triggered from brand icon area ── -->
+                <button class="api-key-trigger" id="api-key-trigger" type="button"
+                        aria-expanded="false" aria-controls="api-key-panel"
+                        aria-label="Configure Anthropic API key" title="Add your Anthropic API key">
+                    <i class="bi bi-key" aria-hidden="true"></i>
+                </button>
+                <div class="api-key-panel" id="api-key-panel" role="dialog"
+                     aria-modal="false" aria-label="Connect Claude AI" aria-hidden="true">
+                    <div class="api-key-panel-header">
+                        <i class="bi bi-stars api-key-panel-icon" aria-hidden="true"></i>
+                        <div>
+                            <div class="api-key-panel-title">Connect Claude AI</div>
+                            <div class="api-key-panel-sub">Your key stays on this machine — it is never shared</div>
+                        </div>
+                        <button class="api-key-panel-close" id="api-key-panel-close" type="button"
+                                aria-label="Close API key panel">
+                            <i class="bi bi-x-lg" aria-hidden="true"></i>
+                        </button>
+                    </div>
+
+                    <div class="api-key-guide">
+                        <div class="api-key-guide-step">
+                            <span class="api-key-guide-num">1</span>
+                            <span>Go to <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer" class="api-key-guide-link">console.anthropic.com</a> and sign up for free — no credit card needed to start.</span>
+                        </div>
+                        <div class="api-key-guide-step">
+                            <span class="api-key-guide-num">2</span>
+                            <span>Click <strong>API Keys</strong> in the left sidebar, then <strong>Create Key</strong>. Give it any name you like (e.g. "FolioSense").</span>
+                        </div>
+                        <div class="api-key-guide-step">
+                            <span class="api-key-guide-num">3</span>
+                            <span>Copy the key — it looks like <code>sk-ant-api03-…</code> — and paste it below. Each AI action costs roughly $0.0002, less than a fraction of a cent.</span>
+                        </div>
+                    </div>
+
+                    <div class="api-key-field-wrap">
+                        <div class="api-key-input-row">
+                            <input class="api-key-input" id="api-key-input" type="password"
+                                   placeholder="sk-ant-api03-…"
+                                   autocomplete="off" autocorrect="off" autocapitalize="off"
+                                   spellcheck="false" aria-label="Anthropic API key"
+                                   aria-describedby="api-key-hint">
+                            <button class="api-key-reveal" id="api-key-reveal" type="button"
+                                    aria-label="Show key" aria-pressed="false">
+                                <i class="bi bi-eye" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                        <div class="api-key-hint" id="api-key-hint" aria-live="polite"></div>
+                    </div>
+
+                    <div class="api-key-panel-footer">
+                        <button class="api-key-save btn" id="api-key-save" type="button" disabled>
+                            <i class="bi bi-check2-circle" aria-hidden="true"></i>
+                            Save &amp; Connect
+                        </button>
+                        <div class="api-key-status" id="api-key-status" aria-live="polite" aria-atomic="true"></div>
+                    </div>
                 </div>
             </div>
             <div class="d-flex align-items-center gap-3">

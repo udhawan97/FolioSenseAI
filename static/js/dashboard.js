@@ -2054,16 +2054,22 @@ function renderSnapshotSectors(active) {
     strip.setAttribute("aria-label", `Portfolio sector exposure: ${aria}`);
     strip.innerHTML = sectors.map((s, index) => {
         const theme = snapshotSectorTheme(s.name);
-        const pct = Math.max(2.5, toNumber(s.weight_pct));
+        const pct = Math.max(1.5, toNumber(s.weight_pct));
         const rawPct = toNumber(s.weight_pct);
+        const showLabel = rawPct >= 8;
         return `<span class="snapshot-sector-seg"
             style="--snapshot-color:${theme.color};--snapshot-width:${pct}%;--snapshot-delay:${index * 35}ms"
-            title="${escapeHtml(s.name)} ${rawPct.toFixed(1)}%"></span>`;
+            title="${escapeHtml(s.name)} ${rawPct.toFixed(1)}%">${
+            showLabel ? `<span class="snapshot-seg-label" aria-hidden="true">${rawPct.toFixed(0)}%</span>` : ""
+        }</span>`;
     }).join("");
 
+    const maxPct = toNumber(sectors[0]?.weight_pct) || 100;
     list.innerHTML = sectors.map((s, index) => {
         const theme = snapshotSectorTheme(s.name);
-        const pct = toNumber(s.weight_pct).toFixed(1);
+        const rawPct = toNumber(s.weight_pct);
+        const pct = rawPct.toFixed(1);
+        const fill = Math.min(100, (rawPct / maxPct) * 100).toFixed(1);
         const isOther = !SNAPSHOT_SECTOR_THEMES.some(t => t.match.test(String(s.name || "").toLowerCase()));
         const tipTitle = `${s.name} · ${pct}%`;
         const tipHint = isOther
@@ -2075,11 +2081,15 @@ function renderSnapshotSectors(active) {
             data-tip-body="${escapeHtml(theme.blurb || "")}"
             data-tip-hint="${escapeHtml(tipHint)}"
             data-tip-icon="${escapeHtml(theme.icon)}">
-            <span class="snapshot-sector-dot"><i class="bi ${theme.icon}" aria-hidden="true"></i></span>
+            <span class="snapshot-sector-dot" aria-hidden="true"></span>
             <span class="snapshot-sector-name">${escapeHtml(s.name)}</span>
+            <div class="snapshot-sector-track" aria-hidden="true">
+                <div class="snapshot-sector-fill" style="--snapshot-fill:${fill}%"></div>
+            </div>
             <span class="snapshot-sector-pct">${pct}%</span>
         </div>`;
-    }).join("") + (top ? `<div class="snapshot-sector-note">
+    }).join("") + (top ? `<div class="snapshot-sector-note"
+        style="--snapshot-tilt-color:${snapshotSectorTheme(top.name).color}">
         <i class="bi bi-crosshair2" aria-hidden="true"></i>
         Biggest tilt&thinsp;·&thinsp;<strong>${escapeHtml(top.name)}</strong>
     </div>` : "");
@@ -8076,6 +8086,7 @@ async function loadAiCostStats() {
     const breakdownEl = document.getElementById("brand-cost-breakdown");
     const notifEl = document.getElementById("brand-cost-notif");
     const triggerEl = document.getElementById("brand-cost-trigger");
+    const predictedLabel = document.getElementById("brand-predicted-label");
     if (!valueEl || !metaEl) return;
 
     try {
@@ -8098,6 +8109,7 @@ async function loadAiCostStats() {
             if (breakdownEl) {
                 breakdownEl.textContent = `${localCachedCount.toLocaleString()} local cached notes · ${claudeCachedCount.toLocaleString()} Claude-backed · $0 new spend`;
             }
+            if (predictedLabel) predictedLabel.textContent = "—";
             _lastAiCostUsd = toNumber(data.estimated_cost_usd);
             return;
         }
@@ -8126,10 +8138,12 @@ async function loadAiCostStats() {
         if (triggerLabel) triggerLabel.textContent = displayCost;
         if (breakdownEl) {
             const localNote = localCachedCount ? ` · ${localCachedCount.toLocaleString()} local/free` : "";
-            const predictedNote = predictedCost > 0
-                ? ` · ~${formatUsdTiny(predictedCost)} / full scan (~${predictedTok.toLocaleString()} tok)`
-                : "";
-            breakdownEl.textContent = `${inTok.toLocaleString()} in · ${outTok.toLocaleString()} out · $${inRate}/$${outRate} per M${localNote}${predictedNote}`;
+            breakdownEl.textContent = `${inTok.toLocaleString()} in · ${outTok.toLocaleString()} out · $${inRate}/$${outRate} per M${localNote}`;
+        }
+        if (predictedLabel) {
+            predictedLabel.textContent = predictedCost > 0
+                ? `~${formatUsdTiny(predictedCost)} (~${predictedTok.toLocaleString()} tok)`
+                : "—";
         }
         const newCost = displayCostUsd;
         if (notifEl && _lastAiCostUsd !== null && newCost !== _lastAiCostUsd) {
@@ -9210,6 +9224,167 @@ function initPortfolioBriefing() {
     });
 }
 
+// ── API Key Panel ─────────────────────────────────────────────────────────────
+
+function initApiKeyPanel() {
+    const trigger  = document.getElementById("api-key-trigger");
+    const panel    = document.getElementById("api-key-panel");
+    const closeBtn = document.getElementById("api-key-panel-close");
+    const input    = document.getElementById("api-key-input");
+    const reveal   = document.getElementById("api-key-reveal");
+    const hint     = document.getElementById("api-key-hint");
+    const saveBtn  = document.getElementById("api-key-save");
+    const status   = document.getElementById("api-key-status");
+
+    if (!trigger || !panel) return;
+
+    // Only characters that can appear in a real sk-ant-… key
+    const KEY_SAFE_RE = /^[A-Za-z0-9_\-]*$/;
+    // Full format check (mirrors the server-side regex)
+    const KEY_FORMAT_RE = /^sk-ant-[A-Za-z0-9_\-]{20,300}$/;
+
+    function openPanel() {
+        panel.classList.add("is-open");
+        panel.setAttribute("aria-hidden", "false");
+        trigger.setAttribute("aria-expanded", "true");
+        input.focus();
+    }
+
+    function closePanel() {
+        panel.classList.remove("is-open");
+        panel.setAttribute("aria-hidden", "true");
+        trigger.setAttribute("aria-expanded", "false");
+    }
+
+    trigger.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (panel.classList.contains("is-open")) {
+            closePanel();
+        } else {
+            openPanel();
+        }
+    });
+
+    closeBtn.addEventListener("click", closePanel);
+
+    // Close when clicking outside
+    document.addEventListener("click", (e) => {
+        if (!panel.contains(e.target) && e.target !== trigger) {
+            closePanel();
+        }
+    });
+
+    // Esc closes
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && panel.classList.contains("is-open")) {
+            closePanel();
+            trigger.focus();
+        }
+    });
+
+    // Show/hide toggle
+    reveal.addEventListener("click", () => {
+        const showing = input.type === "text";
+        input.type = showing ? "password" : "text";
+        reveal.setAttribute("aria-pressed", String(!showing));
+        reveal.setAttribute("aria-label", showing ? "Show key" : "Hide key");
+        reveal.querySelector("i").className = showing ? "bi bi-eye" : "bi bi-eye-slash";
+    });
+
+    // Validate on every keystroke — strip paste garbage and give feedback
+    input.addEventListener("input", () => {
+        status.textContent = "";
+        status.className = "api-key-status";
+
+        const raw = input.value;
+
+        // Strip any characters that can never be part of a valid key
+        const safe = raw.split("").filter(c => KEY_SAFE_RE.test(c)).join("");
+        if (safe !== raw) {
+            input.value = safe;
+        }
+
+        if (!safe) {
+            hint.textContent = "";
+            hint.className = "api-key-hint";
+            saveBtn.disabled = true;
+            return;
+        }
+
+        if (!safe.startsWith("sk-ant-")) {
+            hint.textContent = "Keys must start with sk-ant-";
+            hint.className = "api-key-hint hint-err";
+            saveBtn.disabled = true;
+            return;
+        }
+
+        if (safe.length < 27) {
+            hint.textContent = "Keep pasting — the key isn't complete yet";
+            hint.className = "api-key-hint hint-warn";
+            saveBtn.disabled = true;
+            return;
+        }
+
+        if (!KEY_FORMAT_RE.test(safe)) {
+            hint.textContent = "Doesn't look right — double-check you copied the full key";
+            hint.className = "api-key-hint hint-err";
+            saveBtn.disabled = true;
+            return;
+        }
+
+        hint.textContent = "Key looks good — hit Save & Connect";
+        hint.className = "api-key-hint hint-ok";
+        saveBtn.disabled = false;
+    });
+
+    saveBtn.addEventListener("click", async () => {
+        const key = input.value.trim();
+        if (!KEY_FORMAT_RE.test(key)) return;
+
+        saveBtn.disabled = true;
+        saveBtn.classList.add("is-saving");
+        status.textContent = "Saving…";
+        status.className = "api-key-status";
+
+        try {
+            const res = await fetch("/api/ai/configure-key", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                // Only send the key — nothing else that could be misused
+                body: JSON.stringify({ api_key: key }),
+            });
+
+            const data = await res.json();
+
+            if (res.ok && data.success) {
+                status.textContent = "Connected! AI features are now live.";
+                status.className = "api-key-status status-ok";
+                hint.textContent = "";
+                hint.className = "api-key-hint";
+                input.value = "";
+                saveBtn.disabled = true;
+
+                // Trigger a fresh heartbeat so the HUD updates immediately
+                setTimeout(() => {
+                    closePanel();
+                    if (typeof loadClaudeHeartbeat === "function") loadClaudeHeartbeat();
+                }, 1400);
+            } else {
+                const msg = typeof data.detail === "string" ? data.detail : "Could not save key. Try again.";
+                status.textContent = msg;
+                status.className = "api-key-status status-err";
+                saveBtn.disabled = false;
+            }
+        } catch (err) {
+            status.textContent = "Network error — check the server is running.";
+            status.className = "api-key-status status-err";
+            saveBtn.disabled = false;
+        } finally {
+            saveBtn.classList.remove("is-saving");
+        }
+    });
+}
+
 async function initDashboard() {
     initThemeToggle();
     initTextSizeToggle();
@@ -9228,6 +9403,7 @@ async function initDashboard() {
 
     initBrandIntro();
     initBrandCostCallout();
+    initApiKeyPanel();
     initNavOverflow();
     initDashboardPet();
     initLocalIntelGuide();
