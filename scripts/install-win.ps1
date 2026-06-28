@@ -26,7 +26,10 @@ function Find-Python {
         winget install Python.Python.3.12 --accept-package-agreements --accept-source-agreements --silent
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
                     [System.Environment]::GetEnvironmentVariable("Path","User")
-        if (Get-Command python -ErrorAction SilentlyContinue) { return "python" }
+        if (Get-Command python -ErrorAction SilentlyContinue) {
+            $ok = & python -c "import sys; raise SystemExit(0 if sys.version_info>=(3,11) else 1)" 2>$null
+            if ($LASTEXITCODE -eq 0) { return "python" }
+        }
     }
     return $null
 }
@@ -65,16 +68,19 @@ if (Test-Path "$installDir\.env") {
 if (Test-Path $installDir) { Remove-Item $installDir -Recurse -Force }
 Move-Item "$tmp\$extractName" $installDir
 
-if (Test-Path "$tmp\db_backup") {
-    Copy-Item "$tmp\db_backup" "$installDir\database" -Recurse
-    Write-Host "  OK Portfolio data restored"
-}
 if (Test-Path "$tmp\env_backup") {
     Copy-Item "$tmp\env_backup" "$installDir\.env"
     Write-Host "  OK Settings restored"
 }
 
-Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+# Restore database before pip so data is safe even if dependency install fails.
+if (Test-Path "$tmp\db_backup") {
+    if (Test-Path "$installDir\database") { Remove-Item "$installDir\database" -Recurse -Force }
+    Copy-Item "$tmp\db_backup" "$installDir\database" -Recurse
+    Write-Host "  OK Portfolio data restored"
+} else {
+    New-Item -ItemType Directory -Force -Path "$installDir\database" | Out-Null
+}
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
 Write-Host "  Installing dependencies (one-time, ~60 s)..."
@@ -83,7 +89,8 @@ Set-Location $installDir
 $venvPy = "$installDir\venv\Scripts\python.exe"
 & $venvPy -m pip install --upgrade pip -q
 & $venvPy -m pip install -r requirements.txt -q
-New-Item -ItemType Directory -Force -Path "database" | Out-Null
+
+Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
 
 if (-not (Test-Path ".env")) {
     $secret = & $venvPy -c "import secrets; print(secrets.token_hex(32))"

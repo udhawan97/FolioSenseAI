@@ -58,8 +58,16 @@ mkdir -p "$HOME/Applications"
 rm -rf "$INSTALL_DIR"
 mv "$TMP/$EXTRACT_NAME" "$INSTALL_DIR"
 
-[[ -d "$TMP/db_backup" ]] && cp -r "$TMP/db_backup" "$INSTALL_DIR/database" && echo "  ✓ Portfolio data restored"
 [[ -f "$TMP/env_backup" ]] && cp "$TMP/env_backup" "$INSTALL_DIR/.env" && echo "  ✓ Settings restored"
+
+# Restore database before pip so data is safe even if dependency install fails.
+if [[ -d "$TMP/db_backup" ]]; then
+  rm -rf "$INSTALL_DIR/database"
+  cp -r "$TMP/db_backup" "$INSTALL_DIR/database"
+  echo "  ✓ Portfolio data restored"
+else
+  mkdir -p "$INSTALL_DIR/database"
+fi
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
 echo "  Installing dependencies (one-time, ~60 s)..."
@@ -68,7 +76,6 @@ cd "$INSTALL_DIR"
 source venv/bin/activate
 python -m pip install --upgrade pip -q
 python -m pip install -r requirements.txt -q
-mkdir -p database
 
 if [[ ! -f .env ]]; then
   SECRET="$(python -c 'import secrets; print(secrets.token_hex(32))')"
