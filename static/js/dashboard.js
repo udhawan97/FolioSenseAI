@@ -1195,13 +1195,12 @@ function renderPortfolioValueData(data) {
         renderHoldings();
         trendPromise
             .then((trendData) => {
-                latestTrendData = trendData || {};
+                Object.assign(latestTrendData, trendData || {});
                 renderHoldings();
                 scheduleAllocationFocusPanelRefresh();
                 repaintOpenVerdictSparklines();
             })
             .catch(() => {
-                latestTrendData = {};
                 scheduleAllocationFocusPanelRefresh();
             });
 
@@ -8324,6 +8323,21 @@ async function refreshHoldingsTable() {
             await loadHoldingIntelligence();
             renderHoldings();
             await window.AnalyticsCharts?.loadAiWidgetInsights?.(true);
+        }
+
+        // Re-fetch trend data for any tickers that still have no history (the
+        // initial batch fetch may have been rate-limited by yfinance and returned
+        // empty for some tickers; empty results are no longer cached, so this
+        // second attempt gets a fresh yfinance request for those tickers only).
+        const missingTickers = latestHoldings
+            .map(h => h.ticker)
+            .filter(t => (latestTrendData[t] || []).length < 2);
+        if (missingTickers.length) {
+            const retryData = await loadTrendData(missingTickers);
+            if (Object.keys(retryData).length) {
+                Object.assign(latestTrendData, retryData);
+                renderHoldings();
+            }
         }
     } catch (err) {
         console.warn("Holdings refresh failed:", err);

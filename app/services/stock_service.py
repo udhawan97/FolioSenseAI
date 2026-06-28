@@ -502,7 +502,8 @@ def get_historical_prices(ticker: str, period: str = "1mo") -> list[dict]:
                 "close": round(close, 2),
                 "volume": int(volume),
             })
-        _HISTORY_CACHE[cache_key] = (now + _HISTORY_TTL, results)
+        if results:
+            _HISTORY_CACHE[cache_key] = (now + _HISTORY_TTL, results)
         return results
     except Exception as exc:
         logger.error("Error fetching historical data; exception_type=%s", type(exc).__name__)
