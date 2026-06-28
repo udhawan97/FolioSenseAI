@@ -8,9 +8,11 @@
 
 > *v4.0 is the release where the dashboard stopped watching your book and started reading it. Now it tells you what to do with it — and what the market is saying about it while you decide.*
 
-Your portfolio now has an **Action Plan**. Claude reads the full book — signals, regime, concentration, earnings risk — and comes back with a prioritized Hold / Add / Trim / Exit breakdown, a thesis for each bucket, and the macro mood ring right on the card. No Claude key? The local fallback runs the same buckets deterministically, no API call, no wait. Either way, the plan is cached for 24 hours and invalidates itself when your portfolio's dominant action or concentration meaningfully shifts.
+Your portfolio now has an **Action Plan**. Claude reads the full book — signals, regime, concentration, earnings risk — and comes back with a prioritized Hold / Add / Trim / Exit breakdown, a thesis for each bucket, and the macro mood ring right there on the card. No Claude key? The local fallback runs the same bucket logic deterministically and generates plain-language headlines and per-bucket priority moves, no API call, no wait. Either way, the plan is cached for 24 hours and invalidates itself when your portfolio's dominant action or concentration meaningfully shifts — so rebalancing clears the stale take without you having to ask.
 
-Your portfolio also has a **News tab** now — a fourth zone alongside Overview, Holdings, and Analytics. It pulls live headlines for every active holding, dedupes and caches them, and groups them by ticker. In Claude mode it adds a portfolio-wide briefing and a set of cross-holding theme clusters, so you can see which macro story is quietly working three of your positions at once.
+Your portfolio also has a **News tab** now — a fourth zone alongside Overview, Holdings, and Analytics. It pulls live yfinance headlines for every active holding, dedupes, caches, and groups them by ticker. In Claude mode it adds a portfolio-wide briefing and a set of cross-holding theme clusters so you can see which macro story is quietly working three of your positions at once. Holdings with no news still appear; the feed never silently drops a position.
+
+The cockpit got a deeper pass too. The dark canvas is noticeably darker, panels lift off it cleanly, the gain/loss bar is taller, the P&L glow is more dramatic, the sector strip is glassier, and two cascading specificity bugs that were leaving icon pills cramped in the holdings table were finally rooted out and killed.
 
 v4.0 is the release where "what does this mean?" gets a partner: "what should I actually do about it?"
 
@@ -18,22 +20,34 @@ v4.0 is the release where "what does this mean?" gets a partner: "what should I 
 
 ## What's New
 
-### Portfolio Action Plan
+### Action Plan
 
-- **`/api/ai/action-plan`** — Claude reads the full portfolio signal snapshot and returns a prioritized bucket plan: Hold / Add / Trim / Exit. Each bucket carries a thesis, top moves, and supporting context. Falls back deterministically when Claude is unavailable or `force_local=true`.
+- **`/api/ai/action-plan`** — Claude reads the full portfolio signal snapshot and returns a prioritized bucket plan: Hold / Add / Trim / Exit. Each bucket carries a thesis, top moves, and supporting context. Cached 24 h in `AISummary` (ticker=`BOOK`, type=`action_plan`). Falls back deterministically when Claude is unavailable or `force_local=True`.
+- **Drift invalidation** — the cache key includes the portfolio's dominant-action distribution and concentration signature. Rebalancing or a meaningful shift in signals automatically invalidates the cached plan so a stale take never lingers after you act.
 - **Regime-aware context** — the plan surfaces the current market regime (risk-on / risk-off / neutral) alongside the thesis so bucket decisions have macro backdrop, not just holding-level math.
-- **24 h cache with drift invalidation** — cached in `AISummary` (ticker=`BOOK`, type=`action_plan`). Invalidates automatically when the portfolio's dominant action or concentration signature changes — stale plans don't linger after you rebalance.
-- **Hold / Add / Trim / Exit UI** — bucketed cards with regime chip, mode badge (Claude vs Local), and per-bucket thesis. Skeleton loading state and a refresh button for when you want a fresh read without waiting for the 24 h window.
+- **Local fallback with real language** — when Claude is not in the loop, the fallback now builds a plain-language headline from the dominant signal ("3 positions flagged for trim/exit — 4 anchors steady") and generates per-bucket priority moves with specific tickers and actionable copy.
+- **Action Plan UI** — four bucketed cards with colour-accented top borders, regime chip, Claude vs Local mode badge, per-bucket thesis, and a refresh button. Skeleton loading state holds layout during the fetch so the card does not pop.
 
-### News Tab
+### News
 
-- **`/api/news/feed`** — always available (no API key needed). Fetches and caches yfinance headlines for every active holding and watchlist ticker. Normalized, deduped, and sorted by recency. Holdings with no news still appear so the feed never silently drops a position.
-- **`/api/news/themes`** — Claude mode only. One Haiku call per unique headline signature: portfolio-wide briefing (second-person read of what today's news means for the book) plus cross-holding theme clusters showing which macro narrative is hitting multiple positions at once.
-- **`news_service.py`** — new service handling fetch, TTL caching (5 min market hours / 1 h closed), normalization, and concurrent multi-ticker fetching.
+- **`/api/news/feed`** — always available (no Claude key needed). Fetches and caches yfinance headlines for all active holdings and watchlist tickers concurrently. Normalized, deduped, and sorted by recency. Holdings with no news are still included so the feed never silently omits a position.
+- **`/api/news/themes`** — Claude mode only, gated on heartbeat. One Haiku call per unique headline signature: a second-person portfolio briefing ("here is what today's news means for your book") plus cross-holding theme clusters grouping the macro narrative that is hitting multiple positions at once.
+- **`news_service.py`** — new service covering fetch, in-memory TTL caching (5 min during market hours, 1 h when closed), normalization, dedup, and concurrent multi-ticker fetching.
 
-### Test Coverage
+### UI Polish
 
-- **356 tests** — up from 297 in v3.1. Additions cover the full action-plan pipeline (Claude path, local fallback, cache hit/miss, drift invalidation, regime injection, bucket structure) and news service (fetch, dedup, theme snapshot building, empty-portfolio edge cases).
+- **Darker canvas** — `--bg-base` deepened (`#0a0a0f` → `#050508`), surface opacities pulled back, nav surface opacity raised (`0.62` → `0.88`). Every panel now has more room to lift off the background.
+- **Snapshot panel shell** — panels carry their own opaque dark surface, a stronger top-edge inset highlight, and a real drop shadow.
+- **Sector strip** — taller (4.5 rem → 6 rem), border-radius bumped, segment sheen dialed back (0.28 → 0.18) for a glassier feel.
+- **Gain/loss bar** — taller (0.7 rem → 1 rem); mover tracks taller (0.48 rem → 0.65 rem) with a higher-contrast track background.
+- **P&L glow** — text-shadow radius widened (22 px → 32 px) for a more dramatic green/red bleed on positive and negative days.
+- **Briefing card** — ambient periwinkle crown stronger (9% → 14%), header padding bumped, separator upgraded from `--hairline` to `--hairline-hover`.
+- **Holdings mode box icon fix** — a specificity collision between the GROUP rule (0,2,0) and the per-element rule (0,2,0) left `min-height` losing unpredictably, clipping icons at the top of manage-modal pill buttons. Parent-scoped selectors at (0,3,0) now definitively own `min-height`, `justify-content`, and `overflow` for both modal segments and table-row strips.
+
+### Bug Fixes
+
+- **Mode persistence** — `initDashboardPet()` was hardcoding `_forcedLocalMode = true` on every page load, silently overwriting the preference saved by `enableClaudeAiAndReload()`. The fix reads the `PET_MODE_KEY` value from `localStorage` and only defaults to local (`"1"`) when no preference is stored. Switching to Claude AI now sticks across reloads.
+- Two new tests in `tests/test_intelligence_engine_ui.py`: one asserting the init function reads localStorage and `enableClaudeAiAndReload()` writes `"0"`, one asserting the nav Engine toggle and the banner "Enable Claude AI" button both exist with correct `aria-pressed` and JS wiring.
 
 ---
 
@@ -43,7 +57,7 @@ v4.0 is the release where "what does this mean?" gets a partner: "what should I 
 - New router: `app/routers/news.py` — mounted at `/api/news`
 - New service: `app/services/news_service.py`
 - New AI service function: `generate_news_themes()` in `ai_service.py`
-- New AI router function: `generate_action_plan()` — `_collect_portfolio_signals_core()` shared between `/investment-signals/all` and `/action-plan` to avoid duplicate signal computation
+- `_collect_portfolio_signals_core()` extracted and shared between `/investment-signals/all` and `/action-plan` to avoid computing the signal pipeline twice
 - Static cache keys: `style.css?v=97`, `dashboard.js?v=90`, `analytics-charts.js?v=13`
 - No database schema changes — no migration required.
 - No `.env` changes required.
