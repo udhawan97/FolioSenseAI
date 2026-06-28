@@ -221,6 +221,10 @@ function refreshThemeAwareVisuals() {
     updateChartChrome(projectionChart);
     window.AnalyticsCharts?.onThemeChange?.();
     if (latestHoldings.length) renderHoldings();
+    requestAnimationFrame(() => {
+        syncDztIndicator();
+        syncHvtIndicator();
+    });
 }
 
 function updateChartChrome(chart) {
