@@ -10139,7 +10139,8 @@ function renderAddHoldingError(err, fallback = "Error adding holding") {
         </span>`;
 
     msg.querySelectorAll(".ticker-suggestion-chip").forEach(button => {
-        button.addEventListener("click", () => {
+        button.addEventListener("click", (e) => {
+            e.stopPropagation();
             const tickerInput = document.getElementById("new-ticker");
             if (tickerInput) {
                 tickerInput.value = button.dataset.ticker || "";
