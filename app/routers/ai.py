@@ -15,10 +15,12 @@ from app.database import get_db
 from app.models import AISummary, Holding, VerdictSnapshot
 from app.services.ai_service import (
     MODEL,
+    ACTION_PLAN_MODEL,
     get_cached_claude_heartbeat,
     generate_etf_profile_seed,
     generate_portfolio_briefing,
     generate_analytics_insights,
+    generate_action_plan,
     generate_stock_summary,
     next_briefing_canned_quote,
 )
@@ -935,16 +937,18 @@ async def get_investment_signal_single(ticker: str, db: Session = Depends(get_db
     return sig_dict
 
 
-@router.get("/investment-signals/all")
-async def get_all_investment_signals(  # pylint: disable=too-many-statements,too-many-branches
-    db: Session = Depends(get_db),
-    force_local: bool = False,
-):
+def _collect_portfolio_signals_core(db: Session) -> dict:  # pylint: disable=too-many-locals
     """
-    Return investment signals for all active portfolio holdings.
-    Deterministic signals are computed fresh; quips are cached 24h in AISummary
-    (summary_type='verdict') with price-drift invalidation.
-    Pass force_local=true to skip Claude quip generation and use deterministic fallbacks.
+    Shared signal pipeline: active tickers → per-ticker deterministic signal dicts.
+
+    Runs the full verdict pipeline (analyst rec, timing, peer, events, exposure,
+    investment-signal build → signal_to_dict) for every active holding.
+    Returns raw sig_dicts plus the shared portfolio metadata so that both
+    ``get_all_investment_signals`` and ``get_action_plan`` can consume it without
+    duplicating the loop.
+
+    Error tickers carry ``{"_signal_error": True, **_NEEDS_DATA_SIGNAL}`` so the
+    callers can distinguish build failures from legitimate needs-data verdicts.
     """
     active_tickers = _active_portfolio_tickers(db)
     holding_meta = _holding_meta(db)
@@ -959,9 +963,6 @@ async def get_all_investment_signals(  # pylint: disable=too-many-statements,too
     regime = get_market_regime()
 
     signals: dict[str, dict] = {}
-    missing_quip_tickers: list[str] = []
-    scan_snapshot_changed = False
-
     for ticker in active_tickers:
         try:
             meta = holding_meta.get(ticker, {})
@@ -1001,18 +1002,79 @@ async def get_all_investment_signals(  # pylint: disable=too-many-statements,too
                 event_context=event_ctx,
                 user_context=_user_context(meta, quote_data, db, ticker),
             )
-            sig_dict = signal_to_dict(sig)
-            footnote = calibration_footnote(
-                db, action=sig.action, confidence=sig.confidence,
+            signals[ticker] = signal_to_dict(sig)
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.error(
+                "Signal build failed for %s; exception_type=%s",
+                ticker, type(exc).__name__,
             )
+            signals[ticker] = {**_NEEDS_DATA_SIGNAL, "ticker": ticker, "_signal_error": True}
+
+    return {
+        "active_tickers": active_tickers,
+        "signals": signals,
+        "alloc_map": alloc_map,
+        "holding_meta": holding_meta,
+        "portfolio_exposure": portfolio_exposure,
+        "regime": regime,
+        "quotes": quotes,
+        "history_map": history_map,
+    }
+
+
+@router.get("/investment-signals/all")
+async def get_all_investment_signals(  # pylint: disable=too-many-statements,too-many-branches
+    db: Session = Depends(get_db),
+    force_local: bool = False,
+):
+    """
+    Return investment signals for all active portfolio holdings.
+    Deterministic signals are computed fresh; quips are cached 24h in AISummary
+    (summary_type='verdict') with price-drift invalidation.
+    Pass force_local=true to skip Claude quip generation and use deterministic fallbacks.
+    """
+    core = _collect_portfolio_signals_core(db)
+    active_tickers = core["active_tickers"]
+    holding_meta = core["holding_meta"]
+    portfolio_exposure = core["portfolio_exposure"]
+    regime = core["regime"]
+    quotes = core["quotes"]
+    alloc_map = core["alloc_map"]
+
+    signals: dict[str, dict] = {}
+    missing_quip_tickers: list[str] = []
+    scan_snapshot_changed = False
+
+    for ticker in active_tickers:
+        try:
+            raw = core["signals"].get(ticker) or {}
+            sig_dict = dict(raw)
+            # Tickers that failed signal-building in the core helper get an immediate
+            # fallback quip — matching original behaviour (exceptions skip AI pipeline).
+            if sig_dict.pop("_signal_error", False):
+                sig_dict["quip"] = fallback_quip("needs-data")
+                sig_dict["ai_enhanced"] = False
+                sig_dict["disclaimer"] = _VERDICT_DISCLAIMER
+                sig_dict["brand"] = _brand_payload()
+                sig_dict.setdefault("generated_at", "")
+                signals[ticker] = sig_dict
+                continue
+
+            meta = holding_meta.get(ticker, {})
+            hold_class = meta.get("hold_class", "auto")
+            action = sig_dict.get("action", "needs-data")
+            confidence = sig_dict.get("confidence", 0)
+            quote_data = quotes.get(ticker) or {}
+
+            footnote = calibration_footnote(db, action=action, confidence=confidence)
             if footnote:
                 sig_dict["calibration_footnote"] = footnote
             log_verdict_snapshot(
                 db,
                 ticker=ticker,
-                action=sig.action,
-                confidence=sig.confidence,
-                local_score=sig.confidence,
+                action=action,
+                confidence=confidence,
+                local_score=confidence,
                 ai_score=None,
                 price_at_scan=quote_data.get("current_price"),
                 hold_class=hold_class,
@@ -1768,3 +1830,298 @@ async def get_analytics_insights(
     except Exception as exc:
         logger.warning("AI analytics insights failed; exception_type=%s", type(exc).__name__)
         return build_analytics_fallback(snapshot)
+
+
+# ── Portfolio Action Plan endpoint ────────────────────────────────────────────
+
+_ACTION_PLAN_CACHE_TYPE = "action_plan"
+
+
+def _action_plan_snapshot(db: Session, core: dict) -> dict:  # pylint: disable=too-many-locals
+    """
+    Build the compact snapshot sent to Claude for the action plan.
+    Fuses per-ticker signal data, portfolio exposure, risk metrics, regime,
+    and performance vs benchmark into a token-lean JSON.
+    """
+    from app.routers.portfolio import _compute_portfolio  # lazy — avoids circular import
+    from app.services.portfolio_analytics import (
+        compute_portfolio_beta,
+        compute_rolling_volatility,
+        compute_sector_tilt,
+        compute_conviction_gaps,
+    )
+
+    signals = core["signals"]
+    alloc_map = core["alloc_map"]
+    holding_meta = core["holding_meta"]
+    portfolio_exposure = core["portfolio_exposure"]
+    regime = core["regime"]
+    active_tickers = core["active_tickers"]
+
+    # Portfolio value + per-holding total_return_pct from the portfolio compute layer
+    try:
+        holdings_rows, total_value, _, _ = _compute_portfolio(1, db)
+    except Exception as exc:
+        logger.warning(
+            "Action plan _compute_portfolio failed; exception_type=%s",
+            type(exc).__name__,
+        )
+        holdings_rows, total_value = [], 0.0
+
+    return_map = {
+        h["ticker"]: float(h.get("total_return_pct") or 0)
+        for h in holdings_rows
+    }
+
+    # Per-holding compact entries
+    holdings_data = []
+    for ticker in active_tickers:
+        sig = {k: v for k, v in (signals.get(ticker) or {}).items()
+               if not k.startswith("_")}
+        meta = holding_meta.get(ticker, {})
+        entry: dict = {
+            "t": ticker,
+            "action": sig.get("action", "needs-data"),
+            "conf": sig.get("confidence", 0),
+            "alloc_pct": alloc_map.get(ticker, 0),
+            "ret_pct": return_map.get(ticker, 0),
+            "reason": (sig.get("reasons") or [""])[0][:80],
+            "risk": (sig.get("risks") or [""])[0][:60],
+            "flip": sig.get("flip_triggers"),
+            "hold_class": sig.get("hold_class", "auto"),
+            "watchlist": meta.get("is_watchlist", False),
+            "timing": timing_bucket(sig.get("timing")),
+            "events": bool(sig.get("events")),
+        }
+        peer = sig.get("peer_relative") or {}
+        if peer:
+            entry["peer"] = (peer.get("summary") or peer.get("zone") or "")[:60]
+        holdings_data.append(entry)
+
+    # Risk metrics
+    beta_data: dict = {}
+    vol_data: dict = {}
+    sector_tilt_data: dict = {}
+    conviction_data: dict = {}
+    try:
+        if holdings_rows:
+            beta_data = compute_portfolio_beta(holdings_rows) or {}
+            vol_data = compute_rolling_volatility(holdings_rows) or {}
+            sector_tilt_data = compute_sector_tilt(holdings_rows) or {}
+            conviction_data = compute_conviction_gaps(holdings_rows, signals) or {}
+    except Exception as exc:
+        logger.debug(
+            "Action plan risk metrics failed; exception_type=%s",
+            type(exc).__name__,
+        )
+
+    # Exposure summary — top 4 sectors + top 3 countries
+    sectors = (portfolio_exposure.get("sectors") or [])[:4]
+    countries = (portfolio_exposure.get("countries") or [])[:3]
+    hhi = float(portfolio_exposure.get("concentration_hhi") or 0)
+
+    # Conviction gaps summary
+    gap_items = (conviction_data.get("gaps") or [])[:3]
+
+    snapshot: dict = {
+        "as_of": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "total_value": round(total_value, 0),
+        "regime": {
+            "label": regime.get("label", ""),
+            "mood": regime.get("mood", ""),
+        },
+        "concentration_hhi": round(hhi, 3),
+        "hhi_band": (
+            "high" if hhi >= 0.25 else "medium" if hhi >= 0.10 else "low"
+        ),
+        "holdings": holdings_data,
+        "exposure": {
+            "top_sectors": [
+                {
+                    "s": s.get("sector") or s.get("name", ""),
+                    "w": round(float(s.get("weight_pct") or 0), 1),
+                }
+                for s in sectors
+            ],
+            "top_countries": [
+                {
+                    "c": c.get("country") or c.get("name", ""),
+                    "w": round(float(c.get("weight_pct") or 0), 1),
+                }
+                for c in countries
+            ],
+        },
+        "risk": {
+            "beta": beta_data.get("beta"),
+            "beta_label": beta_data.get("label"),
+            "vol_pct": vol_data.get("current_vol_pct"),
+        },
+        "tilt": [
+            {"s": t.get("sector", ""), "vs_spy": round(float(t.get("overweight_pct") or 0), 1)}
+            for t in (sector_tilt_data.get("tilt") or [])[:3]
+        ],
+        "conviction_gaps": [
+            {"t": g["ticker"], "type": g["gap_type"]}
+            for g in gap_items
+        ],
+    }
+    return snapshot
+
+
+def _action_plan_fallback(core: dict) -> dict:
+    """
+    Deterministic fallback when Claude is unavailable.
+    Buckets holdings purely from their existing verdict actions.
+    """
+    signals = core["signals"]
+    alloc_map = core["alloc_map"]
+    holding_meta = core["holding_meta"]
+    active_tickers = core["active_tickers"]
+    regime = core["regime"]
+
+    buckets: dict[str, list[dict]] = {"hold": [], "add": [], "trim": [], "exit": []}
+    for ticker in active_tickers:
+        sig = signals.get(ticker) or {}
+        action = str(sig.get("action") or "hold").lower()
+        meta = holding_meta.get(ticker, {})
+        reason = (sig.get("reasons") or [""])[0][:80]
+
+        # Map verdict actions: watchlist "trim" or needs-data → exit bucket
+        if meta.get("is_watchlist") and action in ("trim", "needs-data"):
+            bucket_key = "exit"
+        elif action in ("hold", "add", "trim"):
+            bucket_key = action
+        else:
+            bucket_key = "hold"
+
+        buckets[bucket_key].append({"ticker": ticker, "reason": reason})
+
+    dominant = max(buckets, key=lambda k: len(buckets[k]))
+    mood = regime.get("mood", "neutral")
+    thesis = (
+        f"Local signals read: {len(buckets['hold'])} hold, "
+        f"{len(buckets['add'])} add, {len(buckets['trim'])} trim, "
+        f"{len(buckets['exit'])} exit. Market mood: {mood}. "
+        "Sorted by existing verdict — Claude unavailable for deeper read."
+    )
+
+    alloc_sorted = sorted(
+        [(t, alloc_map.get(t, 0)) for t in active_tickers],
+        key=lambda x: x[1],
+        reverse=True,
+    )
+    largest_ticker = alloc_sorted[0][0] if alloc_sorted else ""
+    largest_alloc = alloc_sorted[0][1] if alloc_sorted else 0
+
+    priority: list[str] = []
+    if buckets["add"]:
+        first_add = buckets["add"][0]["ticker"]
+        priority.append(f"Consider sizing into {first_add} — local signal says add.")
+    if buckets["trim"]:
+        first_trim = buckets["trim"][0]["ticker"]
+        priority.append(f"Lighten {first_trim} — local signal says trim.")
+    if buckets["exit"]:
+        first_exit = buckets["exit"][0]["ticker"]
+        priority.append(f"Review {first_exit} for exit — watchlist or deteriorating signal.")
+
+    return {
+        "source": "local-fallback",
+        "headline": f"Book reads {dominant} — Claude offline for deeper view.",
+        "thesis": thesis[:280],
+        "buckets": buckets,
+        "priority_moves": priority[:3],
+        "best_return_note": (
+            f"{largest_ticker} at {largest_alloc:.0f}% is the largest lever; "
+            "right-sizing concentration could close the gap to optimal mix."
+            if largest_ticker else
+            "Diversify concentration to close the gap to the optimal mix."
+        ),
+        "disclaimer": _VERDICT_DISCLAIMER,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.get("/action-plan")
+async def get_action_plan(
+    force_refresh: bool = False,
+    db: Session = Depends(get_db),
+):
+    """
+    Portfolio Action Plan — Claude reads the full book and returns a prioritised
+    bucket plan (Hold / Add / Trim / Exit) with a thesis and top moves.
+
+    Cached 24 h in AISummary (ticker=BOOK, summary_type='action_plan').
+    Invalidated on portfolio-state drift (dominant action + concentration shift).
+    Falls back deterministically when Claude is unavailable.
+    """
+    # Build portfolio state signature for cache invalidation
+    core = _collect_portfolio_signals_core(db)
+    alloc_map = core["alloc_map"]
+    raw_signals = core["signals"]
+    # Strip internal flags before portfolio_state_signature
+    clean_signals = {
+        t: {k: v for k, v in sig.items() if not k.startswith("_")}
+        for t, sig in raw_signals.items()
+    }
+    port_state = _portfolio_state_signature(clean_signals, alloc_map)
+    cache_summary_type = f"{_ACTION_PLAN_CACHE_TYPE}:{port_state['summary_type']}"
+
+    if not force_refresh:
+        cached = (
+            db.query(AISummary)
+            .filter(
+                AISummary.ticker == _PORTFOLIO_CACHE_TICKER,
+                AISummary.summary_type == cache_summary_type,
+            )
+            .order_by(AISummary.generated_at.desc())
+            .first()
+        )
+        if cached and _cache_is_fresh(cached):
+            try:
+                stored = json.loads(getattr(cached, "summary_text", None) or "{}")
+                stored["from_cache"] = True
+                return stored
+            except Exception:
+                pass  # cache corrupted — regenerate below
+
+    # Build compact snapshot for Claude
+    try:
+        snapshot = _action_plan_snapshot(db, core)
+    except Exception as exc:
+        logger.warning(
+            "Action plan snapshot failed; exception_type=%s",
+            type(exc).__name__,
+        )
+        return _action_plan_fallback(core)
+
+    # Call Claude — fall back deterministically on any failure
+    try:
+        parsed = generate_action_plan(snapshot)
+        payload: dict = {
+            "source": "claude",
+            **parsed,
+            "disclaimer": _VERDICT_DISCLAIMER,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        try:
+            db.add(AISummary(
+                ticker=_PORTFOLIO_CACHE_TICKER,
+                summary_type=cache_summary_type,
+                summary_text=json.dumps(payload),
+                price_when_generated=None,
+                model_used=ACTION_PLAN_MODEL,
+            ))
+            db.commit()
+        except Exception as exc:
+            logger.debug(
+                "Failed to cache action plan; exception_type=%s",
+                type(exc).__name__,
+            )
+        return payload
+
+    except Exception as exc:
+        logger.warning(
+            "Action plan Claude call failed; exception_type=%s",
+            type(exc).__name__,
+        )
+        return _action_plan_fallback(core)

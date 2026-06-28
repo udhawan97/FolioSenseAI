@@ -22,7 +22,7 @@
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="/static/css/style.css?v=97" rel="stylesheet">
+    <link href="/static/css/style.css?v=98" rel="stylesheet">
 </head>
 <body>
 
@@ -594,6 +594,42 @@
         <!-- ═══════════════ ANALYTICS ═══════════════ -->
         <section class="dashboard-zone-pane" data-zone-pane="analytics"
                  role="tabpanel" aria-label="Analytics">
+
+        <!-- ── Portfolio Action Plan (Claude Intelligence only) ────────── -->
+        <div id="action-plan-card" data-engine-claude-only
+             class="card bg-dark border-secondary action-plan-card mb-3">
+            <div class="card-header d-flex align-items-center gap-2">
+                <i class="bi bi-stars action-plan-card-icon" aria-hidden="true"></i>
+                <span class="action-plan-card-title">Portfolio Action Plan</span>
+                <button class="tip-trigger ms-1" onclick="event.stopPropagation()"
+                    data-tip-title="Portfolio Action Plan"
+                    data-tip-body="Claude reads your full book and buckets every holding into Hold, Add, Trim, or Exit — then surfaces the highest-impact moves to push toward your best achievable return. Not financial advice."
+                    data-tip-hint="Only available in Claude Intelligence mode"
+                    data-tip-icon="bi-stars"
+                    data-tip-variant="ai">
+                    <i class="bi bi-info-circle"></i>
+                </button>
+                <button class="action-plan-refresh-btn ms-1" id="action-plan-refresh-btn"
+                        type="button" title="Refresh action plan"
+                        aria-label="Refresh action plan"
+                        onclick="loadActionPlan(true)">
+                    <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+                </button>
+            </div>
+            <div class="card-body action-plan-body" id="action-plan-body">
+                <!-- skeleton shown while loading -->
+                <div class="action-plan-skeleton" id="action-plan-skeleton" aria-hidden="true">
+                    <div class="shimmer-line" style="width:72%;margin-bottom:.5rem"></div>
+                    <div class="shimmer-line" style="width:88%;margin-bottom:1.1rem"></div>
+                    <div class="shimmer-line" style="width:40%;height:1.8rem;border-radius:8px;margin-bottom:.5rem;display:inline-block;margin-right:.5rem"></div>
+                    <div class="shimmer-line" style="width:35%;height:1.8rem;border-radius:8px;margin-bottom:.5rem;display:inline-block;margin-right:.5rem"></div>
+                    <div class="shimmer-line" style="width:32%;height:1.8rem;border-radius:8px;margin-bottom:.5rem;display:inline-block"></div>
+                    <div class="shimmer-line" style="width:60%;margin-top:.8rem"></div>
+                </div>
+                <!-- content injected by loadActionPlan() -->
+                <div class="action-plan-content" id="action-plan-content" aria-live="polite"></div>
+            </div>
+        </div>
 
         <nav class="analytics-zone-tabs mb-3" id="analytics-zone-tabs" role="tablist"
              aria-label="Analytics sections" data-active-pane="performance">
@@ -1707,36 +1743,74 @@
             </div>
             <div class="card-body p-0">
                 <canvas id="holdings-bg-canvas" aria-hidden="true"></canvas>
-                <div class="ai-scan-panel" id="ai-scan-panel" aria-hidden="true">
-                    <!-- Background layers -->
+                <div class="ai-scan-panel" id="ai-scan-panel" aria-hidden="true" data-engine="ai">
+                    <!-- Legacy stubs kept for backward-compat — hidden via CSS -->
                     <div class="ai-scan-bg-grid" aria-hidden="true"></div>
                     <div class="ai-scan-scanlines" aria-hidden="true"></div>
                     <div class="ai-scan-beam" aria-hidden="true"></div>
                     <div class="ai-scan-radar" aria-hidden="true"></div>
-                    <!-- HUD corner brackets -->
                     <div class="ai-scan-corners" aria-hidden="true">
                         <span class="ai-scan-corner ai-scan-corner-tl"></span>
                         <span class="ai-scan-corner ai-scan-corner-tr"></span>
                         <span class="ai-scan-corner ai-scan-corner-bl"></span>
                         <span class="ai-scan-corner ai-scan-corner-br"></span>
                     </div>
-                    <!-- Header -->
-                    <div class="ai-scan-head">
-                        <div class="ai-scan-orbit" aria-hidden="true">
-                            <span class="ai-scan-ring ai-scan-ring-one"></span>
-                            <span class="ai-scan-ring ai-scan-ring-two"></span>
-                            <span class="ai-scan-ring ai-scan-ring-three"></span>
-                            <img src="/static/img/brand/folio-orbit-icon.svg" alt="">
-                        </div>
-                        <div class="ai-scan-copy">
-                            <div class="ai-scan-title" id="ai-scan-title">AI checking holdings</div>
-                            <div class="ai-scan-subtitle ai-scan-subtitle--highlight" id="ai-scan-subtitle">Scoring context across your portfolio signal...</div>
-                        </div>
-                    </div>
-                    <!-- Research rows -->
-                    <div class="ai-scan-tickers" id="ai-scan-tickers"></div>
-                    <!-- Sweep wave -->
                     <div class="ai-scan-wave" aria-hidden="true"></div>
+
+                    <!-- ── Two-column layout: intelligence core · data ledger ── -->
+                    <div class="ai-scan-layout">
+
+                        <!-- ── LEFT: intelligence core ── -->
+                        <div class="ai-scan-core-module" aria-hidden="true">
+                            <!-- Ambient glow -->
+                            <div class="ai-scan-core-glow"></div>
+
+                            <!-- Orbit + rings -->
+                            <div class="ai-scan-orbit">
+                                <span class="ai-scan-ring ai-scan-ring-one"></span>
+                                <span class="ai-scan-ring ai-scan-ring-two"></span>
+                                <span class="ai-scan-ring ai-scan-ring-three"></span>
+                                <!-- Stepped tick marks (local mode) -->
+                                <svg class="ai-scan-ticks" viewBox="0 0 100 100" fill="none" aria-hidden="true">
+                                    <circle cx="50" cy="50" r="44" stroke="currentColor" stroke-width="1.5"
+                                            stroke-dasharray="2 21" stroke-linecap="round"
+                                            transform="rotate(-90 50 50)"/>
+                                </svg>
+                                <!-- Core inner: brand icon + mode badge -->
+                                <div class="ai-scan-core-inner">
+                                    <img src="/static/img/brand/folio-orbit-icon.svg" alt="" class="ai-scan-orbit-img">
+                                    <span class="ai-scan-mode-badge">
+                                        <i class="bi bi-cpu-fill ai-scan-badge-local"></i>
+                                        <i class="bi bi-stars ai-scan-badge-ai"></i>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Neural filaments (AI) / circuit traces (local) -->
+                            <svg class="ai-scan-filaments" viewBox="0 0 160 160" fill="none" aria-hidden="true" overflow="visible">
+                                <path class="ai-scan-filament ai-scan-filament-1" d="M80 80 Q100 55 150 38"/>
+                                <path class="ai-scan-filament ai-scan-filament-2" d="M80 80 Q100 105 150 122"/>
+                                <path class="ai-scan-filament ai-scan-filament-3" d="M80 80 Q60 52 10 38"/>
+                                <path class="ai-scan-filament ai-scan-filament-4" d="M80 80 Q60 108 10 124"/>
+                            </svg>
+
+                            <!-- Extraction chips float up from here -->
+                            <div class="ai-scan-chips" id="ai-scan-chips-emitter" aria-live="polite" aria-atomic="false"></div>
+                        </div>
+
+                        <!-- ── RIGHT: header copy + ticker rows ── -->
+                        <div class="ai-scan-content">
+                            <div class="ai-scan-head">
+                                <div class="ai-scan-copy">
+                                    <div class="ai-scan-title" id="ai-scan-title">AI checking holdings</div>
+                                    <div class="ai-scan-subtitle ai-scan-subtitle--highlight" id="ai-scan-subtitle">Scoring context across your portfolio signal…</div>
+                                </div>
+                            </div>
+                            <!-- Research rows injected by JS -->
+                            <div class="ai-scan-tickers" id="ai-scan-tickers"></div>
+                        </div>
+
+                    </div>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-dark table-hover mb-0 holdings-table">

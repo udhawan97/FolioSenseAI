@@ -539,6 +539,101 @@ def generate_analytics_insights(snapshot: dict) -> dict:
     return {"insights": insights, "widget_insights": widget_insights}
 
 
+ACTION_PLAN_MODEL = "claude-sonnet-4-5"
+
+_ACTION_PLAN_SYSTEM = (
+    "Portfolio action planner. Compact portfolio snapshot → JSON only:\n"
+    '"headline": ≤12w one-line portfolio stance.\n'
+    '"thesis": ≤40w why, citing concrete snapshot numbers '
+    "(concentration, regime, top risks).\n"
+    '"buckets": {'
+    '"hold":[{"ticker","reason":≤16w}],'
+    '"add":[{"ticker","reason":≤16w}],'
+    '"trim":[{"ticker","reason":≤16w}],'
+    '"exit":[{"ticker","reason":≤16w}]'
+    "}\n"
+    '"priority_moves":[≤18w each, highest-impact-first, max 3].\n'
+    '"best_return_note":≤28w gap-to-optimal note.\n'
+    "Rules: use ONLY supplied numbers; never invent prices or targets; "
+    "advisory voice only — consider/may want, no buy/sell orders; "
+    "respect each holding's existing action as the prior — only escalate "
+    "trim→exit when watchlist=true or clearly deteriorating; "
+    "portfolio-level stance, not a wall of per-stock text. JSON only."
+)
+
+
+def generate_action_plan(snapshot: dict) -> dict:
+    """
+    One Sonnet call: prioritised action plan from a compact portfolio snapshot.
+    Returns {headline, thesis, buckets, priority_moves, best_return_note}.
+    Raises on any API failure — let the caller handle the deterministic fallback.
+    """
+    message = client.messages.create(
+        model=ACTION_PLAN_MODEL,
+        max_tokens=800,
+        system=_cached_system(_ACTION_PLAN_SYSTEM),
+        messages=[{"role": "user", "content": _compact_json(snapshot)}],
+    )
+    text_block = next((b for b in message.content if b.type == "text"), None)
+    raw = text_block.text.strip() if text_block else ""
+    logger.info(
+        "Generated action plan: %s+%s tokens",
+        message.usage.input_tokens,
+        message.usage.output_tokens,
+    )
+
+    cleaned = re.sub(r"^```[a-z]*\s*|\s*```$", "", raw, flags=re.DOTALL).strip()
+    data = json.loads(cleaned)
+    if not isinstance(data, dict):
+        raise ValueError("Action plan response is not a JSON object")
+
+    headline = str(data.get("headline") or "").strip()
+    if not headline:
+        raise ValueError("Action plan response missing 'headline'")
+
+    thesis = str(data.get("thesis") or "").strip()
+
+    raw_buckets = data.get("buckets") or {}
+    if not isinstance(raw_buckets, dict):
+        raise ValueError("Action plan response missing 'buckets'")
+
+    def _parse_bucket(items: object) -> list[dict]:
+        if not isinstance(items, list):
+            return []
+        result: list[dict] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            ticker = str(item.get("ticker") or "").upper().strip()
+            reason = str(item.get("reason") or "").strip()
+            if ticker:
+                result.append({"ticker": ticker, "reason": reason})
+        return result
+
+    buckets = {
+        "hold": _parse_bucket(raw_buckets.get("hold")),
+        "add":  _parse_bucket(raw_buckets.get("add")),
+        "trim": _parse_bucket(raw_buckets.get("trim")),
+        "exit": _parse_bucket(raw_buckets.get("exit")),
+    }
+
+    raw_pm = data.get("priority_moves")
+    priority_moves = (
+        [str(m).strip() for m in raw_pm[:3] if m]
+        if isinstance(raw_pm, list) else []
+    )
+
+    best_return_note = str(data.get("best_return_note") or "").strip()
+
+    return {
+        "headline": headline,
+        "thesis": thesis,
+        "buckets": buckets,
+        "priority_moves": priority_moves,
+        "best_return_note": best_return_note,
+    }
+
+
 def generate_stock_summary(stock_data: dict) -> str:
     """
     Generate a 3-bullet AI summary for a single holding.

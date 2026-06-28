@@ -691,6 +691,7 @@ let portfolioSnapshotExposurePromise = null;
 const cachedDeepIntel = {};      // ticker → deep read payload
 const deepIntelLoadingTickers = new Set();
 let aiCheckInterval = null;
+let _scanActiveRow = -1;        // index of row currently marked .is-active (-1 = none)
 
 const AI_CHECK_MESSAGES = [
     "Reading positions",
@@ -968,20 +969,70 @@ function renderAiScanTickers() {
     const tickerRail = document.getElementById("ai-scan-tickers");
     if (!tickerRail) return;
 
-    const tickers = latestHoldings
-        .map(h => h.ticker)
-        .filter(Boolean)
+    const holdings = latestHoldings
+        .filter(h => h?.ticker)
         .slice(0, 12);
 
-    tickerRail.innerHTML = tickers.map((ticker, index) => {
+    tickerRail.innerHTML = holdings.map((h, index) => {
         const phase = ((index * 0.6180339887) % 1).toFixed(3);
-        return `<div class="ai-scan-row" style="--row-index:${index};--row-phase:${phase}">
+        const ticker = escapeHtml(h.ticker);
+        return `<div class="ai-scan-row" style="--row-index:${index};--row-phase:${phase}" data-ticker="${ticker}">
             <span class="ai-scan-row-dot" aria-hidden="true"></span>
-            <span class="ai-scan-row-ticker">${escapeHtml(ticker)}</span>
+            <span class="ai-scan-row-ticker">${ticker}</span>
             <span class="ai-scan-row-bar" aria-hidden="true"><span class="ai-scan-row-fill" style="--row-index:${index}"></span></span>
             <span class="ai-scan-row-label">${SCAN_ROW_LABELS[index % SCAN_ROW_LABELS.length]}</span>
         </div>`;
     }).join("");
+}
+
+/** Emit up to 2 real-data extraction chips for the holding currently being "read". */
+function _emitScanChips(rowEl) {
+    const emitter = document.getElementById("ai-scan-chips-emitter");
+    if (!emitter) return;
+    // Clear previous chips (remove without reflow by replacing children)
+    emitter.replaceChildren();
+
+    const ticker = rowEl?.dataset?.ticker;
+    if (!ticker) return;
+    const h = latestHoldings.find(lh => lh.ticker === ticker);
+    if (!h) return;
+
+    const chips = [];
+    if (isFiniteNumber(h.current_price)) {
+        chips.push({ text: formatCurrency(h.current_price), cls: "chip-price" });
+    }
+    if (isFiniteNumber(h.day_change_pct)) {
+        const pct = Number(h.day_change_pct);
+        chips.push({ text: `${pct >= 0 ? "+" : ""}${formatPct(pct)}`, cls: pct >= 0 ? "chip-up" : "chip-dn" });
+    }
+    if (isFiniteNumber(h.allocation_pct)) {
+        chips.push({ text: `${Number(h.allocation_pct).toFixed(1)}%`, cls: "chip-alloc" });
+    }
+
+    chips.slice(0, 2).forEach((chip, i) => {
+        const span = document.createElement("span");
+        span.className = `ai-scan-chip ${chip.cls}`;
+        span.textContent = chip.text;
+        span.style.setProperty("--chip-delay", `${i * 0.14}s`);
+        emitter.appendChild(span);
+        // Self-clean after animation lifecycle (~1.7 s + stagger)
+        setTimeout(() => { if (span.parentNode === emitter) span.remove(); }, 1800 + i * 150);
+    });
+}
+
+/** Advance the .is-active scan-highlight to the next row, emit chips for it. */
+function _advanceScanActiveRow() {
+    const rows = document.querySelectorAll("#ai-scan-tickers .ai-scan-row");
+    if (!rows.length) return;
+    // Remove previous highlight
+    rows.forEach(r => r.classList.remove("is-active"));
+    // Advance (wrap around)
+    _scanActiveRow = (_scanActiveRow + 1) % rows.length;
+    const activeRow = rows[_scanActiveRow];
+    if (activeRow) {
+        activeRow.classList.add("is-active");
+        _emitScanChips(activeRow);
+    }
 }
 
 function setAiChecking(active, message = "Reading positions", insightsReady = false, claudeAction = false) {
@@ -1002,6 +1053,9 @@ function setAiChecking(active, message = "Reading positions", insightsReady = fa
         card.classList.remove("is-ai-checking");
         dashboardPet?.classList.remove("is-texting");
         if (panel) panel.setAttribute("aria-hidden", "true");
+        // Clear extraction chips + reset active-row state
+        document.getElementById("ai-scan-chips-emitter")?.replaceChildren();
+        _scanActiveRow = -1;
         updateAgentStatus({
             scanning: false,
             ready: insightsReady,
@@ -1012,17 +1066,23 @@ function setAiChecking(active, message = "Reading positions", insightsReady = fa
         return;
     }
 
+    const local = isLocalIntelligenceMode();
     let messageIndex = 0;
     card.classList.add("is-ai-checking");
     dashboardPet?.classList.add("is-texting");
-    if (title) title.textContent = isLocalIntelligenceMode() ? "Local checking holdings" : "AI checking holdings";
+    // Drive engine variant (colors + motion personality)
+    if (panel) panel.dataset.engine = local ? "local" : "ai";
+    if (title) title.textContent = local ? "FolioSense checking holdings" : "AI checking holdings";
     updateAgentStatus({ scanning: true, message, claudeAction });
     HoldingsBg.stop();
     if (panel) {
         panel.setAttribute("aria-hidden", "false");
         panel.style.setProperty("--scan-travel", `${panel.offsetHeight + 180}px`);
     }
+    // Reset and render rows, then immediately activate first row
+    _scanActiveRow = -1;
     renderAiScanTickers();
+    setTimeout(() => _advanceScanActiveRow(), 130);
     setAgentLine(message);
     claudeMessageIndex = 0;
     claudeOfflineScanMessageIndex = 0;
@@ -1056,6 +1116,8 @@ function setAiChecking(active, message = "Reading positions", insightsReady = fa
             }
             subtitle.classList.toggle("ai-scan-subtitle--highlight", isClaudeBeat || claudeHoldRemaining > 0);
         }
+        // Advance active-row scan highlight + emit extraction chips
+        _advanceScanActiveRow();
     }, 800);
 }
 
@@ -2665,6 +2727,7 @@ function setDashboardZone(zone, opts = {}) {
         });
         ensureProjectionLoaded();
         window.AnalyticsCharts?.onAnalyticsZoneEnter?.();
+        if (!_cachedActionPlan && !_actionPlanLoading) loadActionPlan();
     }
     if (zone === "news") {
         ensureNewsLoaded();
@@ -7528,9 +7591,12 @@ function applyIntelligenceModeUi() {
     const scanActive = document.querySelector(".card.is-ai-checking");
     const scanSubtitle = document.getElementById("ai-scan-subtitle");
     const scanTitle = document.getElementById("ai-scan-title");
+    // Keep data-engine attribute in sync with the current engine (even mid-scan)
+    const scanPanel = document.getElementById("ai-scan-panel");
+    if (scanPanel) scanPanel.dataset.engine = local ? "local" : "ai";
     if (!scanActive) {
         if (scanSubtitle) scanSubtitle.textContent = _defaultScanSubtitle();
-        if (scanTitle) scanTitle.textContent = local ? "Local checking holdings" : "AI checking holdings";
+        if (scanTitle) scanTitle.textContent = local ? "FolioSense checking holdings" : "AI checking holdings";
     }
 
     document.querySelectorAll(".intel-loading-title").forEach(el => {
@@ -8884,6 +8950,116 @@ async function loadPortfolioBriefing(mode, forceRefresh = false) {
     }
 }
 
+// ── Portfolio Action Plan ─────────────────────────────────────────────────────
+
+let _actionPlanLoading = false;
+let _cachedActionPlan = null;
+
+const _AP_BUCKET_COLOR = { hold: "is-hold", add: "is-add", trim: "is-trim", exit: "is-exit" };
+const _AP_BUCKET_LABEL = { hold: "Hold", add: "Add", trim: "Trim", exit: "Exit" };
+const _AP_BUCKET_ICON  = {
+    hold: "bi-pause-circle",
+    add:  "bi-plus-circle",
+    trim: "bi-scissors",
+    exit: "bi-door-open",
+};
+
+function _actionPlanShowSkeleton(show) {
+    const sk = document.getElementById("action-plan-skeleton");
+    const ct = document.getElementById("action-plan-content");
+    if (sk) sk.hidden = !show;
+    if (ct) ct.hidden = show;
+}
+
+function _renderActionPlan(data) {
+    const content = document.getElementById("action-plan-content");
+    if (!content) return;
+
+    const headline = escapeHtml(data.headline || "");
+    const thesis   = escapeHtml(data.thesis   || "");
+
+    const bucketOrder = ["hold", "add", "trim", "exit"];
+    const buckets = data.buckets || {};
+
+    const bucketsHtml = bucketOrder.map(bucket => {
+        const items = buckets[bucket] || [];
+        if (!items.length) return "";
+        const colorCls = _AP_BUCKET_COLOR[bucket] || "";
+        const label    = _AP_BUCKET_LABEL[bucket] || bucket;
+        const icon     = _AP_BUCKET_ICON[bucket]  || "";
+        const chips    = items.map(item => {
+            const ticker = escapeHtml(item.ticker || "");
+            const reason = escapeHtml(item.reason || "");
+            return `<span class="ap-chip ${colorCls}" title="${reason}">${ticker}</span>`;
+        }).join("");
+        return `<div class="ap-bucket">
+            <div class="ap-bucket-hdr ${colorCls}">
+                <i class="bi ${icon}" aria-hidden="true"></i>
+                <span class="ap-bucket-label">${label}</span>
+                <span class="ap-bucket-count">${items.length}</span>
+            </div>
+            <div class="ap-chips">${chips}</div>
+        </div>`;
+    }).filter(Boolean).join("");
+
+    const movesHtml = (data.priority_moves || []).map((move, i) =>
+        `<li class="ap-move"><span class="ap-move-num">${i + 1}</span>${escapeHtml(move)}</li>`
+    ).join("");
+
+    const noteHtml = data.best_return_note
+        ? `<div class="ap-note"><i class="bi bi-bullseye" aria-hidden="true"></i> ${escapeHtml(data.best_return_note)}</div>`
+        : "";
+
+    const disclaimer = data.disclaimer || FOLIO_SENSE_VERDICT_COPY.disclaimer;
+
+    content.innerHTML = `<div class="ap-wrap">
+        ${headline ? `<div class="ap-headline">${headline}</div>` : ""}
+        ${thesis   ? `<div class="ap-thesis">${thesis}</div>`     : ""}
+        <div class="ap-buckets">${bucketsHtml}</div>
+        ${movesHtml ? `<ol class="ap-moves">${movesHtml}</ol>` : ""}
+        ${noteHtml}
+        <div class="ap-disclaimer">${escapeHtml(disclaimer)}</div>
+    </div>`;
+}
+
+async function loadActionPlan(forceRefresh = false) {
+    if (isLocalIntelligenceMode() || _isClaudeApiLive === false) return;
+    if (_actionPlanLoading && !forceRefresh) return;
+
+    if (_cachedActionPlan && !forceRefresh) {
+        _actionPlanShowSkeleton(false);
+        _renderActionPlan(_cachedActionPlan);
+        return;
+    }
+
+    _actionPlanLoading = true;
+    _actionPlanShowSkeleton(true);
+
+    const refreshBtn = document.getElementById("action-plan-refresh-btn");
+    refreshBtn?.classList.add("is-spinning");
+
+    try {
+        const url = forceRefresh
+            ? "/api/ai/action-plan?force_refresh=true"
+            : "/api/ai/action-plan";
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        _cachedActionPlan = data;
+        _actionPlanShowSkeleton(false);
+        _renderActionPlan(data);
+    } catch (err) {
+        console.warn("Action plan fetch failed:", err);
+        _actionPlanShowSkeleton(false);
+        const ct = document.getElementById("action-plan-content");
+        if (ct) ct.innerHTML = `<span class="ap-error">Action plan temporarily unavailable — refresh to retry.</span>`;
+    } finally {
+        _actionPlanLoading = false;
+        refreshBtn?.classList.remove("is-spinning");
+    }
+}
+
 function initPortfolioBriefing() {
     const seg = document.getElementById("briefing-seg");
     if (!seg) return;
@@ -8943,6 +9119,7 @@ async function initDashboard() {
         loadAnalystRecommendations();
         loadWorldMarkets();
         loadPortfolioBriefing();
+        loadActionPlan();
         startClaudeHeartbeat();
         ensureAiCostStatsLoaded();
     });
@@ -9702,6 +9879,8 @@ async function generateAiHoldingSummaries() {
             _syncOpenSummaryHeights(tbody);
         }
         await window.AnalyticsCharts?.loadAiWidgetInsights?.(true);
+        _cachedActionPlan = null;
+        await loadActionPlan();
         showToast("Claude summaries ready", "success");
     } catch (err) {
         console.warn("Claude summaries failed:", err);
