@@ -3829,7 +3829,12 @@ function holdingPetReaction(mainRow) {
 }
 
 function toggleSummaryRow(mainRow) {
-    const expandRow = mainRow.nextElementSibling;
+    let expandRow = mainRow.nextElementSibling;
+    if (!expandRow || !expandRow.classList.contains("summary-expand-row")) {
+        const tbody = mainRow.closest("tbody");
+        if (tbody) injectSummaryRows(tbody);
+        expandRow = mainRow.nextElementSibling;
+    }
     if (!expandRow || !expandRow.classList.contains("summary-expand-row")) return;
     const body = expandRow.querySelector(".summary-body");
     const isOpen = body.classList.contains("open");
