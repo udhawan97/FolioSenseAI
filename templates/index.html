@@ -8,10 +8,8 @@
     <script>
         (() => {
             try {
-                const savedTheme = localStorage.getItem("foliosense-theme");
                 const savedTextSize = localStorage.getItem("foliosense-text-size");
-                const prefersLight = window.matchMedia?.("(prefers-color-scheme: light)").matches;
-                document.documentElement.dataset.bsTheme = savedTheme || (prefersLight ? "light" : "dark");
+                document.documentElement.dataset.bsTheme = "dark";
                 const textSizes = ["compact", "standard", "comfortable"];
                 document.documentElement.dataset.textSize = textSizes.includes(savedTextSize) ? savedTextSize : "standard";
             } catch (_) {}

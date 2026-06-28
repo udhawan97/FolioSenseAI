@@ -205,10 +205,7 @@ function animateToggle(toggle) {
 }
 
 function initThemeToggle() {
-    let saved = null;
-    try { saved = localStorage.getItem(THEME_KEY); } catch (_) {}
-    const initial = saved || currentTheme();
-    applyTheme(initial, false);
+    applyTheme("dark", false);
 
     const toggle = document.getElementById("theme-toggle");
     if (!toggle) return;
@@ -2739,10 +2736,6 @@ function initDashboardZones() {
     const track = document.getElementById("dashboard-zone-tabs");
     if (!track) return;
     let initial = "overview";
-    try {
-        const stored = localStorage.getItem(DASHBOARD_ZONE_KEY);
-        if (DASHBOARD_ZONES.includes(stored)) initial = stored;
-    } catch (_) {}
     setDashboardZone(initial, { persist: false });
     requestAnimationFrame(syncDztIndicator);
     window.addEventListener("resize", syncDztIndicator, { passive: true });
@@ -8020,12 +8013,7 @@ function initDashboardPet() {
         }
     }
 
-    try {
-        const stored = localStorage.getItem(PET_MODE_KEY);
-        _forcedLocalMode = stored !== "0";
-    } catch (_) {
-        _forcedLocalMode = true;
-    }
+    _forcedLocalMode = true;
     applyForcedLocalMode(_forcedLocalMode, false);
 
     modeToggle?.addEventListener("click", (e) => {
