@@ -7841,6 +7841,7 @@ function applyClaudeApiStatus(claudeLive) {
         }
         applyIntelligenceModeUi();
         window.AnalyticsCharts?.onIntelligenceModeChanged?.();
+        if (!intelligenceLoaded && !intelligenceLoading) loadHoldingIntelligence();
     } else if (claudeLive === true) {
         brand?.classList.add("claude-live");
         brand?.classList.remove("claude-offline");
@@ -9236,6 +9237,7 @@ async function initDashboard() {
         loadActionPlan();
         startClaudeHeartbeat();
         ensureAiCostStatsLoaded();
+        if (isLocalIntelligenceMode()) loadHoldingIntelligence();
     });
 }
 

@@ -12121,8 +12121,9 @@ tr.research-holding-row:hover {
 
 /* Panes: only the active one is in flow. Inactive panes stay laid out (so their
    Chart.js canvases keep correct dimensions) but are visually hidden — no
-   display:none, which would zero-size the charts. */
-.dashboard-zone-panes { position: relative; }
+   display:none, which would zero-size the charts. overflow:hidden prevents the
+   absolutely-positioned hidden panes from expanding the page scroll height. */
+.dashboard-zone-panes { position: relative; overflow: hidden; }
 .dashboard-zone-pane { opacity: 1; transition: opacity 150ms ease; }
 .dashboard-zone-pane:not(.dashboard-zone-pane--active) {
     position: absolute;

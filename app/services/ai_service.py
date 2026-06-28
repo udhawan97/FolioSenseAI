@@ -555,6 +555,8 @@ _ACTION_PLAN_SYSTEM = (
     '"priority_moves":[≤18w each, highest-impact-first, max 3].\n'
     '"best_return_note":≤28w gap-to-optimal note.\n'
     "Rules: use ONLY supplied numbers; never invent prices or targets; "
+    "plain conversational English only — no snake_case, underscores, or ALL-CAPS "
+    "except for ticker symbols (e.g. write 'now' not 'NOW', 'large hold' not 'heavy_hold'); "
     "advisory voice only — consider/may want, no buy/sell orders; "
     "respect each holding's existing action as the prior — only escalate "
     "trim→exit when watchlist=true or clearly deteriorating; "
