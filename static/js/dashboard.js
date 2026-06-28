@@ -3849,7 +3849,21 @@ function toggleSummaryRow(mainRow) {
             _lastExpandedHoldingTicker = ticker;
             const needsIntel = !cachedVerdicts[ticker] || !holdingIntelSettled(ticker);
             if (needsIntel && !intelligenceRetryingTickers.has(ticker)) {
-                loadTargetedHoldingIntelligence(ticker);
+                const hub = document.getElementById("holdings-intel-hub");
+                if (hub) {
+                    hub.classList.add("is-scanning");
+                    hub.classList.remove("is-ready", "is-idle");
+                }
+                loadTargetedHoldingIntelligence(ticker).finally(() => {
+                    updateHoldingsIntelHub({ scanning: intelligenceLoading, ready: intelligenceLoaded });
+                });
+                window.setTimeout(() => {
+                    if (holdingIntelSettled(ticker)) return;
+                    const expandRow = mainRow.nextElementSibling;
+                    const hint = expandRow?.querySelector(".intel-slow-hint");
+                    if (hint) hint.hidden = false;
+                    if (!intelligenceLoading && !_aiSummariesLoading) onHoldingsIntelHubClick();
+                }, 1000);
             } else {
                 renderExpandedTicker(ticker);
             }
@@ -5223,6 +5237,10 @@ function injectSummaryRows(tbody) {
                 <div class="intel-coverage-section"></div>
                 <div class="intel-move-section"></div>
                 <div class="intel-verdict-section"></div>
+                <div class="intel-slow-hint" hidden>
+                    <i class="bi bi-hourglass-split"></i>
+                    Still loading — hit <strong>Holding Intel</strong> in the top-right to run the full scan.
+                </div>
                 <div class="intel-loading-overlay" aria-hidden="true">
                     <div class="intel-loading-content">
                         <img src="/static/img/brand/folio-orbit-icon.svg" alt="" class="intel-loading-orbit">
@@ -5295,7 +5313,11 @@ function renderExpandedTicker(ticker) {
     if (coverageSection) renderHoldingCoverage(coverageSection, cachedIntelligence[ticker]);
     if (moveSection) renderMoveExplainer(moveSection, cachedExplanations[ticker], cachedIntelligence[ticker]);
     if (verdictSection) renderAiVerdict(verdictSection, cachedVerdicts[ticker], ticker);
-    if (holdingIntelSettled(ticker)) mainRow.classList.add("has-intel-ready");
+    if (holdingIntelSettled(ticker)) {
+        mainRow.classList.add("has-intel-ready");
+        const hint = expandRow.querySelector(".intel-slow-hint");
+        if (hint) hint.hidden = true;
+    }
 
     const body = expandRow.querySelector(".summary-body.open");
     if (body && body.style.maxHeight && body.style.maxHeight !== "none") {
@@ -5303,10 +5325,19 @@ function renderExpandedTicker(ticker) {
     }
 }
 
-function drawTrend(canvas, history = []) {
+function _fitCanvas(canvas) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.offsetWidth  || Math.round(canvas.width  / dpr);
+    const h = canvas.offsetHeight || Math.round(canvas.height / dpr);
+    canvas.width  = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
     const ctx = canvas.getContext("2d");
-    const width = canvas.width;
-    const height = canvas.height;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, width: w, height: h };
+}
+
+function drawTrend(canvas, history = []) {
+    const { ctx, width, height } = _fitCanvas(canvas);
     const padding = 3;
     const closes = history
         .slice(-TREND_DAYS)
@@ -6104,9 +6135,7 @@ function _paintVerdictSparkline(section, verdict, ticker) {
 }
 
 function _drawPctSparkline(canvas, pctSeries = []) {
-    const ctx = canvas.getContext("2d");
-    const width = canvas.width;
-    const height = canvas.height;
+    const { ctx, width, height } = _fitCanvas(canvas);
     const padding = 4;
     const values = pctSeries.filter(v => Number.isFinite(v));
     ctx.clearRect(0, 0, width, height);
