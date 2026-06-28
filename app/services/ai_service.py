@@ -417,6 +417,68 @@ def generate_portfolio_briefing(snapshot: dict) -> dict:
     return {"health": health, "drivers": drivers, "adjustments": adjustments, "quote": quote}
 
 
+# ── News themes ───────────────────────────────────────────────────────────────
+
+_NEWS_THEMES_SYSTEM = (
+    "Portfolio news narrator. Compact holdings+headlines JSON → JSON only:\n"
+    '"briefing": 1-2 sentence second-person read of what in today\'s news '
+    "matters to THIS book.\n"
+    '"themes": 2-4 items, each {"title": ≤6w, "summary": ≤28w, '
+    '"tickers": [...]}.\n'
+    "Each theme ties a shared narrative to the holdings it touches.\n"
+    "Use only the supplied headlines. No buy/sell advice."
+)
+
+
+def generate_news_themes(snapshot: dict) -> dict:
+    """
+    One Haiku call: news briefing + cross-holding theme clusters.
+    Returns {"briefing": str, "themes": [{"title", "summary", "tickers"}]}.
+    Raises on any failure so the caller can serve a 503.
+    """
+    message = client.messages.create(
+        model=MODEL,
+        max_tokens=480,
+        system=_cached_system(_NEWS_THEMES_SYSTEM),
+        messages=[{"role": "user", "content": _compact_json(snapshot)}],
+    )
+    text_block = next((b for b in message.content if b.type == "text"), None)
+    raw = text_block.text.strip() if text_block else ""
+    logger.info(
+        "Generated news themes: %s+%s tokens",
+        message.usage.input_tokens,
+        message.usage.output_tokens,
+    )
+
+    cleaned = re.sub(r"^```[a-z]*\s*|\s*```$", "", raw, flags=re.DOTALL).strip()
+    data = json.loads(cleaned)
+    if not isinstance(data, dict):
+        raise ValueError("News themes response is not a JSON object")
+
+    briefing = str(data.get("briefing") or "").strip()
+    if not briefing:
+        raise ValueError("News themes response missing 'briefing'")
+
+    raw_themes = data.get("themes")
+    if not isinstance(raw_themes, list):
+        raise ValueError("News themes response missing 'themes' list")
+
+    themes: list[dict] = []
+    for t in raw_themes[:4]:
+        if not isinstance(t, dict):
+            continue
+        title   = str(t.get("title")   or "").strip()
+        summary = str(t.get("summary") or "").strip()
+        tickers = [str(x).upper() for x in (t.get("tickers") or []) if x]
+        if title and summary:
+            themes.append({"title": title, "summary": summary, "tickers": tickers})
+
+    if not themes:
+        raise ValueError("News themes response contained no usable themes")
+
+    return {"briefing": briefing, "themes": themes}
+
+
 def _analytics_insights_system() -> str:
     from app.services.analytics_insights import KEY_TIP_WIDGETS
 

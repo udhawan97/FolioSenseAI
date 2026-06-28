@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from starlette.middleware.gzip import GZipMiddleware
 from app.routers import stocks, portfolio, ai
+from app.routers import news
 from app.config import settings
 from app.database import engine, ensure_startup_migrations
 from app import models
@@ -82,6 +83,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 app.include_router(stocks.router)
 app.include_router(portfolio.router)
 app.include_router(ai.router)
+app.include_router(news.router)
 
 
 @app.get("/")

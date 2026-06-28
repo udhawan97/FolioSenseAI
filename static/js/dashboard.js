@@ -2602,7 +2602,7 @@ function syncHvtIndicator() {
 }
 
 // ── Dashboard zones (Overview / Holdings / Analytics) ──────────────────────
-const DASHBOARD_ZONES = ["overview", "holdings", "analytics"];
+const DASHBOARD_ZONES = ["overview", "holdings", "analytics", "news"];
 const DASHBOARD_ZONE_KEY = "foliosense-dashboard-zone";
 let dashboardZone = "overview";
 
@@ -2662,6 +2662,9 @@ function setDashboardZone(zone, opts = {}) {
         });
         ensureProjectionLoaded();
         window.AnalyticsCharts?.onAnalyticsZoneEnter?.();
+    }
+    if (zone === "news") {
+        ensureNewsLoaded();
     }
     syncHoldingExpandFab();
 }
@@ -7366,6 +7369,13 @@ async function onIntelligenceModeChanged(local, { notify = false } = {}) {
 
     loadPortfolioBriefing(null, true);
     window.AnalyticsCharts?.onIntelligenceModeChanged?.();
+    if (_newsLoaded) {
+        if (local) {
+            _newsClearAiSection();
+        } else {
+            _newsLoadThemes();
+        }
+    }
 
     if (!notify) return;
     if (local) {
@@ -10084,3 +10094,232 @@ const HoldingsBg = (() => {
         },
     };
 })();
+
+// ── News zone ─────────────────────────────────────────────────────────────────
+
+let _newsLoaded = false;
+let _newsLoadPromise = null;
+let _newsFeedData = null;   // cached feed response
+
+/**
+ * Format a date-ish value as a relative time string ("3h ago", "2d ago").
+ * Accepts ISO-8601 strings, Date objects, or epoch millis.
+ * Falls back to an empty string on parse failure.
+ */
+function timeAgo(value) {
+    if (!value) return "";
+    let date;
+    if (value instanceof Date) {
+        date = value;
+    } else if (typeof value === "number") {
+        date = new Date(value < 1e12 ? value * 1000 : value);
+    } else {
+        date = new Date(String(value));
+    }
+    if (isNaN(date.getTime())) return "";
+
+    const diffMs  = Date.now() - date.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    if (diffSec < 60)           return "just now";
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60)           return `${diffMin}m ago`;
+    const diffHr  = Math.floor(diffMin / 60);
+    if (diffHr  < 24)           return `${diffHr}h ago`;
+    const diffDay = Math.floor(diffHr  / 24);
+    if (diffDay < 30)           return `${diffDay}d ago`;
+    const diffMon = Math.floor(diffDay / 30);
+    if (diffMon < 12)           return `${diffMon}mo ago`;
+    return `${Math.floor(diffMon / 12)}y ago`;
+}
+
+/** Show/hide the news loading skeleton. */
+function _newsShowLoading(show) {
+    const el = document.getElementById("news-loading");
+    if (el) el.hidden = !show;
+}
+
+/** Show/hide the feed container. */
+function _newsShowFeed(show) {
+    const el = document.getElementById("news-feed-wrap");
+    if (el) el.hidden = !show;
+}
+
+/** Show/hide the empty state. */
+function _newsShowEmpty(show) {
+    const el = document.getElementById("news-empty");
+    if (el) el.hidden = !show;
+}
+
+/** Clear the AI briefing/themes section text (used when switching to local). */
+function _newsClearAiSection() {
+    const body = document.getElementById("news-briefing-body");
+    if (body) body.innerHTML = "";
+    const row = document.getElementById("news-themes-row");
+    if (row) row.innerHTML = "";
+}
+
+/**
+ * Render a single article card for the news feed.
+ * All text is inserted via textContent or escapeHtml to prevent XSS.
+ */
+function _newsArticleCardHtml(item) {
+    const thumb = item.thumbnail_url
+        ? `<img class="news-article-thumb" src="${escapeHtml(item.thumbnail_url)}"
+                alt="" loading="lazy" onerror="this.style.display='none'">`
+        : "";
+    const timeStr = item.published_at ? timeAgo(item.published_at) : "";
+    const meta    = [escapeHtml(item.source), timeStr].filter(Boolean).join(" · ");
+    const href    = item.url ? escapeHtml(item.url) : "#";
+    const target  = item.url ? 'target="_blank" rel="noopener noreferrer"' : "";
+
+    return `<article class="news-article-card">
+        ${thumb}
+        <div class="news-article-body">
+            <a class="news-article-title" href="${href}" ${target}>${escapeHtml(item.title)}</a>
+            <div class="news-article-meta">${meta}</div>
+            ${item.summary ? `<p class="news-article-summary">${escapeHtml(item.summary)}</p>` : ""}
+        </div>
+    </article>`;
+}
+
+/**
+ * Render a holding group block (header chip + article list).
+ * P/L-colored accent comes from the existing color helpers.
+ */
+function _newsGroupHtml(holding) {
+    const watchBadge = holding.is_watchlist
+        ? `<span class="news-watchlist-badge">Research</span>`
+        : "";
+    const articles = holding.items.length
+        ? holding.items.map(_newsArticleCardHtml).join("")
+        : `<p class="news-no-articles">No recent news for this holding.</p>`;
+
+    const sector = holding.sector
+        ? `<span class="news-group-sector">${escapeHtml(holding.sector)}</span>`
+        : "";
+
+    return `<section class="news-group" aria-label="${escapeHtml(holding.ticker)} news">
+        <div class="news-group-header">
+            <span class="news-group-chip">${escapeHtml(holding.ticker)}</span>
+            <span class="news-group-name">${escapeHtml(holding.company_name)}</span>
+            ${watchBadge}
+            ${sector}
+        </div>
+        <div class="news-article-list">
+            ${articles}
+        </div>
+    </section>`;
+}
+
+/** Render the feed section from cached feed data. */
+function _newsRenderFeed(feedData) {
+    const wrap = document.getElementById("news-feed-wrap");
+    if (!wrap) return;
+
+    const holdings = (feedData.holdings || []);
+    const hasAnyNews = holdings.some(h => h.items && h.items.length > 0);
+
+    if (!holdings.length || !hasAnyNews) {
+        _newsShowFeed(false);
+        _newsShowEmpty(true);
+        return;
+    }
+
+    wrap.innerHTML = holdings.map(_newsGroupHtml).join("");
+    _newsShowEmpty(false);
+    _newsShowFeed(true);
+}
+
+/** Render the AI briefing text from the themes response. */
+function _newsRenderBriefing(themesData) {
+    const body = document.getElementById("news-briefing-body");
+    if (!body) return;
+    body.textContent = themesData.briefing || "";
+}
+
+/** Render the AI theme clusters row. */
+function _newsRenderThemes(themesData) {
+    const row = document.getElementById("news-themes-row");
+    if (!row) return;
+
+    const themes = themesData.themes || [];
+    if (!themes.length) {
+        row.innerHTML = "";
+        return;
+    }
+
+    row.innerHTML = themes.map(theme => {
+        const chips = (theme.tickers || []).map(t =>
+            `<span class="news-theme-chip">${escapeHtml(t)}</span>`
+        ).join("");
+        return `<div class="news-theme-card">
+            <div class="news-theme-title">${escapeHtml(theme.title)}</div>
+            <p class="news-theme-summary">${escapeHtml(theme.summary)}</p>
+            ${chips ? `<div class="news-theme-chips">${chips}</div>` : ""}
+        </div>`;
+    }).join("");
+}
+
+/** Fetch themes from the API and render them; silently ignores 503 (Claude offline). */
+async function _newsLoadThemes() {
+    const briefingBody = document.getElementById("news-briefing-body");
+    // Show skeleton while loading
+    if (briefingBody && !briefingBody.textContent.trim()) {
+        briefingBody.innerHTML = `<div class="news-skeleton news-skeleton--line news-skeleton--wide"></div>
+            <div class="news-skeleton news-skeleton--line news-skeleton--medium"></div>`;
+    }
+    try {
+        const res = await fetch("/api/news/themes");
+        if (res.status === 503) {
+            // Claude offline — AI section stays hidden via data-engine-claude-only
+            if (briefingBody) briefingBody.innerHTML = "";
+            return;
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        _newsRenderBriefing(data);
+        _newsRenderThemes(data);
+    } catch (err) {
+        console.warn("News themes fetch failed:", err);
+        if (briefingBody) briefingBody.innerHTML = "";
+        const row = document.getElementById("news-themes-row");
+        if (row) row.innerHTML = "";
+    }
+}
+
+/**
+ * Load the news zone: fetch the feed, render groups, then (in Claude mode)
+ * fetch and render AI themes.  Lazy — only runs once per session unless forced.
+ */
+async function loadNewsZone() {
+    _newsShowLoading(true);
+    _newsShowFeed(false);
+    _newsShowEmpty(false);
+
+    try {
+        const res = await fetch("/api/news/feed");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        _newsFeedData = await res.json();
+        _newsRenderFeed(_newsFeedData);
+    } catch (err) {
+        console.warn("News feed fetch failed:", err);
+        _newsShowFeed(false);
+        _newsShowEmpty(true);
+    } finally {
+        _newsShowLoading(false);
+    }
+
+    // AI layer — only in Claude mode; 503 / failures are silently swallowed.
+    if (!isLocalIntelligenceMode()) {
+        await _newsLoadThemes();
+    }
+
+    _newsLoaded = true;
+    _newsLoadPromise = null;
+}
+
+/** Lazy entry-point: starts a load if not already done. */
+function ensureNewsLoaded() {
+    if (_newsLoaded) return;
+    if (!_newsLoadPromise) _newsLoadPromise = loadNewsZone();
+}

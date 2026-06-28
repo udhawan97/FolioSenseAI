@@ -231,6 +231,11 @@
                     <i class="bi bi-bar-chart-line-fill dzt-icon" aria-hidden="true"></i>
                     <span class="dzt-label">Analytics</span>
                 </button>
+                <button class="dzt-tab" type="button" data-zone="news"
+                        role="tab" aria-selected="false" onclick="setDashboardZone('news')">
+                    <i class="bi bi-newspaper dzt-icon" aria-hidden="true"></i>
+                    <span class="dzt-label">News</span>
+                </button>
             </div>
         </div>
 
@@ -1812,6 +1817,65 @@
         </div>
 
         </section><!-- /holdings pane -->
+
+        <!-- ═══════════════ NEWS ═══════════════ -->
+        <section class="dashboard-zone-pane" data-zone-pane="news"
+                 role="tabpanel" aria-label="News">
+
+            <!-- ── AI section (Claude mode only) ──────────────────────── -->
+            <div data-engine-claude-only id="news-ai-section">
+
+                <!-- Briefing card -->
+                <div class="card bg-dark border-secondary news-briefing-card mb-3" id="news-briefing-card">
+                    <div class="news-briefing-inner">
+                        <div class="news-briefing-header">
+                            <span class="news-briefing-icon" aria-hidden="true">
+                                <i class="bi bi-stars"></i>
+                            </span>
+                            <span class="news-briefing-label">Portfolio Briefing</span>
+                        </div>
+                        <div class="news-briefing-body" id="news-briefing-body">
+                            <div class="news-skeleton news-skeleton--line news-skeleton--wide"></div>
+                            <div class="news-skeleton news-skeleton--line news-skeleton--medium"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Theme clusters row -->
+                <div class="news-themes-row mb-3" id="news-themes-row" aria-label="News themes">
+                    <!-- Populated by JS -->
+                </div>
+
+            </div><!-- /AI section -->
+
+            <!-- ── Loading skeleton (shown before first fetch) ────────── -->
+            <div class="news-loading-wrap" id="news-loading" hidden>
+                <div class="news-group-skeleton">
+                    <div class="news-skeleton news-skeleton--chip"></div>
+                    <div class="news-skeleton news-skeleton--line news-skeleton--wide"></div>
+                    <div class="news-skeleton news-skeleton--line news-skeleton--medium"></div>
+                    <div class="news-skeleton news-skeleton--line news-skeleton--narrow"></div>
+                </div>
+                <div class="news-group-skeleton">
+                    <div class="news-skeleton news-skeleton--chip"></div>
+                    <div class="news-skeleton news-skeleton--line news-skeleton--wide"></div>
+                    <div class="news-skeleton news-skeleton--line news-skeleton--medium"></div>
+                </div>
+            </div>
+
+            <!-- ── Grouped feed (always visible once loaded) ──────────── -->
+            <div class="news-feed-wrap" id="news-feed-wrap" hidden>
+                <!-- Populated by JS — one .news-group per holding -->
+            </div>
+
+            <!-- ── Empty state ────────────────────────────────────────── -->
+            <div class="news-empty-wrap" id="news-empty" hidden>
+                <i class="bi bi-newspaper news-empty-icon" aria-hidden="true"></i>
+                <p class="news-empty-title">No recent news for your holdings.</p>
+                <p class="news-empty-body">Add holdings or check back later — news refreshes every 15 minutes.</p>
+            </div>
+
+        </section><!-- /news pane -->
 
         </div><!-- /dashboard-zone-panes -->
 
