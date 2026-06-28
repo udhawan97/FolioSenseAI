@@ -83,14 +83,14 @@ html[data-text-size="comfortable"] {
     color-scheme: dark;
 
     /* Surfaces */
-    --bg-base:        #0a0a0f;
-    --surface:        rgba(255, 255, 255, 0.09);
-    --surface-strong: rgba(255, 255, 255, 0.13);
+    --bg-base:        #050508;
+    --surface:        rgba(255, 255, 255, 0.05);
+    --surface-strong: rgba(255, 255, 255, 0.08);
     --surface-hover:  rgba(255, 255, 255, 0.06);
     --hairline:       rgba(255, 255, 255, 0.08);
     --hairline-soft:  rgba(255, 255, 255, 0.05);
     --hairline-hover: rgba(255, 255, 255, 0.14);
-    --nav-surface:    rgba(12, 12, 18, 0.62);
+    --nav-surface:    rgba(8, 8, 12, 0.88);
     --modal-surface:  rgba(22, 22, 28, 0.82);
     --popover-surface: rgba(20, 20, 28, 0.97);
     --toast-surface:  rgba(22, 22, 30, 0.95);
@@ -102,8 +102,8 @@ html[data-text-size="comfortable"] {
     --shadow-card-hover: 0 22px 48px -18px rgba(0, 0, 0, 0.78);
     --shadow-float:   0 28px 64px -12px rgba(0, 0, 0, 0.78);
     /* Brand-driven ambient glows */
-    --bg-ambient-1:   radial-gradient(1200px 620px at 12% -8%, rgba(111, 214, 240, 0.18), transparent 58%);
-    --bg-ambient-2:   radial-gradient(1000px 520px at 112% 6%, rgba(151, 172, 236, 0.14), transparent 55%);
+    --bg-ambient-1:   radial-gradient(1200px 620px at 12% -8%, rgba(111, 214, 240, 0.12), transparent 58%);
+    --bg-ambient-2:   radial-gradient(1000px 520px at 112% 6%, rgba(151, 172, 236, 0.09), transparent 55%);
     /* Brand cyan overrides Apple system cyan in dark mode */
     --accent-cyan:    #6fd6f0;
 
@@ -10281,8 +10281,8 @@ body > .dashboard-pet {
     position: relative;
     overflow: hidden;
     background:
-        radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--accent-blue) 10%, transparent), transparent 32%),
-        radial-gradient(circle at 86% 6%, color-mix(in srgb, var(--accent-green) 8%, transparent), transparent 30%),
+        radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--accent-blue) 12%, transparent), transparent 32%),
+        radial-gradient(circle at 86% 6%, color-mix(in srgb, var(--accent-green) 10%, transparent), transparent 30%),
         var(--bs-card-bg);
 }
 
@@ -10291,7 +10291,7 @@ body > .dashboard-pet {
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), transparent 42%);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 42%);
     opacity: 0.75;
 }
 
@@ -10309,11 +10309,11 @@ body > .dashboard-pet {
 
 .snapshot-panel {
     min-width: 0;
-    border: 1px solid var(--hairline);
-    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 20px;
     padding: 0.86rem;
-    background: color-mix(in srgb, var(--surface-strong) 72%, transparent);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+    background: rgba(14, 14, 20, 0.82);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 8px 32px -12px rgba(0, 0, 0, 0.7);
 }
 
 .snapshot-panel-head,
@@ -10394,10 +10394,10 @@ body > .dashboard-pet {
     display: flex;
     align-items: stretch;
     width: 100%;
-    height: 4.5rem;
+    height: 6rem;
     overflow: hidden;
-    border-radius: 14px;
-    border: 1px solid var(--hairline-soft);
+    border-radius: 16px;
+    border: 1px solid var(--hairline);
     background: rgba(255, 255, 255, 0.045);
 }
 
@@ -10411,7 +10411,7 @@ body > .dashboard-pet {
     flex: 0 0 var(--snapshot-width);
     min-width: 0.5rem;
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.28) 0%, transparent 55%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, transparent 55%),
         var(--snapshot-color);
     box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.14);
     overflow: hidden;
@@ -10430,7 +10430,7 @@ body > .dashboard-pet {
     display: flex;
     align-items: center;
     min-width: 0;
-    border-radius: 12px;
+    border-radius: 13px;
     border: 1px solid var(--hairline-soft);
     background: rgba(255, 255, 255, 0.04);
 }
@@ -10439,7 +10439,7 @@ body > .dashboard-pet {
     position: relative;
     overflow: hidden;
     gap: 0.42rem;
-    padding: 0.42rem 0.5rem;
+    padding: 0.5rem 0.6rem;
 }
 
 /* snapshot-sector-item doubles as a tip-trigger — keep its row shape, not the
@@ -10481,8 +10481,8 @@ body > .dashboard-pet {
     z-index: 1;
     display: inline-grid;
     place-items: center;
-    width: 1.35rem;
-    height: 1.35rem;
+    width: 1.5rem;
+    height: 1.5rem;
     flex: 0 0 auto;
     border-radius: 9px;
     color: var(--snapshot-color);
@@ -10520,7 +10520,7 @@ body > .dashboard-pet {
     font-size: 0.7rem;
     font-weight: 650;
     border-color: color-mix(in srgb, var(--accent-blue) 22%, transparent);
-    background: color-mix(in srgb, var(--accent-blue) 7%, transparent);
+    background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
 }
 
 .snapshot-sector-note i {
@@ -10615,7 +10615,7 @@ body > .dashboard-pet {
 
 .snapshot-stack-track {
     display: flex;
-    height: 0.7rem;
+    height: 1rem;
     overflow: hidden;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.055);
@@ -10694,10 +10694,10 @@ body > .dashboard-pet {
 .snapshot-mover-track {
     display: grid;
     grid-template-columns: 1fr 1px 1fr;
-    height: 0.48rem;
+    height: 0.65rem;
     overflow: hidden;
-    border-radius: 3px;
-    background: rgba(255, 255, 255, 0.045);
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.07);
 }
 
 .snapshot-mover-left {
@@ -13102,7 +13102,10 @@ svg.signal-radar {
     display: block;
 }
 
-.holding-expand-fab {
+/* `body > .holding-expand-fab` (not just `.holding-expand-fab`) so this beats
+   the global `body > *:not(.bg-orb) { position: relative; z-index: 1 }` layering
+   rule — otherwise the fixed FAB gets forced into normal flow at the page bottom. */
+body > .holding-expand-fab {
     position: fixed;
     right: max(1rem, env(safe-area-inset-right, 0px));
     top: 50%;

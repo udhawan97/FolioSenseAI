@@ -5808,6 +5808,21 @@ function _syncVerdictCharts(section, verdict, ticker) {
     }
 }
 
+/**
+ * Scroll a holding's title row to just beneath the sticky navbar.
+ * No-op when the title is already comfortably in view, so collapsing a row
+ * you just opened doesn't trigger a jarring jump.
+ */
+function scrollHoldingTitleIntoView(row) {
+    if (!row) return;
+    const navbar = document.querySelector("body > .navbar");
+    const navH = navbar ? navbar.offsetHeight : 0;
+    const rect = row.getBoundingClientRect();
+    if (rect.top >= navH + 4 && rect.bottom <= window.innerHeight) return;
+    const top = Math.max(0, window.scrollY + rect.top - navH - 14);
+    window.scrollTo({ top, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+}
+
 function initHoldingExpandFab() {
     if (document.getElementById("holding-expand-fab")) return;
     const fab = document.createElement("button");
@@ -5819,7 +5834,11 @@ function initHoldingExpandFab() {
     fab.addEventListener("click", () => {
         const openRows = [...document.querySelectorAll("#holdings-table tr[data-ticker].summary-open")];
         if (openRows.length) {
+            // Anchor to the topmost open row so the view returns to its title
+            // after the section(s) collapse.
+            const anchor = openRows[0];
             openRows.forEach(row => toggleSummaryRow(row));
+            scrollHoldingTitleIntoView(anchor);
             return;
         }
         const ticker = _lastExpandedHoldingTicker;
@@ -6101,7 +6120,7 @@ const _HOLD_MODE_META = {
     },
     anchor: {
         label: "Anchor",
-        icon: "bi-anchor",
+        icon: "bi-pin-angle-fill",
         tipTitle: "Anchor mode",
         tipBody:
             "Marks a holding you do not want to sell down. FolioSense will never suggest trimming it — "
@@ -6420,7 +6439,7 @@ function _collectVerdictContextChips(verdict, ticker) {
         chips.push({
             label: "Role",
             value: "Anchor · trim muted",
-            icon: "bi-anchor",
+            icon: "bi-pin-angle-fill",
             tipTitle: "Anchor holding",
             tipBody: "You marked this as a core anchor — trim calls are suppressed unless risk is extreme.",
             cls: "verdict-position-chip",
