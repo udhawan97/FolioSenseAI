@@ -183,6 +183,13 @@
                             <span class="brand-cost-meta" id="brand-cost-meta">Estimated from cached summaries</span>
                             <span class="brand-cost-breakdown" id="brand-cost-breakdown"></span>
                         </div>
+                        <div class="nav-menu-row" role="menuitem" data-engine-claude-only>
+                            <span class="nav-menu-icon" aria-hidden="true"><i class="bi bi-graph-up-arrow"></i></span>
+                            <span class="nav-menu-label">Per full scan</span>
+                            <span class="nav-menu-trailing">
+                                <span class="nav-menu-value" id="brand-predicted-label">—</span>
+                            </span>
+                        </div>
 
                         <div class="nav-menu-divider" aria-hidden="true"></div>
                         <div class="nav-menu-section">Dashboard</div>
@@ -241,17 +248,18 @@
             <div class="local-intel-guide-inner">
                 <span class="local-intel-guide-icon" aria-hidden="true"><i class="bi bi-cpu-fill"></i></span>
                 <div class="local-intel-guide-copy">
-                    <strong class="local-intel-guide-title">Local Intelligence — sharp math, zero poetry</strong>
+                    <strong class="local-intel-guide-title">Local Intelligence — fast, private, always on</strong>
                     <p class="local-intel-guide-text">
-                        Consider this your onboard briefing. FolioSense is running on-device right now:
-                        signals, charts, and Holding Intel stay fast, deterministic, and token-free.
-                        When you want Claude's voice — verdict quips, AI briefings, and
-                        <strong>Claude Summaries</strong> on Holdings — enable it in FolioSense:
-                        click <button type="button" class="local-intel-guide-link" id="local-intel-guide-menu-btn">menu</button>
-                        (<i class="bi bi-three-dots local-intel-guide-dots" aria-hidden="true"></i> top-right)
-                        → <strong>Intelligence → Engine</strong> → <strong>Claude AI</strong>.
-                        Or skip the tour and hit <strong>Enable Claude AI</strong> below — we'll refresh once
-                        and pick up exactly where you left off.
+                        Signals, charts, and Holdings run on-device: instant, token-free, no strings attached.
+                        Want Claude's take — verdict quips, AI briefings, <strong>Claude Summaries</strong>?
+                        The API key is free; Claude's opinions run about $0.0002 a pop (cheaper than your last trade fee, probably).
+                        Grab a key at
+                        <a href="https://console.anthropic.com" target="_blank" rel="noopener" class="local-intel-guide-link">console.anthropic.com</a>
+                        → <strong>API Keys → Create Key</strong>, then drop it in via
+                        <button type="button" class="local-intel-guide-link" id="local-intel-guide-menu-btn">menu</button>
+                        (<i class="bi bi-three-dots local-intel-guide-dots" aria-hidden="true"></i>)
+                        → <strong>Intelligence → Engine → Claude AI</strong>.
+                        Or just hit <strong>Enable Claude AI</strong> below.
                     </p>
                 </div>
                 <div class="local-intel-guide-actions">

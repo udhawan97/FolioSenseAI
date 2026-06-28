@@ -22,6 +22,18 @@ MODEL = "claude-haiku-4-5-20251001"
 _HEARTBEAT_CACHE: tuple[float, dict] | None = None
 _HEARTBEAT_TTL = 120  # seconds — matches frontend poll interval
 
+# Lifetime token accumulator — reset on process restart, updated after every API call
+_TOKEN_USAGE: dict[str, int] = {"total_in": 0, "total_out": 0}
+
+
+def _track_usage(model: str, usage) -> None:  # noqa: ARG001
+    _TOKEN_USAGE["total_in"] += getattr(usage, "input_tokens", 0) or 0
+    _TOKEN_USAGE["total_out"] += getattr(usage, "output_tokens", 0) or 0
+
+
+def get_accumulated_usage() -> dict:
+    return dict(_TOKEN_USAGE)
+
 
 def _compact_json(payload: dict) -> str:
     return json.dumps(payload, separators=(",", ":"), ensure_ascii=True)
@@ -172,6 +184,7 @@ def generate_verdict_ai_bundles(signals: list[dict]) -> dict[str, dict]:
             system=_cached_system(_VERDICT_SYSTEM),
             messages=[{"role": "user", "content": prompt}],
         )
+        _track_usage(MODEL, message.usage)
         text_block = next((b for b in message.content if b.type == "text"), None)
         raw = text_block.text.strip() if text_block else ""
         bundles = parse_ai_bundle_response(raw, ticker_set)
@@ -215,6 +228,7 @@ def generate_etf_profile_seed(ticker: str, name: str | None = None, limit: int =
             ),
             messages=[{"role": "user", "content": prompt}],
         )
+        _track_usage(MODEL, message.usage)
         text_block = next((b for b in message.content if b.type == "text"), None)
         raw = text_block.text.strip() if text_block else ""
         raw = re.sub(r"^```[a-z]*\s*|\s*```$", "", raw, flags=re.DOTALL).strip()
@@ -383,6 +397,7 @@ def generate_portfolio_briefing(snapshot: dict) -> dict:
         system=_cached_system(_BRIEFING_SYSTEM),
         messages=[{"role": "user", "content": _compact_json(snapshot)}],
     )
+    _track_usage(MODEL, message.usage)
     text_block = next((b for b in message.content if b.type == "text"), None)
     raw = (text_block.text.strip() if text_block else "")
     logger.info(
@@ -442,6 +457,7 @@ def generate_news_themes(snapshot: dict) -> dict:
         system=_cached_system(_NEWS_THEMES_SYSTEM),
         messages=[{"role": "user", "content": _compact_json(snapshot)}],
     )
+    _track_usage(MODEL, message.usage)
     text_block = next((b for b in message.content if b.type == "text"), None)
     raw = text_block.text.strip() if text_block else ""
     logger.info(
@@ -503,6 +519,7 @@ def generate_analytics_insights(snapshot: dict) -> dict:
         system=_cached_system(_analytics_insights_system()),
         messages=[{"role": "user", "content": _compact_json(slim)}],
     )
+    _track_usage(MODEL, message.usage)
     text_block = next((b for b in message.content if b.type == "text"), None)
     raw = (text_block.text.strip() if text_block else "")
     logger.info(
@@ -576,6 +593,7 @@ def generate_action_plan(snapshot: dict) -> dict:
         system=_cached_system(_ACTION_PLAN_SYSTEM),
         messages=[{"role": "user", "content": _compact_json(snapshot)}],
     )
+    _track_usage(ACTION_PLAN_MODEL, message.usage)
     text_block = next((b for b in message.content if b.type == "text"), None)
     raw = text_block.text.strip() if text_block else ""
     logger.info(
@@ -652,7 +670,7 @@ def generate_stock_summary(stock_data: dict) -> str:
             system=_cached_system(_SUMMARY_SYSTEM),
             messages=[{"role": "user", "content": prompt}],
         )
-
+        _track_usage(MODEL, message.usage)
         text_block = next((b for b in message.content if b.type == "text"), None)
         raw = text_block.text.strip() if text_block else ""
         logger.info(

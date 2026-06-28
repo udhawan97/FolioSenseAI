@@ -2056,26 +2056,21 @@ function renderSnapshotSectors(active) {
         const theme = snapshotSectorTheme(s.name);
         const pct = Math.max(2.5, toNumber(s.weight_pct));
         const rawPct = toNumber(s.weight_pct);
-        const showIcon = rawPct >= 6;
         return `<span class="snapshot-sector-seg"
             style="--snapshot-color:${theme.color};--snapshot-width:${pct}%;--snapshot-delay:${index * 35}ms"
-            title="${escapeHtml(s.name)} ${rawPct.toFixed(1)}%">
-            ${showIcon ? `<i class="bi ${theme.icon} snapshot-seg-icon" aria-hidden="true"></i>` : ""}
-        </span>`;
+            title="${escapeHtml(s.name)} ${rawPct.toFixed(1)}%"></span>`;
     }).join("");
 
-    const maxPct = sectors.length ? toNumber(sectors[0].weight_pct) : 1;
-    list.innerHTML = sectors.slice(0, 5).map((s, index) => {
+    list.innerHTML = sectors.map((s, index) => {
         const theme = snapshotSectorTheme(s.name);
         const pct = toNumber(s.weight_pct).toFixed(1);
-        const normalizedPct = (toNumber(s.weight_pct) / Math.max(maxPct, 1) * 100).toFixed(1);
         const isOther = !SNAPSHOT_SECTOR_THEMES.some(t => t.match.test(String(s.name || "").toLowerCase()));
         const tipTitle = `${s.name} · ${pct}%`;
         const tipHint = isOther
             ? "Industry-level breakdown coming soon"
             : "Industries this sector may include";
         return `<div class="snapshot-sector-item tip-trigger" tabindex="0"
-            style="--snapshot-color:${theme.color};--snapshot-pct:${normalizedPct}%;--snapshot-delay:${index * 35}ms"
+            style="--snapshot-color:${theme.color};--snapshot-delay:${index * 35}ms"
             data-tip-title="${escapeHtml(tipTitle)}"
             data-tip-body="${escapeHtml(theme.blurb || "")}"
             data-tip-hint="${escapeHtml(tipHint)}"
@@ -8107,18 +8102,36 @@ async function loadAiCostStats() {
             return;
         }
 
-        const cost = formatUsdTiny(data.estimated_cost_usd);
+        // Prefer actual tracked tokens when available, fall back to cache estimate
+        const hasActual = toNumber(data.actual_input_tokens) + toNumber(data.actual_output_tokens) > 0;
+        const displayCostUsd = hasActual ? toNumber(data.actual_cost_usd) : toNumber(data.estimated_cost_usd);
+        const displayCost = formatUsdTiny(displayCostUsd);
+        const inTok = hasActual ? toNumber(data.actual_input_tokens) : toNumber(data.estimated_input_tokens);
+        const outTok = hasActual ? toNumber(data.actual_output_tokens) : toNumber(data.estimated_output_tokens);
+
+        // Rates from API — never hardcoded so they update when pricing changes
+        const pricing = data.pricing || {};
+        const inRate = toNumber(pricing.input_usd_per_million_tokens, 1);
+        const outRate = toNumber(pricing.output_usd_per_million_tokens, 5);
+
+        // Predicted per-run from backend constants
+        const predicted = data.predicted_per_run || {};
+        const predictedCost = toNumber(predicted.cost_usd);
+        const predictedTok = toNumber(predicted.input_tokens) + toNumber(predicted.output_tokens);
+
         triggerEl?.classList.remove("claude-offline");
-        valueEl.textContent = cost;
-        metaEl.textContent = `${totalTokens.toLocaleString()} est. tokens across ${claudeCachedCount.toLocaleString()} Claude-backed cached summaries`;
-        if (triggerLabel) triggerLabel.textContent = cost;
+        valueEl.textContent = displayCost;
+        const sessionLabel = hasActual ? "session" : "est.";
+        metaEl.textContent = `${(inTok + outTok).toLocaleString()} tokens this ${sessionLabel} · ${claudeCachedCount.toLocaleString()} cached summaries`;
+        if (triggerLabel) triggerLabel.textContent = displayCost;
         if (breakdownEl) {
-            const inputTok = toNumber(data.estimated_input_tokens).toLocaleString();
-            const outputTok = toNumber(data.estimated_output_tokens).toLocaleString();
             const localNote = localCachedCount ? ` · ${localCachedCount.toLocaleString()} local/free` : "";
-            breakdownEl.textContent = `${inputTok} in · ${outputTok} out · $1/$5 per M${localNote}`;
+            const predictedNote = predictedCost > 0
+                ? ` · ~${formatUsdTiny(predictedCost)} / full scan (~${predictedTok.toLocaleString()} tok)`
+                : "";
+            breakdownEl.textContent = `${inTok.toLocaleString()} in · ${outTok.toLocaleString()} out · $${inRate}/$${outRate} per M${localNote}${predictedNote}`;
         }
-        const newCost = toNumber(data.estimated_cost_usd);
+        const newCost = displayCostUsd;
         if (notifEl && _lastAiCostUsd !== null && newCost !== _lastAiCostUsd) {
             notifEl.classList.add("brand-cost-notif--active");
             notifEl.setAttribute("aria-hidden", "false");

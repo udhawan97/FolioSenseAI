@@ -17,6 +17,7 @@ from app.services.ai_service import (
     MODEL,
     ACTION_PLAN_MODEL,
     get_cached_claude_heartbeat,
+    get_accumulated_usage,
     generate_etf_profile_seed,
     generate_portfolio_briefing,
     generate_analytics_insights,
@@ -85,6 +86,11 @@ PRICE_DRIFT_THRESHOLD = 0.08  # stock summaries only; verdicts key off action + 
 HAIKU_45_INPUT_USD_PER_MILLION = 1.00
 HAIKU_45_OUTPUT_USD_PER_MILLION = 5.00
 ESTIMATED_PROMPT_TOKENS_PER_SUMMARY = 120
+
+# Predicted tokens for one full dashboard cycle at ~10 holdings
+# summaries + verdicts + briefing + news + analytics + ETF seeds + action plan
+_PREDICTED_IN_PER_RUN = 2600
+_PREDICTED_OUT_PER_RUN = 3000
 
 
 def _is_number(value) -> bool:
@@ -344,6 +350,16 @@ async def get_ai_cache_stats(db: Session = Depends(get_db)):
     )
     claude_configured = bool(settings.ANTHROPIC_API_KEY.strip())
 
+    actual = get_accumulated_usage()
+    actual_cost_usd = (
+        actual["total_in"] / 1_000_000 * HAIKU_45_INPUT_USD_PER_MILLION
+        + actual["total_out"] / 1_000_000 * HAIKU_45_OUTPUT_USD_PER_MILLION
+    )
+    predicted_cost_usd = (
+        _PREDICTED_IN_PER_RUN / 1_000_000 * HAIKU_45_INPUT_USD_PER_MILLION
+        + _PREDICTED_OUT_PER_RUN / 1_000_000 * HAIKU_45_OUTPUT_USD_PER_MILLION
+    )
+
     return {
         "model": MODEL,
         "cached_summaries": cached_count,
@@ -353,6 +369,14 @@ async def get_ai_cache_stats(db: Session = Depends(get_db)):
         "estimated_output_tokens": estimated_output_tokens,
         "estimated_total_tokens": estimated_input_tokens + estimated_output_tokens,
         "estimated_cost_usd": round(estimated_cost_usd, 6),
+        "actual_input_tokens": actual["total_in"],
+        "actual_output_tokens": actual["total_out"],
+        "actual_cost_usd": round(actual_cost_usd, 6),
+        "predicted_per_run": {
+            "input_tokens": _PREDICTED_IN_PER_RUN,
+            "output_tokens": _PREDICTED_OUT_PER_RUN,
+            "cost_usd": round(predicted_cost_usd, 6),
+        },
         "pricing": {
             "input_usd_per_million_tokens": HAIKU_45_INPUT_USD_PER_MILLION,
             "output_usd_per_million_tokens": HAIKU_45_OUTPUT_USD_PER_MILLION,
