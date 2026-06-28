@@ -3943,39 +3943,49 @@ function animateMoveHeroNumber(el, targetText) {
 
 function _buildMarketBackdropBlock(regime, coverageData) {
     if (!regime || typeof regime !== "object") return "";
-    const riskRegime  = regime.risk_regime  || "";
-    const ratesRegime = regime.rates_regime || "";
-    const vixBand     = regime.vix_band     || "";
-    const usdRegime   = regime.usd_regime   || "";
+
+    // Normalize a regime field: coerce to lowercase string, reject if blank or suspiciously long.
+    const _rf = (v) => { const s = String(v || "").trim().toLowerCase(); return s.length > 0 && s.length < 30 ? s : ""; };
+
+    const riskRegime  = _rf(regime.risk_regime);
+    const ratesRegime = _rf(regime.rates_regime);
+    const vixBand     = _rf(regime.vix_band);
+    const usdRegime   = _rf(regime.usd_regime);
     if (!riskRegime && !ratesRegime && !vixBand && !usdRegime) return "";
 
+    // Known enum sets — only render cards for values the backend explicitly supports.
+    const KNOWN_RISK  = new Set(["risk_on", "risk_off", "neutral", "mixed"]);
+    const KNOWN_RATES = new Set(["rates_rising", "rates_falling", "rates_steady", "steady"]);
+    const KNOWN_VIX   = new Set(["elevated", "low", "normal"]);
+    const KNOWN_USD   = new Set(["usd_strong", "usd_weak", "usd_steady", "steady"]);
+
     const items = [];
-    if (riskRegime) {
+    if (KNOWN_RISK.has(riskRegime)) {
         items.push(riskRegime === "risk_on"
-            ? { icon: "bi-graph-up-arrow",   label: "Risk mood",   value: "Risk-on",  detail: "Markets chasing growth",           tone: "positive" }
+            ? { icon: "bi-graph-up-arrow",   label: "Risk mood", value: "Risk-on",  detail: "Markets chasing growth",    tone: "positive" }
             : riskRegime === "risk_off"
-            ? { icon: "bi-graph-down-arrow", label: "Risk mood",   value: "Risk-off", detail: "Investors playing it safe",         tone: "negative" }
-            : { icon: "bi-dash-circle",      label: "Risk mood",   value: "Mixed",    detail: "No clear directional bias",        tone: "neutral"  });
+            ? { icon: "bi-graph-down-arrow", label: "Risk mood", value: "Risk-off", detail: "Investors playing it safe", tone: "negative" }
+            : { icon: "bi-dash-circle",      label: "Risk mood", value: "Mixed",    detail: "No clear directional bias", tone: "neutral"  });
     }
-    if (ratesRegime) {
+    if (KNOWN_RATES.has(ratesRegime)) {
         items.push(ratesRegime === "rates_rising"
-            ? { icon: "bi-bank", label: "Rates", value: "Rising", detail: "Borrowing costs climbing",      tone: "gold" }
+            ? { icon: "bi-bank", label: "Rates", value: "Rising", detail: "Borrowing costs climbing",       tone: "gold" }
             : ratesRegime === "rates_falling"
-            ? { icon: "bi-bank", label: "Rates", value: "Easing", detail: "Borrowing costs coming down",  tone: "cyan" }
+            ? { icon: "bi-bank", label: "Rates", value: "Easing", detail: "Borrowing costs coming down",   tone: "cyan" }
             : { icon: "bi-bank", label: "Rates", value: "Steady", detail: "Rates holding near current level", tone: "blue" });
     }
-    if (vixBand) {
+    if (KNOWN_VIX.has(vixBand)) {
         items.push(vixBand === "elevated"
-            ? { icon: "bi-activity", label: "Fear gauge", value: "Jittery", detail: "Volatility above normal",         tone: "negative" }
+            ? { icon: "bi-activity", label: "Fear gauge", value: "Jittery", detail: "Volatility above normal",           tone: "negative" }
             : vixBand === "low"
             ? { icon: "bi-activity", label: "Fear gauge", value: "Calm",    detail: "Markets relaxed \u2014 low volatility", tone: "positive" }
-            : { icon: "bi-activity", label: "Fear gauge", value: "Normal",  detail: "Volatility in usual range",       tone: "blue"     });
+            : { icon: "bi-activity", label: "Fear gauge", value: "Normal",  detail: "Volatility in usual range",         tone: "blue"     });
     }
-    if (usdRegime) {
+    if (KNOWN_USD.has(usdRegime)) {
         items.push(usdRegime === "usd_strong"
-            ? { icon: "bi-currency-exchange", label: "Dollar", value: "Strong USD", detail: "US dollar rising vs peers",   tone: "cyan"    }
+            ? { icon: "bi-currency-exchange", label: "Dollar", value: "Strong USD", detail: "US dollar rising vs peers",    tone: "cyan"    }
             : usdRegime === "usd_weak"
-            ? { icon: "bi-currency-exchange", label: "Dollar", value: "Weak USD",   detail: "Dollar declining vs peers",   tone: "gold"    }
+            ? { icon: "bi-currency-exchange", label: "Dollar", value: "Weak USD",   detail: "Dollar declining vs peers",    tone: "gold"    }
             : { icon: "bi-currency-exchange", label: "Dollar", value: "Steady USD", detail: "Dollar near its recent range", tone: "neutral" });
     }
     if (items.length === 0) return "";
@@ -3991,36 +4001,41 @@ function _buildMarketBackdropBlock(regime, coverageData) {
         </div>`).join("")}
     </div>`;
 
-    const moodWord = riskRegime === "risk_on" ? "risk-on" : riskRegime === "risk_off" ? "risk-off" : "mixed";
-    const vixWord  = vixBand === "elevated" ? "jittery fear gauge" : vixBand === "low" ? "calm fear gauge" : "normal fear gauge";
+    // Summary sentence only when we have at least one recognized directional signal.
+    const hasKnownRisk = riskRegime === "risk_on" || riskRegime === "risk_off";
+    const hasKnownVix  = vixBand === "elevated" || vixBand === "low";
+    const summaryHtml  = (hasKnownRisk || hasKnownVix) ? (() => {
+        const moodWord = riskRegime === "risk_on" ? "risk-on" : riskRegime === "risk_off" ? "risk-off" : "mixed";
+        const vixWord  = vixBand === "elevated" ? "jittery fear gauge" : vixBand === "low" ? "calm fear gauge" : "normal fear gauge";
 
-    const sectors    = (coverageData?.sectors || []).map(s => (s.name || "").toLowerCase());
-    const theme      = (coverageData?.theme   || "").toLowerCase();
-    const isGrowth   = sectors.some(s => /tech|software|growth|consumer discret/.test(s)) || /growth|tech/.test(theme);
-    const isDefensive = sectors.some(s => /util|health|consumer stap|real estate/.test(s)) || /defensive|dividend/.test(theme);
+        const sectors     = (coverageData?.sectors || []).map(s => (s.name || "").toLowerCase());
+        const theme       = (coverageData?.theme   || "").toLowerCase();
+        const isGrowth    = sectors.some(s => /tech|software|growth|consumer discret/.test(s)) || /growth|tech/.test(theme);
+        const isDefensive = sectors.some(s => /util|health|consumer stap|real estate/.test(s)) || /defensive|dividend/.test(theme);
 
-    let tailClause;
-    if (riskRegime === "risk_off" && vixBand === "elevated") {
-        tailClause = isDefensive ? " \u2014 defensive pockets stayed more resilient than growth today."
-            : isGrowth            ? " \u2014 growth and risk assets typically face the most pressure."
-            :                       " \u2014 investors shifted toward safer ground today.";
-    } else if (riskRegime === "risk_on" && vixBand === "low") {
-        tailClause = isGrowth     ? " \u2014 growth and tech usually benefit the most."
-            : isDefensive         ? " \u2014 even defensive holdings tend to find buyers in this backdrop."
-            :                       " \u2014 a broad tailwind for most holdings today.";
-    } else if (riskRegime === "risk_off") {
-        tailClause = " \u2014 defensive corners held up better than growth today.";
-    } else if (riskRegime === "risk_on") {
-        tailClause = " \u2014 broad market conditions support most holdings.";
-    } else {
-        tailClause = " \u2014 no clear directional push from the broader market today.";
-    }
+        let tailClause;
+        if (riskRegime === "risk_off" && vixBand === "elevated") {
+            tailClause = isDefensive ? " \u2014 defensive pockets stayed more resilient than growth today."
+                : isGrowth           ? " \u2014 growth and risk assets typically face the most pressure."
+                :                      " \u2014 investors shifted toward safer ground today.";
+        } else if (riskRegime === "risk_on" && vixBand === "low") {
+            tailClause = isGrowth    ? " \u2014 growth and tech usually benefit the most."
+                : isDefensive        ? " \u2014 even defensive holdings tend to find buyers in this backdrop."
+                :                      " \u2014 a broad tailwind for most holdings today.";
+        } else if (riskRegime === "risk_off") {
+            tailClause = " \u2014 defensive corners held up better than growth today.";
+        } else if (riskRegime === "risk_on") {
+            tailClause = " \u2014 broad market conditions support most holdings.";
+        } else {
+            tailClause = " \u2014 no clear directional push from the broader market today.";
+        }
+        return `<p class="move-explanation-text">${escapeHtml(`Broad market leaning ${moodWord} with a ${vixWord}${tailClause}`)}</p>`;
+    })() : "";
 
-    const summary = `Broad market leaning ${moodWord} with a ${vixWord}${tailClause}`;
     return `
         <div class="intel-label"><i class="bi bi-globe-americas"></i> Market backdrop</div>
         ${pulseHtml}
-        <p class="move-explanation-text">${escapeHtml(summary)}</p>`;
+        ${summaryHtml}`;
 }
 
 function _buildTodayInContextBlock(timing, data) {
@@ -4039,9 +4054,15 @@ function _buildTodayInContextBlock(timing, data) {
     if (!Number.isFinite(typicalSwing) || typicalSwing < 0.01) {
         typicalSwing = deltas.reduce((s, v) => s + Math.abs(v), 0) / deltas.length;
     }
-    typicalSwing = Math.round(typicalSwing * 10) / 10 || 0.1;
+    // Clamp to [0.05, 25]% — guards against a flat 30-day period producing 0, or a
+    // single extreme outlier inflating the baseline into an absurd number.
+    typicalSwing = Math.min(Math.max(Math.round(typicalSwing * 10) / 10, 0.05), 25);
 
-    const today          = Math.abs(data.day_change_pct || 0);
+    // Require a finite day change — if the explanation was fetched before price data
+    // was available, `day_change_pct` can be null/NaN and the classification would be wrong.
+    if (!isFiniteNumber(data.day_change_pct)) return "";
+    const today = Math.abs(Number(data.day_change_pct));
+
     const classification = today <= typicalSwing       ? "Routine day"
         : today <= 2 * typicalSwing                    ? "Notable day"
         :                                                "Big day";
@@ -4081,17 +4102,27 @@ function _buildTrendContextBlock(timing) {
 
     const rows = [];
     if (timing.vs50d_pct != null && Number.isFinite(Number(timing.vs50d_pct))) {
-        rows.push(`<div class="intel-spec-row"><span>vs 50-day avg</span><strong>${escapeHtml(formatPct(Number(timing.vs50d_pct)))}</strong></div>`);
+        const val = Number(timing.vs50d_pct);
+        // Reject values outside ±500% — almost certainly a data artifact or unit mismatch.
+        if (Math.abs(val) < 500) {
+            rows.push(`<div class="intel-spec-row"><span>vs 50-day avg</span><strong>${escapeHtml(formatPct(val))}</strong></div>`);
+        }
     }
     if (timing.vs200d_pct != null && Number.isFinite(Number(timing.vs200d_pct))) {
-        rows.push(`<div class="intel-spec-row"><span>vs 200-day avg</span><strong>${escapeHtml(formatPct(Number(timing.vs200d_pct)))}</strong></div>`);
+        const val = Number(timing.vs200d_pct);
+        if (Math.abs(val) < 500) {
+            rows.push(`<div class="intel-spec-row"><span>vs 200-day avg</span><strong>${escapeHtml(formatPct(val))}</strong></div>`);
+        }
     }
-    if (timing.momentum_state) {
-        const mWord = momentumMap[timing.momentum_state] || timing.momentum_state;
-        rows.push(`<div class="intel-spec-row"><span>Momentum</span><strong>${escapeHtml(mWord)}</strong></div>`);
+    // Only surface momentum labels that are in the known map — never let raw API strings
+    // reach the UI (e.g. if the backend adds a new state we haven't mapped yet).
+    if (timing.momentum_state && Object.prototype.hasOwnProperty.call(momentumMap, timing.momentum_state)) {
+        rows.push(`<div class="intel-spec-row"><span>Momentum</span><strong>${escapeHtml(momentumMap[timing.momentum_state])}</strong></div>`);
     }
     const dd = Number(timing.drawdown_from_52w_high_pct);
-    if (Number.isFinite(dd) && dd >= 3) {
+    // The backend may return this as a positive (5) or negative (-5) number depending on
+    // version; Math.abs handles both conventions.
+    if (Number.isFinite(dd) && Math.abs(dd) >= 3) {
         rows.push(`<div class="intel-spec-row"><span>Off its 1-yr high</span><strong>-${Math.abs(dd).toFixed(1)}%</strong></div>`);
     }
     if (rows.length === 0) return "";
@@ -4703,6 +4734,249 @@ function renderMarketPulseStrip(data) {
         </div>`;
 }
 
+// ── Stock deep-dive enrichment helpers ───────────────────────────────────────
+
+function _buildEquityFundamentals(data, rating, aiMode) {
+    const valuationRows = [];
+    const profitabilityRows = [];
+    const growthRows = [];
+
+    if (isFiniteNumber(data.pe_ratio) && Number(data.pe_ratio) > 0) {
+        valuationRows.push(`<div class="intel-spec-row"><span>P/E ratio ${_verdictTip({
+            title: "P/E ratio",
+            body: "How many years of current earnings investors are paying for. Higher means the market expects faster growth ahead.",
+        })}</span><strong>${escapeHtml(formatPositiveMultiple(data.pe_ratio))}</strong></div>`);
+    }
+    if (isFiniteNumber(data.forward_pe) && Number(data.forward_pe) > 0) {
+        valuationRows.push(`<div class="intel-spec-row"><span>Forward P/E ${_verdictTip({
+            title: "Forward P/E",
+            body: "Like P/E but uses next year's expected earnings. Lower can mean the stock looks cheaper once growth kicks in.",
+        })}</span><strong>${escapeHtml(formatPositiveMultiple(data.forward_pe))}</strong></div>`);
+    }
+    if (isFiniteNumber(data.enterprise_to_revenue) && Number(data.enterprise_to_revenue) > 0) {
+        valuationRows.push(`<div class="intel-spec-row"><span>EV / Sales ${_verdictTip({
+            title: "Enterprise value / Sales",
+            body: "Total company value (equity + debt) divided by annual revenue — useful for comparing firms with different debt loads.",
+        })}</span><strong>${escapeHtml(formatPositiveMultiple(data.enterprise_to_revenue))}</strong></div>`);
+    } else if (isFiniteNumber(data.price_to_sales) && Number(data.price_to_sales) > 0) {
+        valuationRows.push(`<div class="intel-spec-row"><span>Price / Sales ${_verdictTip({
+            title: "Price / Sales",
+            body: "What investors pay per dollar of revenue — handy when profits are thin or negative. Lower often means cheaper.",
+        })}</span><strong>${escapeHtml(formatPositiveMultiple(data.price_to_sales))}</strong></div>`);
+    }
+    if (isFiniteNumber(data.enterprise_to_ebitda) && Number(data.enterprise_to_ebitda) > 0) {
+        valuationRows.push(`<div class="intel-spec-row"><span>EV / EBITDA ${_verdictTip({
+            title: "Enterprise value / EBITDA",
+            body: "Total company value versus operating profit before interest, taxes, and accounting charges. A standard M&A yardstick.",
+        })}</span><strong>${escapeHtml(formatPositiveMultiple(data.enterprise_to_ebitda))}</strong></div>`);
+    }
+
+    if (isFiniteNumber(data.profit_margin)) {
+        const v = Number(data.profit_margin);
+        const cls = v > 0 ? " class=\"text-success\"" : v < 0 ? " class=\"text-danger\"" : "";
+        profitabilityRows.push(`<div class="intel-spec-row"><span>Profit margin ${_verdictTip({
+            title: "Net profit margin",
+            body: "Cents kept as net profit after every bill — taxes, interest, everything. Positive means the company is making money.",
+        })}</span><strong${cls}>${escapeHtml(formatPercentMetric(v, 1))}</strong></div>`);
+    }
+    if (isFiniteNumber(data.operating_margin)) {
+        const v = Number(data.operating_margin);
+        const cls = v > 0 ? " class=\"text-success\"" : v < 0 ? " class=\"text-danger\"" : "";
+        profitabilityRows.push(`<div class="intel-spec-row"><span>Operating margin ${_verdictTip({
+            title: "Operating margin",
+            body: "Profit from the core business before interest and taxes — a clean view of how efficient the operation actually is.",
+        })}</span><strong${cls}>${escapeHtml(formatPercentMetric(v, 1))}</strong></div>`);
+    }
+    if (isFiniteNumber(data.gross_margin)) {
+        const v = Number(data.gross_margin);
+        const cls = v > 0 ? " class=\"text-success\"" : v < 0 ? " class=\"text-danger\"" : "";
+        profitabilityRows.push(`<div class="intel-spec-row"><span>Gross margin ${_verdictTip({
+            title: "Gross margin",
+            body: "Revenue minus direct production costs, as a percentage. High gross margins leave room for profit after other expenses.",
+        })}</span><strong${cls}>${escapeHtml(formatPercentMetric(v, 1))}</strong></div>`);
+    }
+
+    if (isFiniteNumber(data.revenue_growth)) {
+        const v = Number(data.revenue_growth);
+        const cls = v > 0 ? " class=\"text-success\"" : v < 0 ? " class=\"text-danger\"" : "";
+        growthRows.push(`<div class="intel-spec-row"><span>Revenue growth ${_verdictTip({
+            title: "Revenue growth",
+            body: "How fast the company's sales grew versus the same period last year — the fuel that eventually drives profits.",
+        })}</span><strong${cls}>${escapeHtml(formatPercentMetric(v, 1))}</strong></div>`);
+    }
+    if (isFiniteNumber(data.fcf_yield)) {
+        const v = Number(data.fcf_yield);
+        const cls = v > 0 ? " class=\"text-success\"" : v < 0 ? " class=\"text-danger\"" : "";
+        growthRows.push(`<div class="intel-spec-row"><span>FCF yield ${_verdictTip({
+            title: "Free cash flow yield",
+            body: "Real cash generated as a percentage of market cap — the purest sign of financial health, harder to fake than earnings.",
+        })}</span><strong${cls}>${escapeHtml(formatPercentMetric(v, 1))}</strong></div>`);
+    }
+    if (isFiniteNumber(data.dividend_yield) && Number(data.dividend_yield) > 0) {
+        growthRows.push(`<div class="intel-spec-row"><span>Dividend yield ${_verdictTip({
+            title: "Dividend yield",
+            body: "Annual cash paid to shareholders as a percentage of the stock price — income you receive without having to sell shares.",
+        })}</span><strong class="text-success">${escapeHtml(formatPercentMetric(Number(data.dividend_yield), 1))}</strong></div>`);
+    }
+    if (isFiniteNumber(data.total_revenue) && Number(data.total_revenue) > 0) {
+        growthRows.push(`<div class="intel-spec-row"><span>Revenue ${_verdictTip({
+            title: "Annual revenue",
+            body: "Total sales the company brought in over the last 12 months — the top line of every income statement.",
+        })}</span><strong>${escapeHtml(formatCompact(data.total_revenue))}</strong></div>`);
+    }
+    if (isFiniteNumber(data.ebitda) && Number(data.ebitda) > 0) {
+        growthRows.push(`<div class="intel-spec-row"><span>EBITDA ${_verdictTip({
+            title: "EBITDA",
+            body: "Earnings before interest, taxes, depreciation, and amortization — a rough proxy for operating cash flow.",
+        })}</span><strong>${escapeHtml(formatCompact(data.ebitda))}</strong></div>`);
+    }
+
+    if (!valuationRows.length && !profitabilityRows.length && !growthRows.length) return "";
+
+    const pmRaw = isFiniteNumber(data.profit_margin) ? Number(data.profit_margin) : null;
+    const pmPct = pmRaw !== null ? (Math.abs(pmRaw) <= 1 ? pmRaw * 100 : pmRaw) : null;
+    const rgRaw = isFiniteNumber(data.revenue_growth) ? Number(data.revenue_growth) : null;
+    const rgPct = rgRaw !== null ? (Math.abs(rgRaw) <= 1 ? rgRaw * 100 : rgRaw) : null;
+    const pe = (isFiniteNumber(data.forward_pe) && Number(data.forward_pe) > 0) ? Number(data.forward_pe)
+             : (isFiniteNumber(data.pe_ratio) && Number(data.pe_ratio) > 0) ? Number(data.pe_ratio) : null;
+
+    const sentenceParts = [];
+    if (pmPct !== null) {
+        if (pmPct > 15) sentenceParts.push("highly profitable");
+        else if (pmPct > 0) sentenceParts.push("profitable");
+        else sentenceParts.push("currently unprofitable");
+    }
+    if (rgPct !== null) {
+        if (rgPct > 20) sentenceParts.push("growing revenue quickly");
+        else if (rgPct > 5) sentenceParts.push("growing steadily");
+        else if (rgPct >= 0) sentenceParts.push("with flat revenue");
+        else sentenceParts.push("with shrinking revenue");
+    }
+    if (pe !== null) {
+        if (pe > 40) sentenceParts.push("valued richly by earnings standards");
+        else if (pe < 15) sentenceParts.push("at a modest earnings multiple");
+        else sentenceParts.push("at a fair earnings multiple");
+    }
+
+    let summaryHtml = "";
+    if (sentenceParts.length) {
+        const joined = sentenceParts.length > 1
+            ? sentenceParts.slice(0, -1).join(", ") + " and " + sentenceParts[sentenceParts.length - 1]
+            : sentenceParts[0];
+        const sentence = joined.charAt(0).toUpperCase() + joined.slice(1) + ".";
+        const tipBody = aiMode && data.strategy
+            ? String(data.strategy).slice(0, 140)
+            : "Based on live financial data — useful context, not a recommendation.";
+        const tip = _verdictTip({
+            title: "Financial snapshot",
+            body: tipBody,
+            icon: aiMode ? "bi-stars" : "bi-info-circle-fill",
+            variant: aiMode ? "ai" : "",
+        });
+        summaryHtml = `<p class="eq-fundamentals-summary">${escapeHtml(sentence)} ${tip}</p>`;
+    }
+
+    const groupParts = [];
+    if (valuationRows.length) groupParts.push(`<div class="intel-spec-rows">${valuationRows.join("")}</div>`);
+    if (profitabilityRows.length) groupParts.push(`<div class="intel-spec-rows">${profitabilityRows.join("")}</div>`);
+    if (growthRows.length) groupParts.push(`<div class="intel-spec-rows">${growthRows.join("")}</div>`);
+
+    return `
+        <div class="coverage-section">
+            ${renderCoverageDivider("bi-table", "By the numbers")}
+            ${renderCoverageSectionHint("The financial vital signs behind this company")}
+            ${groupParts.join("")}
+            ${summaryHtml}
+        </div>`;
+}
+
+function _buildEquityValueBlock(data, rating, timing) {
+    const watchLevels = timing.watch_levels || {};
+    const posPct = isFiniteNumber(timing.range_position_pct) ? Number(timing.range_position_pct) : null;
+    const low = isFiniteNumber(watchLevels.fifty_two_week_low) ? Number(watchLevels.fifty_two_week_low) : null;
+    const high = isFiniteNumber(watchLevels.fifty_two_week_high) ? Number(watchLevels.fifty_two_week_high) : null;
+
+    let rangeBarHtml = "";
+    if (posPct !== null && low !== null && high !== null && high > low) {
+        const pct = Math.min(Math.max(posPct, 0), 100);
+        let zoneTone, zoneLabel;
+        if (pct <= 33) {
+            zoneTone = "positive";
+            zoneLabel = "Bargain zone";
+        } else if (pct <= 66) {
+            zoneTone = "cyan";
+            zoneLabel = "Fair zone";
+        } else {
+            zoneTone = "gold";
+            zoneLabel = "Expensive zone";
+        }
+        const dd = isFiniteNumber(timing.drawdown_from_52w_high_pct)
+            ? Math.abs(Number(timing.drawdown_from_52w_high_pct)) : 0;
+        const drawdownCaption = dd >= 3
+            ? `<p class="eq-range-drawdown">\u2014 ${dd.toFixed(1)}% off its 12-month high</p>`
+            : "";
+        const rangeTip = _verdictTip({
+            title: "52-week range",
+            body: "Where today's price sits between the stock's 12-month low and high. Lower in the range can mean more room to recover.",
+        });
+        rangeBarHtml = `
+            <div class="eq-range-bar-wrap">
+                <div class="eq-range-bar-labels">
+                    <span class="eq-range-edge">${escapeHtml(formatCurrency(low))}</span>
+                    <span class="eq-range-zone ${escapeHtml(zoneTone)}">${escapeHtml(zoneLabel)} ${rangeTip}</span>
+                    <span class="eq-range-edge">${escapeHtml(formatCurrency(high))}</span>
+                </div>
+                <div class="eq-range-bar-track">
+                    <div class="eq-range-bar-fill ${escapeHtml(zoneTone)}" style="width:${pct.toFixed(1)}%"></div>
+                    <div class="eq-range-bar-marker" style="left:${pct.toFixed(1)}%"></div>
+                </div>
+                ${drawdownCaption}
+            </div>`;
+    }
+
+    let analystHtml = "";
+    if (isFiniteNumber(rating.target_price) || (rating.analyst_count && rating.label)) {
+        const rows = [];
+        if (isFiniteNumber(rating.target_price)) {
+            const upside = isFiniteNumber(rating.target_upside_pct) ? Number(rating.target_upside_pct) : null;
+            const tone = upside !== null ? signalTone(upside) : "neutral";
+            const toneClass = tone === "positive" ? "text-success" : tone === "negative" ? "text-danger" : "text-secondary";
+            const upsideSpan = upside !== null
+                ? ` <span class="${toneClass}">${escapeHtml(formatSignalPct(upside))}</span>`
+                : "";
+            rows.push(`<div class="intel-spec-row">
+                <span>Analyst target ${_verdictTip({
+                    title: "Analyst price target",
+                    body: "The average price Wall Street analysts think this stock is worth 12 months from now.",
+                })}</span>
+                <strong>${escapeHtml(formatCurrency(rating.target_price))}${upsideSpan}</strong>
+            </div>`);
+        }
+        if (rating.analyst_count && rating.label) {
+            rows.push(`<div class="intel-spec-row">
+                <span>Consensus ${_verdictTip({
+                    title: "Analyst consensus",
+                    body: "How many analysts cover this stock and what their average recommendation is — Buy, Hold, or Sell.",
+                })}</span>
+                <strong>${escapeHtml(String(rating.analyst_count))} analysts · ${escapeHtml(String(rating.label))}</strong>
+            </div>`);
+        }
+        if (rows.length) {
+            analystHtml = `<div class="intel-spec-rows">${rows.join("")}</div>`;
+        }
+    }
+
+    if (!rangeBarHtml && !analystHtml) return "";
+
+    return `
+        <div class="coverage-section">
+            ${renderCoverageDivider("bi-graph-up", "Where it trades")}
+            ${renderCoverageSectionHint("How today\u2019s price compares to its last 12 months and to Wall Street\u2019s targets")}
+            ${rangeBarHtml}
+            ${analystHtml}
+        </div>`;
+}
+
 function renderHoldingCoverage(section, data) {
     if (!data) {
         section.innerHTML = `<div class="intel-coverage"><span class="intel-na">Coverage data not available</span></div>`;
@@ -4719,6 +4993,9 @@ function renderHoldingCoverage(section, data) {
     const heroTagline = data.theme || typeHint;
     const heroSubhint = data.theme ? typeHint : "";
     const strategyText = (data.strategy || "").trim();
+    const verdict = cachedVerdicts[data.ticker] || {};
+    const timing = verdict.timing || {};
+    const aiMode = !isLocalIntelligenceMode();
 
     const heroHtml = `
         <div class="coverage-hero">
@@ -4844,6 +5121,10 @@ function renderHoldingCoverage(section, data) {
            </div>`
         : "";
 
+    const equityDeepDiveHtml = coverageType === "equity"
+        ? (_buildEquityFundamentals(data, rating, aiMode) + _buildEquityValueBlock(data, rating, timing))
+        : "";
+
     section.innerHTML = `
         <div class="intel-coverage">
             <div class="intel-label"><i class="bi bi-layers"></i> What It Covers</div>
@@ -4853,6 +5134,7 @@ function renderHoldingCoverage(section, data) {
             ${insideHtml}
             ${etfProfileHtml}
             ${extrasHtml}
+            ${equityDeepDiveHtml}
         </div>`;
     if (data.ticker && _isCoverageRowOpen(section)) {
         _syncDeepIntelSection(section, data.ticker);
@@ -10183,8 +10465,8 @@ function _newsArticleCardHtml(item) {
 }
 
 /**
- * Render a holding group block (header chip + article list).
- * P/L-colored accent comes from the existing color helpers.
+ * Render a holding group block using a native <details>/<summary> dropdown.
+ * The browser handles show/hide with zero JS overhead; chevron is CSS-only.
  */
 function _newsGroupHtml(holding) {
     const watchBadge = holding.is_watchlist
@@ -10198,17 +10480,27 @@ function _newsGroupHtml(holding) {
         ? `<span class="news-group-sector">${escapeHtml(holding.sector)}</span>`
         : "";
 
-    return `<section class="news-group" aria-label="${escapeHtml(holding.ticker)} news">
-        <div class="news-group-header">
+    const count = holding.items.length;
+    const countBadge = `<span class="news-group-count" aria-label="${count} article${count !== 1 ? "s" : ""}">${count}</span>`;
+
+    // First holding with news is open by default; the rest are collapsed.
+    const openAttr = (holding._isFirst && count > 0) ? " open" : "";
+
+    return `<details class="news-group"${openAttr}>
+        <summary class="news-group-header">
             <span class="news-group-chip">${escapeHtml(holding.ticker)}</span>
             <span class="news-group-name">${escapeHtml(holding.company_name)}</span>
             ${watchBadge}
             ${sector}
-        </div>
+            <span class="news-group-right">
+                ${countBadge}
+                <i class="bi bi-chevron-down news-group-chevron" aria-hidden="true"></i>
+            </span>
+        </summary>
         <div class="news-article-list">
             ${articles}
         </div>
-    </section>`;
+    </details>`;
 }
 
 /** Render the feed section from cached feed data. */
@@ -10225,7 +10517,15 @@ function _newsRenderFeed(feedData) {
         return;
     }
 
-    wrap.innerHTML = holdings.map(_newsGroupHtml).join("");
+    // Mark the first holding that has news so it opens by default.
+    let firstMarked = false;
+    const annotated = holdings.map(h => {
+        const isFirst = !firstMarked && h.items && h.items.length > 0;
+        if (isFirst) firstMarked = true;
+        return { ...h, _isFirst: isFirst };
+    });
+
+    wrap.innerHTML = annotated.map(_newsGroupHtml).join("");
     _newsShowEmpty(false);
     _newsShowFeed(true);
 }

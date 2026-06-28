@@ -13093,7 +13093,7 @@ svg.signal-radar {
 .holding-expand-fab {
     position: fixed;
     right: max(1rem, env(safe-area-inset-right, 0px));
-    bottom: max(1.15rem, env(safe-area-inset-bottom, 0px));
+    top: 50%;
     z-index: 1035;
     display: inline-flex;
     align-items: center;
@@ -13114,7 +13114,11 @@ svg.signal-radar {
         0 0 0 1px color-mix(in srgb, white 8%, transparent) inset;
     cursor: pointer;
     opacity: 0;
-    transform: translateY(10px) scale(0.96);
+    /* Vertically centered on the right edge so it stays reachable while
+       reading a long expanded section — no need to scroll back up to the
+       row header to collapse. translateY(-50%) keeps it centered; the
+       horizontal slide + scale animate the entrance. */
+    transform: translateY(-50%) translateX(12px) scale(0.96);
     pointer-events: none;
     transition:
         opacity 0.22s ease,
@@ -13124,7 +13128,7 @@ svg.signal-radar {
 
 .holding-expand-fab.is-visible {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(-50%) translateX(0) scale(1);
     pointer-events: auto;
 }
 
@@ -18461,52 +18465,129 @@ body > .correlation-cell-tip {
 .news-feed-wrap {
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 0.5rem;
 }
 
+/* <details> element — browser handles open/closed natively */
 .news-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0.625rem;
+    border: 1px solid var(--hairline);
+    border-radius: 0.7rem;
+    overflow: hidden;
+    background: var(--surface);
+    transition: border-color 0.15s var(--ease);
 }
 
+.news-group[open] {
+    border-color: var(--hairline-hover);
+}
+
+/* <summary> — the clickable holding header */
 .news-group-header {
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid var(--hairline);
+    flex-wrap: nowrap;
+    gap: 0.625rem;
+    padding: 0.75rem 0.875rem;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;           /* Firefox */
+    -webkit-appearance: none;  /* Safari */
+    transition: background 0.12s var(--ease);
 }
 
-.news-group-chip {
-    font-size: var(--ts-sm);
-    font-weight: 700;
-    font-family: var(--font-mono, ui-monospace, "SF Mono", monospace);
-    letter-spacing: 0.04em;
-    color: var(--text-primary);
+/* Remove default browser disclosure triangle */
+.news-group-header::-webkit-details-marker { display: none; }
+.news-group-header::marker               { display: none; }
+
+.news-group-header:hover {
     background: var(--surface-strong);
-    border: 1px solid var(--hairline-hover);
-    border-radius: 0.35rem;
-    padding: 0.15rem 0.55rem;
 }
 
+.news-group-header:active {
+    background: var(--surface-hover);
+}
+
+/* Ticker chip — bold, accent-colored, prominent */
+.news-group-chip {
+    flex-shrink: 0;
+    font-size: 0.82rem;
+    font-weight: 800;
+    font-family: var(--font-mono, ui-monospace, "SF Mono", monospace);
+    letter-spacing: 0.06em;
+    color: var(--brand-cyan);
+    background: rgba(111, 214, 240, 0.1);
+    border: 1px solid rgba(111, 214, 240, 0.28);
+    border-radius: 0.35rem;
+    padding: 0.2rem 0.6rem;
+    text-shadow: 0 0 14px rgba(111, 214, 240, 0.35);
+    transition: background 0.12s, border-color 0.12s;
+}
+
+.news-group[open] .news-group-chip {
+    background: rgba(111, 214, 240, 0.16);
+    border-color: rgba(111, 214, 240, 0.42);
+}
+
+/* Company name — clear, bold */
 .news-group-name {
-    font-size: var(--ts-sm);
-    color: var(--text-secondary);
+    font-size: var(--ts-body);
+    font-weight: 700;
+    color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 16rem;
+    min-width: 0;
+    flex: 1;
 }
 
 .news-group-sector {
     font-size: var(--ts-xs);
     color: var(--text-tertiary);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Right-side cluster: count pill + chevron */
+.news-group-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
     margin-left: auto;
 }
 
+.news-group-count {
+    font-size: var(--ts-xs);
+    font-weight: 600;
+    color: var(--text-tertiary);
+    background: var(--surface-strong);
+    border: 1px solid var(--hairline);
+    border-radius: 2rem;
+    padding: 0.1rem 0.5rem;
+    line-height: 1.4;
+    transition: color 0.12s, border-color 0.12s;
+}
+
+.news-group[open] .news-group-count {
+    color: var(--text-secondary);
+    border-color: var(--hairline-hover);
+}
+
+/* Chevron — GPU-only rotation, instant-feel */
+.news-group-chevron {
+    font-size: 0.7rem;
+    color: var(--text-tertiary);
+    transition: transform 0.18s var(--ease), color 0.15s;
+    will-change: transform;
+}
+
+.news-group[open] .news-group-chevron {
+    transform: rotate(-180deg);
+    color: var(--text-secondary);
+}
+
 .news-watchlist-badge {
+    flex-shrink: 0;
     font-size: var(--ts-xs);
     font-weight: 600;
     color: var(--accent-cyan);
@@ -18520,18 +18601,19 @@ body > .correlation-cell-tip {
 .news-article-list {
     display: flex;
     flex-direction: column;
-    gap: 0.625rem;
+    gap: 0.5rem;
+    padding: 0 0.75rem 0.75rem;
 }
 
 /* ── Article cards ── */
 .news-article-card {
     display: flex;
     gap: 0.75rem;
-    background: var(--surface);
+    background: var(--surface-hover);
     border: 1px solid var(--hairline);
-    border-radius: 0.6rem;
-    padding: 0.75rem;
-    transition: background 0.15s var(--ease), border-color 0.15s var(--ease);
+    border-radius: 0.5rem;
+    padding: 0.7rem 0.75rem;
+    transition: background 0.12s var(--ease), border-color 0.12s var(--ease);
 }
 
 .news-article-card:hover {
@@ -18682,4 +18764,113 @@ body > .correlation-cell-tip {
     .news-group-sector {
         display: none;
     }
+
+    .news-group-name {
+        font-size: var(--ts-sm);
+    }
+}
+
+/* What It Covers — stock deep-dive enrichment */
+
+.eq-fundamentals-summary {
+    margin: 0.18rem 0 0;
+    font-size: var(--ts-xs);
+    line-height: 1.45;
+    color: var(--text-secondary);
+    font-style: italic;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.1rem;
+}
+
+.eq-range-bar-wrap {
+    margin-bottom: var(--intel-section-gap);
+}
+
+.eq-range-bar-labels {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.3rem;
+}
+
+.eq-range-edge {
+    font-size: var(--ts-xs);
+    color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.eq-range-zone {
+    font-size: var(--ts-xs);
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.12rem;
+    white-space: nowrap;
+}
+
+.eq-range-zone.positive { color: var(--accent-green); }
+.eq-range-zone.cyan     { color: var(--accent-cyan);  }
+.eq-range-zone.gold     { color: var(--accent-yellow);}
+
+.eq-range-bar-track {
+    position: relative;
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.055);
+    overflow: visible;
+}
+
+.eq-range-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    max-width: 100%;
+    transition: width 0.5s var(--ease, ease);
+}
+
+.eq-range-bar-fill.positive {
+    background: linear-gradient(90deg,
+        color-mix(in srgb, var(--accent-green) 55%, transparent),
+        var(--accent-green));
+    box-shadow: 0 0 10px -6px var(--accent-green);
+}
+
+.eq-range-bar-fill.cyan {
+    background: linear-gradient(90deg,
+        color-mix(in srgb, var(--accent-cyan) 55%, transparent),
+        var(--accent-cyan));
+    box-shadow: 0 0 10px -6px var(--accent-cyan);
+}
+
+.eq-range-bar-fill.gold {
+    background: linear-gradient(90deg,
+        color-mix(in srgb, var(--accent-yellow) 55%, transparent),
+        var(--accent-yellow));
+    box-shadow: 0 0 10px -6px var(--accent-yellow);
+}
+
+.eq-range-bar-marker {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55),
+                0 0 0 2px rgba(255, 255, 255, 0.22);
+    pointer-events: none;
+    z-index: 1;
+}
+
+.eq-range-drawdown {
+    margin: 0.22rem 0 0;
+    font-size: var(--ts-xs);
+    color: var(--text-tertiary);
+    text-align: center;
 }
