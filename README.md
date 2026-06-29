@@ -377,7 +377,7 @@ Issues and PRs welcome. For anything beyond a small fix, open an issue first to 
 
 ## 📄 License & Disclaimer
 
-Personal project, released for public use. **Not financial advice.** If you make or lose money because a dashboard on GitHub had nice colors, that is a fascinating life choice and also entirely on you.
+Released under the [MIT License](LICENSE). Personal project, released for public use. **Not financial advice.** If you make or lose money because a dashboard on GitHub had nice colors, that is a fascinating life choice and also entirely on you.
 
 <p align="center">
   Built with AI, caffeine, and a deeply normal interest in watching numbers move.<br/>
