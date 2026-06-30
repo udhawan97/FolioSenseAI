@@ -2,413 +2,354 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="static/img/brand/folio-orbit-mark-light.svg">
     <source media="(prefers-color-scheme: light)" srcset="static/img/brand/folio-orbit-mark-dark.svg">
-    <img src="static/img/brand/folio-orbit-mark-dark.svg" alt="FolioSenseAI" width="285"/>
+    <img src="static/img/brand/folio-orbit-mark-dark.svg" alt="FolioSenseAI" width="285">
   </picture>
 </p>
 
-<h2 align="center">FolioSenseAI</h2>
+<h1 align="center">FolioSenseAI</h1>
+
 <p align="center"><em>Your folio, finally making sense.</em></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/release-v4.1-brightgreen?style=flat-square" alt="Release v4.1"/>
-  <img src="https://img.shields.io/badge/tests-361%20passing-success?style=flat-square" alt="361 tests"/>
-  <img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"/>
-  <img src="https://img.shields.io/badge/FastAPI-0.136.3-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI"/>
-  <img src="https://img.shields.io/badge/Claude-optional-D4A853?style=flat-square&logo=anthropic&logoColor=white" alt="Claude optional"/>
-  <img src="https://img.shields.io/badge/SQLite-local-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite"/>
-  <img src="https://img.shields.io/badge/Bootstrap-5.3.2-7952B3?style=flat-square&logo=bootstrap&logoColor=white" alt="Bootstrap"/>
-  <img src="https://img.shields.io/badge/Chart.js-4.4.0-FF6384?style=flat-square&logo=chartdotjs&logoColor=white" alt="Chart.js"/>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT License"/></a>
+  <strong>A local-first portfolio intelligence dashboard that turns holdings, market data, risk signals, news, and optional Claude narration into plain-English portfolio context.</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/udhawan97/FolioSenseAI/actions/workflows/ci.yml"><img src="https://github.com/udhawan97/FolioSenseAI/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
-  <a href="https://github.com/udhawan97/FolioSenseAI/actions/workflows/pylint.yml"><img src="https://github.com/udhawan97/FolioSenseAI/actions/workflows/pylint.yml/badge.svg" alt="Pylint"/></a>
-  <a href="https://github.com/udhawan97/FolioSenseAI/actions/workflows/codeql.yml"><img src="https://github.com/udhawan97/FolioSenseAI/actions/workflows/codeql.yml/badge.svg" alt="CodeQL"/></a>
+  <img src="https://img.shields.io/badge/release-v4.1-brightgreen?style=flat-square" alt="Release v4.1">
+  <img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.11+">
+  <img src="https://img.shields.io/badge/FastAPI-0.136.3-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI 0.136.3">
+  <img src="https://img.shields.io/badge/SQLite-local-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite local database">
+  <img src="https://img.shields.io/badge/Claude-optional-D4A853?style=flat-square" alt="Claude optional">
+  <img src="https://img.shields.io/badge/setup-scripts-success?style=flat-square" alt="Setup scripts">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT License"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/udhawan97/FolioSenseAI/actions/workflows/ci.yml"><img src="https://github.com/udhawan97/FolioSenseAI/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/udhawan97/FolioSenseAI/actions/workflows/pylint.yml"><img src="https://github.com/udhawan97/FolioSenseAI/actions/workflows/pylint.yml/badge.svg" alt="Pylint"></a>
+  <a href="https://github.com/udhawan97/FolioSenseAI/actions/workflows/codeql.yml"><img src="https://github.com/udhawan97/FolioSenseAI/actions/workflows/codeql.yml/badge.svg" alt="CodeQL"></a>
+</p>
+
+<p align="center">
+  <a href="#quick-start">Setup</a> ·
+  <a href="#what-it-does">Features</a> ·
+  <a href="#architecture-and-technical-layout">Architecture</a> ·
+  <a href="#quality-checks">Quality</a> ·
+  <a href="#troubleshooting">Help</a>
 </p>
 
 ---
 
 <p align="center">
-  <img src="docs/dashboard.png" alt="FolioSenseAI dashboard" width="860"/>
-  <br/>
-  <sub><em>Demo numbers. Real anxiety simulation.</em></sub>
+  <img src="docs/dashboard.png" alt="FolioSenseAI dashboard" width="860">
+  <br>
+  <sub><em>Local dashboard, live market context, optional Claude explanations. Still not financial advice. Very much a dashboard.</em></sub>
 </p>
 
-<p align="center">
-  <img src="docs/architecture.svg" alt="FolioSenseAI architecture" width="860"/>
-</p>
+## Quick Start
 
----
+FolioSenseAI runs on your computer as a local web app at [http://localhost:8000](http://localhost:8000).
 
-FolioSenseAI is a **self-hosted portfolio intelligence dashboard** built on FastAPI + SQLite + vanilla JS. It turns live market data and a modular analytics engine into Hold / Add / Trim / Exit verdicts — optionally upgraded with Anthropic Claude narration when you bring a key. Runs entirely on your machine. No account. No subscription. No hot takes from the cloud unless you ask for them.
+**Prerequisites**
 
-## Contents
+- Python 3.11 or newer from [python.org](https://www.python.org/downloads/)
+- Internet access for market data from Yahoo Finance through `yfinance`
+- Optional: an Anthropic API key for Claude-powered briefings and action plans
 
-- [What This Is](#-what-this-is)
-- [Architecture at a Glance](#-architecture-at-a-glance)
-- [Engineering Highlights](#-engineering-highlights)
-- [Features](#-features)
-- [Tech Stack](#️-tech-stack)
-- [Install & Run](#-install--run)
-- [Developer Setup](#-developer-setup)
-- [Quality & CI](#-quality--ci)
-- [Roadmap](#️-roadmap)
-- [Contributing](#-contributing)
-- [License & Disclaimer](#-license--disclaimer)
+**Mac / Linux**
 
----
+```bash
+git clone https://github.com/udhawan97/FolioSenseAI.git
+cd FolioSenseAI
+./scripts/setup.sh
+```
 
-## ⚡ What This Is
+**Windows PowerShell**
 
-| Audience | What you get |
+```powershell
+git clone https://github.com/udhawan97/FolioSenseAI.git
+cd FolioSenseAI
+.\scripts\setup.ps1
+```
+
+The setup script creates a virtual environment, installs dependencies, creates local config if needed, prepares the `database/` folder, and starts the app.
+
+For day-to-day use after setup:
+
+```bash
+./scripts/start.sh
+```
+
+```powershell
+.\scripts\start.ps1
+```
+
+Keep the terminal window open while using FolioSenseAI. Closing it stops the local server.
+
+## The Short Version
+
+FolioSenseAI helps you understand what your portfolio is doing and why it might be doing it. Add holdings, open the dashboard, and it combines live prices, portfolio math, market regime context, risk analytics, headlines, and a modular signal engine into a more useful view than "line went up" or "line went down, emotionally."
+
+The app works without an AI key. Local Intelligence handles the core verdicts, scenarios, exposure, analytics, and fallback summaries. If you bring a Claude key, FolioSenseAI can add richer action plans, portfolio briefings, news themes, and insight copy. Your portfolio database and `.env` stay local.
+
+## At A Glance
+
+| Signal | What FolioSenseAI does |
 | --- | --- |
-| **Investors** | Live market context, a prioritised action plan, and Hold / Add / Trim / Exit verdicts with a thesis — not just a sparkline and a prayer |
-| **Developers** | A production-patterned Python + FastAPI + SQLite project: 14+ modular services, mocked-service tests, a clean REST API, and no frontend framework tax. React was not harmed because it was never invited. |
-| **Recruiters** | A full-stack AI/data product demonstrating API design, multi-layer caching, Anthropic SDK integration, analytics UX, CI/CD, and security hygiene — from scratch, in one repo |
+| Product purpose | A self-hosted portfolio intelligence dashboard for understanding holdings, risk, market context, and possible actions |
+| Core workflow | Add or manage holdings, review live portfolio state, inspect per-ticker intelligence, scan analytics, read news, refresh action plans |
+| AI / ML usage | Optional Anthropic Claude layer for narration, action plans, news themes, and insight text; deterministic local engine remains available without Claude |
+| Privacy / data handling | Uses local SQLite storage, local `.env` config, local-first dashboard behavior, and optional external calls to Yahoo Finance and Anthropic |
+| Setup | Python 3.11+, `pip install -r requirements.txt`, then `python run.py` or the included setup/start scripts |
+| Engineering depth | FastAPI API, SQLAlchemy models, Pydantic schemas, modular services, caching, startup warmup, Chart.js dashboard, pytest coverage, CI, Pylint, CodeQL, dependency audit |
 
----
+## Who This Is For
 
-## 🧭 Architecture at a Glance
+| Audience | Why it helps |
+| --- | --- |
+| Casual users | See portfolio value, P&L, movement explanations, market context, news, and plain-English verdicts without needing a spreadsheet ritual |
+| Recruiters / hiring teams | Review a complete product-minded full-stack project: API design, data modeling, frontend UX, local-first privacy choices, caching, AI integration, tests, and release discipline |
+| Developers | Run a compact FastAPI + SQLite + vanilla JS app locally, inspect the service boundaries, and extend one piece at a time |
+
+## What It Does
+
+| Area | Capability |
+| --- | --- |
+| Portfolio dashboard | 📊 Tracks holdings, watchlist positions, value, cost basis, daily change, unrealized gain, realized reductions, and allocation |
+| Verdict engine | 🧭 Produces Hold / Add / Trim / Exit-style signals with confidence, time horizon, scenario context, and local fallback behavior |
+| Action plan | ✅ Builds bucketed portfolio action plans with thesis text, priority moves, and regime context; Claude-enhanced when available |
+| Holding intelligence | 🔎 Expands tickers into deeper equity or ETF context, market pulse details, peer-relative positioning, event flags, and contribution breakdowns |
+| Analytics | 📈 Covers performance, risk, exposure, signals, market context, benchmark comparison, drawdown, beta, volatility, sector tilt, conviction gaps, and confidence spectrum |
+| News | 🗞️ Fetches grouped news for active holdings and watchlist tickers; Claude mode can add portfolio-level news themes |
+| Market context | 🌎 Pulls live quotes, historical prices, US market status, and major world market indices |
+| Local configuration | 🔐 Lets users save a Claude API key from the dashboard, validates the key shape, writes `.env`, and reconnects without a restart |
+| Cost visibility | 💸 Tracks live Claude token usage for the running process and exposes cache/cost stats through the AI API |
+
+## Product Flow
 
 ```mermaid
 flowchart LR
     user["User opens local dashboard"]
-    ui["Vanilla JS + Bootstrap UI<br/>Holdings, Analytics, News"]
-    api["FastAPI backend<br/>REST endpoints"]
-    intelligence["Portfolio intelligence engine<br/>signals, risk, exposure, regimes"]
-    storage["Local SQLite database<br/>holdings, snapshots, AI cache"]
-    market["Yahoo Finance via yfinance<br/>prices, history, headlines"]
-    claude["Optional Claude layer<br/>action plans and narration"]
+    holdings["Add / edit holdings"]
+    overview["Overview: value, P&L, regime, briefing"]
+    intelligence["Holdings: verdicts, scenarios, deep intelligence"]
+    analytics["Analytics: performance, risk, exposure, signals"]
+    news["News: headlines and optional themes"]
+    action["Action Plan: Hold / Add / Trim / Exit buckets"]
 
-    user --> ui
-    ui --> api
-    api --> intelligence
-    api <--> storage
-    intelligence <--> market
-    intelligence --> claude
-    claude --> intelligence
-    intelligence --> api
-    api --> ui
+    user --> holdings
+    holdings --> overview
+    overview --> intelligence
+    overview --> analytics
+    overview --> news
+    intelligence --> action
+    analytics --> action
+    news --> action
 ```
 
-In plain English: the browser talks to a local FastAPI server, the server pulls market data and portfolio records, the analytics engine turns that into verdicts and charts, and Claude can optionally add richer explanations. The product still works without Claude because the core investment logic runs locally.
+The dashboard keeps the flow intentionally direct: enter holdings, understand the current state, inspect the drivers, then decide what deserves attention. It does not connect to a brokerage or place trades.
 
-<details>
-<summary>📋 What's new in v4.1</summary>
+## Architecture And Technical Layout
 
-- **In-dashboard API key panel** — click the brand mark, paste `sk-ant-*`, save. Key is validated client-side and server-side before touching disk. Server reconnects in-process. No terminal, no restart.
-- **Live token cost tracking** — every Claude call accumulates real token counts. The cost HUD shows actual input/output tokens, a live cost figure, and a predicted per-run annotation — not a cache estimate.
-- **Holdings table auto-refresh + first-click expand** — prices refresh on interval; rows expand on the very first click.
-- **Sector graph proportional fills** — bars now scale relative to the top sector, with a `+N more` overflow note and a dot + track layout.
+<p align="center">
+  <img src="docs/architecture.svg" alt="FolioSenseAI architecture" width="860">
+</p>
 
-**From v4.0:** Portfolio Action Plan (Hold/Add/Trim/Exit with thesis, 24h cached), regime-aware context (SPY/TLT/VIX/UUP chip), News tab (live headlines + Claude cross-holding theme clusters).
+```mermaid
+flowchart LR
+    browser["Browser dashboard<br>HTML, CSS, vanilla JS, Chart.js"]
+    api["FastAPI app<br>routers, middleware, static serving"]
+    services["Service layer<br>signals, analytics, news, AI, market data"]
+    db["SQLite<br>holdings, snapshots, AI cache, verdict history"]
+    yahoo["Yahoo Finance<br>prices, history, headlines"]
+    claude["Anthropic Claude<br>optional narration and plans"]
 
-**From v3.x:** `localStorage` instant table paint, shared `.info` cache across six services, background startup warmup, Overview/Holdings/Analytics zones, Base/Bull/Bear scenarios, look-through exposure, peer-relative positioning, earnings proximity flags.
-
-</details>
-
----
-
-## 🎯 Engineering Highlights
-
-*The design decisions worth a second look, for anyone reading the code.*
-
-**Dual-mode intelligence, single interface** — `/api/ai/*` serves both engines without branching at the route layer. The deterministic Local Intelligence engine (`investment_signal.py`, `market_regime.py`, `portfolio_exposure.py`, and friends) runs signals, scenarios, exposure, and regime analysis with zero external calls. Claude upgrades the same responses with narration when a key is present. No key = still fully functional. This isn't a placeholder fallback; it's the default mode for most users.
-
-**Multi-layer caching with clear contracts** — quote prices are cached in-memory (60 s); Yahoo Finance `.info` is shared across six previously independent callers via `get_ticker_info()` (5 min market hours / 1 h closed); the holdings table paints from `localStorage` before the first HTTP response returns; AI responses persist to SQLite for 24 h with portfolio-drift invalidation so rebalancing clears a stale plan without manual intervention.
-
-**Zero-restart API key configuration** — `POST /api/ai/configure-key` validates the key with `^sk-ant-[A-Za-z0-9_\-]{20,300}$` on both client and server, writes a single line to `.env`, and calls `reinitialize_client()` to hot-swap the Anthropic SDK client in-process. Uvicorn keeps running, the HUD mode chip flips from Local → Claude, and no terminal was opened.
-
-**Frontend without a build step** — one HTML shell, vanilla JS, Bootstrap 5, Chart.js loaded from CDN. Analytics tabs instantiate Chart.js lazily on first activation. The design system is entirely CSS custom properties — no Sass, no PostCSS, no `node_modules`. The `localStorage` snapshot technique means the holdings table is interactive before the first API response lands.
-
-**Modular, independently testable services** — each service has a single responsibility and is tested with mocked external calls, so the full suite runs offline and deterministically. `_collect_portfolio_signals_core()` is extracted and shared between the investment-signals endpoint and the action-plan endpoint to avoid computing the signal pipeline twice.
-
-**361 tests, four CI checks** — pytest (mocked Yahoo Finance and Anthropic), Pylint, pip-audit (known CVE scanning), CodeQL (static analysis), dependency review, and a hygiene workflow that refuses secrets, databases, and OS noise. All checks run on Python 3.11 and 3.12.
-
----
-
-## ✨ Features
-
-### Dashboard zones
-
-| Zone | What's there |
-| --- | --- |
-| **Overview** | Live P&L, weighted sector graph, market regime chip, portfolio briefing from Claude or Local Intelligence |
-| **Holdings** | Per-ticker verdicts with confidence ranges and time horizons, move explanations, auto-refresh prices, expand for deep intelligence |
-| **Analytics** | 5 sub-tabs — Performance, Risk, Exposure, Signals, Markets — with 20+ Chart.js widgets and per-chart AI insight lines |
-| **News** | Live headlines for every holding, deduped and cached; Claude adds a portfolio briefing and cross-holding theme clusters |
-
-<details>
-<summary>📊 Analytics widgets</summary>
-
-| Tab | Widgets |
-| --- | --- |
-| **Performance** | Return breakdown, cumulative P&L, projection vs S&P 500, benchmark tracker, monthly return heatmap |
-| **Risk** | Risk/reward scatter, correlation matrix, HHI concentration score, max drawdown, beta, rolling volatility |
-| **Exposure** | Sector tilt, geographic look-through, theme overlap |
-| **Signals** | Conviction gap analysis, confidence spectrum |
-| **Markets** | World index grid, macro alignment, geographic alignment |
-
-Each tab has a per-tab AI insight bar and per-widget tip cards via `/api/ai/analytics-insights`. Widgets load lazily — only the active tab instantiates Chart.js.
-
-</details>
-
-### Intelligence engine
-
-Every holding gets a verdict derived from benchmark, macro, sector, volume, and event context. Each verdict carries a confidence range, time horizon (`auto / trade / core / anchor`), and Base / Bull / Bear scenarios with probability bars.
-
-<details>
-<summary>🧬 How the engine is built</summary>
-
-The core pipeline runs in `investment_signal.py` and calls out to modular services:
-
-| Service | Responsibility |
-| --- | --- |
-| `investment_signal.py` | Core pipeline — horizon weights, confidence ranges, scenario builders, modifier hooks |
-| `market_regime.py` | SPY/TLT/VIX/UUP regime detection, cached daily |
-| `portfolio_exposure.py` | Look-through sector/country/theme, HHI concentration, duplicate detection |
-| `peer_relative.py` | Own-range percentile vs peer median |
-| `event_calendar.py` | Earnings proximity — 14-day flag, confidence cap |
-| `verdict_calibration.py` | Snapshot logging for future hit-rate accountability |
-| `verdict_ai_enhancement.py` | Claude tension gating — nudges only when inputs conflict; agreement skips the AI call |
-| `holding_intelligence.py` | Deep per-ticker context, lazy-loaded on row expand |
-
-Claude adds probability splits to scenarios and narrative quips when `force_local=False`. The gating logic means Claude is only invoked when it has something interesting to say — a signal conflict, an unusual scenario divergence — not on every request.
-
-Verdict snapshots are logged to the `verdict_snapshots` SQLite table for future calibration reporting. The data is accumulating. The accountability will follow.
-
-</details>
-
-### Action Plan
-
-Claude reads the full portfolio signal snapshot and returns a prioritised Hold / Add / Trim / Exit bucket plan with a thesis, top moves, and a market regime chip. Cached 24 h with portfolio-drift invalidation — rebalancing clears the stale plan automatically. Falls back to a deterministic local plan with plain-language headlines when Claude is unavailable.
-
-<details>
-<summary>🗂️ Caching strategy</summary>
-
-| Layer | What | TTL |
-| --- | --- | --- |
-| In-memory (Python dict) | Yahoo Finance `.info` per ticker | 5 min (market hours) / 1 h (closed) |
-| In-memory (Python dict) | Quote prices | 60 s |
-| `localStorage` (browser) | Full holdings table snapshot | Until next successful live response |
-| SQLite `ai_summaries` | Action Plan, briefing, analytics insights | 24 h with portfolio-drift invalidation |
-| SQLite `verdict_snapshots` | Per-ticker verdict history | Persistent (calibration data) |
-
-A daemon thread warms quotes, 1-year history closes, and world market data for all active holdings on server startup. The first real dashboard request hits a warm cache.
-
-</details>
-
----
-
-## 🏗️ Tech Stack
+    browser <--> api
+    api <--> services
+    services <--> db
+    services <--> yahoo
+    services -. optional .-> claude
+```
 
 | Layer | Stack |
 | --- | --- |
-| **Backend** | Python 3.11+ · FastAPI 0.136.3 · Uvicorn 0.48.0 |
-| **Data** | SQLite · SQLAlchemy 2.0.50 · Pydantic 2.13.4 |
-| **Market Data** | yfinance 1.4.1 · Yahoo Finance |
-| **AI** | Anthropic SDK 0.105.2 · Claude (optional) · Local Intelligence fallback |
-| **Analytics** | pandas 3.0.3 · numpy 2.4.6 |
-| **Frontend** | Bootstrap 5.3.2 · Bootstrap Icons · Chart.js 4.4.0 · Vanilla JS |
-| **Quality** | pytest · Pylint · pip-audit · Dependency Review · CodeQL · security hygiene workflow |
-
-<sub>No blockchain. No NFTs. No "AI agentic alpha swarm." We all survived.</sub>
-
----
-
-## 🚀 Install & Run
-
-FolioSenseAI runs entirely on your computer. No account needed, no data leaves your machine.
-
-**One prerequisite:** Python 3.11+ — [download here](https://www.python.org/downloads/), click the yellow button, run the installer.
-
-> **Windows only:** on the first installer screen, check **"Add Python to PATH"** before clicking Install.
-
-### 🍎 Mac — one command
-
-Open **Terminal** (⌘ Space → *Terminal* → Enter), paste, and press Enter:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/udhawan97/FolioSenseAI/release-v4.1/scripts/install-mac.sh | bash
-```
-
-Downloads, installs, and places a **FolioSenseAI** shortcut on your Desktop. Browser opens automatically. **Next time:** double-click the Desktop shortcut.
-
-### 🪟 Windows — one command
-
-Open **PowerShell** (Win+R → `powershell` → Enter), paste, and press Enter:
-
-```powershell
-irm https://raw.githubusercontent.com/udhawan97/FolioSenseAI/release-v4.1/scripts/install-win.ps1 | iex
-```
-
-Downloads, installs, and places a **FolioSenseAI** shortcut on your Desktop. Browser opens automatically. **Next time:** double-click the Desktop shortcut.
-
-**Keep the Terminal / console window open while using the app — closing it stops the server.** Press Ctrl+C to stop.
-
-### Claude API key (optional)
-
-The app works fully offline with Local Intelligence. For Claude AI features — action plans, news briefings — click the **brand mark** in the top-left of the dashboard, paste your `sk-ant-*` key, and save. No restart required.
-
-Get a key at [console.anthropic.com](https://console.anthropic.com/). Action Plan responses are cached 24 h so you won't be re-billed on every refresh.
-
-### Updating
-
-Run the install command again — it detects your existing `database/` and `.env`, preserves them, and starts the updated app.
-
-<details>
-<summary>🩹 Something not working?</summary>
-
-| Symptom | Fix |
-| --- | --- |
-| `Python not found` | Install from [python.org](https://www.python.org/downloads/) and open a **new** terminal window. |
-| Windows: `winget` fails | Install Python manually, check "Add to PATH", re-run the command. |
-| Mac: `curl: command not found` | `xcode-select --install` — this shouldn't happen on modern macOS. |
-| Mac: `bash: scripts/setup.sh: No such file or directory` | Your Desktop shortcut is outdated. Re-run the one-line install command above — it replaces the shortcut automatically. |
-| Browser doesn't open | Navigate to [http://localhost:8000](http://localhost:8000) manually. |
-| `localhost:8000` won't load | The terminal window must stay open — it is the server. |
-| Port 8000 is busy | Stop the other app on that port, or change the port in `run.py`. |
-| AI shows "Local" mode | Click the brand mark in the dashboard and paste your API key. |
-
-</details>
-
-<details>
-<summary>⚙️ Manual install (advanced)</summary>
-
-```bash
-# Mac / Linux
-curl -L -o FolioSenseAI.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v4.1.zip
-unzip FolioSenseAI.zip && cd FolioSenseAI-release-v4.1
-./scripts/setup.sh
-```
-
-```powershell
-# Windows PowerShell
-Invoke-WebRequest "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v4.1.zip" -OutFile FolioSenseAI.zip
-Expand-Archive FolioSenseAI.zip; cd FolioSenseAI-release-v4.1
-.\scripts\setup.ps1
-```
-
-Daily start: `./scripts/start.sh` (Mac) or `.\scripts\start.ps1` (Windows).
-
-</details>
-
----
-
-## 👩‍💻 Developer Setup
-
-```bash
-python3 -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-cp .env.example .env            # Windows: copy .env.example .env
-python run.py
-```
-
-| URL | Purpose |
-| --- | --- |
-| [`http://localhost:8000`](http://localhost:8000) | Dashboard |
-| [`http://localhost:8000/docs`](http://localhost:8000/docs) | Interactive API docs (Swagger UI) |
-| [`http://localhost:8000/health`](http://localhost:8000/health) | Health check |
-
-<details>
-<summary>🗂️ Project structure</summary>
+| Backend | Python 3.11+, FastAPI 0.136.3, Uvicorn 0.48.0 |
+| Data | SQLite, SQLAlchemy 2.0.50, Pydantic 2.13.4 |
+| Market data | `yfinance` 1.4.1 and Yahoo Finance |
+| AI | Anthropic SDK 0.105.2, optional Claude calls, local deterministic fallback |
+| Frontend | Single HTML shell, Bootstrap 5.3.2, Bootstrap Icons, Chart.js 4.4.0, vanilla JavaScript |
+| Quality | pytest, Pylint, `compileall`, pip-audit, Dependency Review, CodeQL, security hygiene workflow |
 
 ```text
 app/
-├── main.py               — FastAPI app, middleware, static file serving, startup migrations
-├── models.py             — SQLAlchemy ORM models
-├── schemas.py            — Pydantic request/response contracts
-├── routers/              — Route handlers: stocks, portfolio, ai, news
-└── services/
-    ├── stock_service.py          — quotes, history, world markets, shared .info cache
-    ├── investment_signal.py      — core intelligence pipeline
-    ├── holding_intelligence.py   — deep per-ticker context (lazy-loaded on expand)
-    ├── ai_service.py             — Anthropic client, action_plan(), token tracking
-    ├── news_service.py           — headline fetch, TTL cache, dedup
-    ├── portfolio_analytics.py    — drawdown, beta, correlation, projection
-    ├── portfolio_exposure.py     — look-through sector/country/theme, HHI
-    ├── market_regime.py          — SPY/TLT/VIX/UUP regime detection
-    ├── peer_relative.py          — own-range percentile vs peer median
-    ├── event_calendar.py         — earnings proximity flags
-    ├── verdict_calibration.py    — snapshot logging for hit-rate accountability
-    ├── verdict_ai_enhancement.py — Claude tension gating
-    └── ...
+├── main.py                 FastAPI app, middleware, static assets, startup warmup
+├── config.py               Environment-backed settings
+├── database.py             SQLite engine/session and startup migrations
+├── models.py               SQLAlchemy ORM models
+├── schemas.py              Pydantic request/response contracts
+├── routers/                API route groups: stocks, portfolio, ai, news
+└── services/               Market data, analytics, signals, AI, news, exposure, regimes
+
 templates/
-└── index.html            — single-page shell: four zones (Overview, Holdings, Analytics, News)
+└── index.html              Dashboard shell
+
 static/
-├── js/                   — dashboard.js + analytics-charts.js
-└── css/style.css         — design system via CSS custom properties
-tests/                    — 361 tests; all external services mocked
-scripts/                  — one-command install + start for Mac / Linux / Windows
+├── css/style.css           Dashboard design system
+├── js/dashboard.js         Main dashboard behavior
+└── js/analytics-charts.js  Chart.js analytics widgets
+
+scripts/                    Setup and start scripts for Mac/Linux/Windows
+tests/                      Offline-focused pytest suite with mocked external services
+docs/                       Dashboard screenshot and architecture diagram
 ```
 
-</details>
+## Why It Matters
 
-<details>
-<summary>🔌 API quick reference</summary>
+Most portfolio tools show the number. FolioSenseAI works on the next question: what is behind the number?
 
-| Group | Endpoints |
-| --- | --- |
-| **Market data** | `/api/stocks/prices`, `/api/stocks/history/{ticker}`, `/api/stocks/world-markets`, `/api/stocks/market-status` |
-| **Portfolio** | `/api/portfolio/holdings`, `/api/portfolio/value`, `/api/portfolio/pnl`, `/api/portfolio/projection`, `/api/portfolio/risk-metrics`, `/api/portfolio/correlation` |
-| **Analytics** | `/api/portfolio/drawdown`, `/api/portfolio/beta`, `/api/portfolio/rolling-volatility`, `/api/portfolio/sector-tilt`, `/api/portfolio/conviction-gaps`, `/api/portfolio/market-context` |
-| **AI / Intelligence** | `/api/ai/investment-signals/all`, `/api/ai/portfolio-summary`, `/api/ai/portfolio-exposure`, `/api/ai/verdict-calibration`, `/api/ai/analytics-insights`, `/api/ai/intelligence/{ticker}/deep`, `/api/ai/action-plan`, `/api/ai/configure-key` |
-| **News** | `/api/news/feed`, `/api/news/themes` |
+That means turning raw holdings into a product workflow: live quote state, exposure context, portfolio-level risk, ticker-level explanations, market regime, news, and action buckets. The interesting engineering problem is not "call an AI model." It is deciding when deterministic local logic is enough, when narration adds value, how to cache expensive or slow work, and how to keep the dashboard useful even when an external service is unavailable.
 
-Open [`/docs`](http://localhost:8000/docs) locally for the full interactive Swagger reference.
+For reviewers, the project is meant to show both implementation and product taste: a working local app, clear boundaries between routers and services, practical privacy defaults, a frontend without a build step, and enough tests to make changes without holding your breath.
 
-</details>
+## Release And Project Status
 
----
+Current repo status: **v4.1**.
 
-## 🧪 Quality & CI
+Implemented highlights:
+
+- Local FastAPI dashboard with SQLite persistence
+- Holdings management, watchlist support, portfolio value, P&L, and snapshots
+- Modular investment signal and holding intelligence services
+- Analytics, exposure, market regime, peer-relative, event, ETF quality, and projection services
+- News feed plus optional Claude-generated news themes
+- Optional dashboard-based Anthropic key configuration
+- Local fallback behavior when Claude is not configured or reachable
+- GitHub Actions for tests, linting, dependency audit/review, CodeQL, and repository hygiene
+
+Known limits and roadmap:
+
+- This is not a brokerage, tax tool, or financial advisor
+- Market data depends on Yahoo Finance availability through `yfinance`
+- Claude features require the user to provide an Anthropic API key
+- CSV import/export and transaction history views are planned
+- Verdict calibration data is being logged; reporting is a future improvement once enough history exists
+
+See [RELEASE_NOTES.md](RELEASE_NOTES.md) for version-by-version changes.
+
+## Setup, Updating, And Requirements
+
+### Developer Setup
 
 ```bash
-python -m pytest -q
+python3 -m venv venv
+source venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+cp .env.example .env
+mkdir -p database
+python run.py
+```
+
+Windows activation and copy commands:
+
+```powershell
+python -m venv venv
+.\venv\Scripts\activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+copy .env.example .env
+mkdir database
+python run.py
+```
+
+### Useful Local URLs
+
+| URL | Purpose |
+| --- | --- |
+| [http://localhost:8000](http://localhost:8000) | Dashboard |
+| [http://localhost:8000/docs](http://localhost:8000/docs) | Interactive Swagger API docs |
+| [http://localhost:8000/health](http://localhost:8000/health) | Health check |
+
+### Optional Claude Setup
+
+FolioSenseAI works without Claude. To enable Claude-powered briefings and action plans, add an Anthropic key in either place:
+
+- In the dashboard: click the brand mark, paste a valid `sk-ant-*` key, and save.
+- In `.env`: set `ANTHROPIC_API_KEY=...` and restart the server.
+
+The dashboard validates the key format before saving. AI responses are cached where appropriate so refreshes do not always mean new model calls.
+
+### Updating
+
+If you installed from Git:
+
+```bash
+git pull
+python -m pip install -r requirements.txt
+python run.py
+```
+
+If you used the release installer commands, run the installer again. The install scripts are designed to preserve existing `.env` and `database/` files.
+
+## Privacy And Data Handling
+
+FolioSenseAI is local-first, not cloud-hosted.
+
+| Data | Handling |
+| --- | --- |
+| Holdings and portfolio snapshots | Stored in local SQLite under `database/` |
+| Config and API keys | Stored in local `.env`; `.env` is excluded from git |
+| Browser cache | Uses `localStorage` for faster dashboard paint |
+| Market data | Requested from Yahoo Finance through `yfinance` |
+| Claude prompts | Sent to Anthropic only when Claude features are enabled and requested |
+| Generated AI summaries | Cached locally in SQLite for reuse and cost control |
+
+Security-oriented defaults in the repo:
+
+- `.env` and `database/` are intended to stay untracked
+- CORS defaults to local origins
+- API key input is format-validated client-side and server-side before being saved
+- Claude is optional; the local engine remains available without an AI provider
+
+## Quality Checks
+
+Run these from an activated virtual environment:
+
+```bash
 python -m compileall -q app run.py tests
+python -m pytest -q
 python -m pylint $(git ls-files '*.py')
+```
+
+Optional dependency audit:
+
+```bash
+python -m pip install pip-audit
 pip-audit -r requirements.txt
 ```
 
-GitHub CI runs all checks on Python 3.11 and 3.12. Separate workflows cover Pylint, dependency audit/review, CodeQL static analysis, and a hygiene check that blocks secrets, databases, backups, and OS noise from the repo.
+The GitHub workflow runs tests on Python 3.11 and 3.12, imports the FastAPI app, compiles Python sources, audits pinned dependencies, runs Pylint, checks CodeQL, reviews dependency changes on PRs, and blocks common local/generated files from being committed.
 
-<details>
-<summary>🔐 Local-first security model</summary>
+## Troubleshooting
 
-- `.env` and `database/` are git-ignored; fresh installs start with an empty portfolio
-- CORS defaults to local origins only
-- API key is validated via regex on both client and server before touching disk; never logged
-- Claude is optional and cached; Local Intelligence makes zero external AI calls
-- Not a brokerage, advisor, oracle, or suspiciously confident uncle
+| Symptom | Try this |
+| --- | --- |
+| `Python not found` | Install Python 3.11+ from [python.org](https://www.python.org/downloads/) and open a new terminal |
+| Windows cannot find Python | Reinstall Python and check "Add Python to PATH" on the first installer screen |
+| `localhost:8000` will not load | Make sure the terminal running `python run.py` or the start script is still open |
+| Browser does not open automatically | Visit [http://localhost:8000](http://localhost:8000) manually |
+| Port 8000 is busy | Stop the other local server or change the port in `run.py` |
+| Market data looks empty | Check your internet connection and retry; Yahoo Finance requests can fail or rate-limit |
+| AI shows Local mode | Add a valid Anthropic key through the dashboard key panel or `.env` |
+| Claude request fails | Confirm the key starts with `sk-ant-`, has account credit/access, and restart if you edited `.env` manually |
+| Pylint command fails on Windows | Use Git Bash, WSL, or run `pylint app tests run.py` |
 
-</details>
+## License
 
----
+FolioSenseAI is released under the [MIT License](LICENSE).
 
-## 🗺️ Roadmap
-
-- [ ] CSV import / export
-- [ ] Transaction history views
-- [ ] Calibration reporting — the verdict snapshots are accumulating, but they need more history before the hit-rate numbers stop being anecdotal
-
----
-
-## 🤝 Contributing
-
-Issues and PRs welcome. For anything beyond a small fix, open an issue first to align on scope.
-
-- `python -m pytest -q` and `python -m pylint $(git ls-files '*.py')` before submitting
-- Keep changes focused — context lives in the PR description, not the code
-
----
-
-## 📄 License & Disclaimer
-
-Released under the [MIT License](LICENSE). Personal project, released for public use. **Not financial advice.** If you make or lose money because a dashboard on GitHub had nice colors, that is a fascinating life choice and also entirely on you.
+This project is for education, analysis, and portfolio exploration. It is **not financial advice**, does not place trades, and should not be treated as a substitute for professional judgment.
 
 <p align="center">
-  Built with AI, caffeine, and a deeply normal interest in watching numbers move.<br/>
-  ⭐ Star it if it helped you understand your portfolio — or if it at least insulted your diversification with better vocabulary than your last advisor.
+  Built to make portfolio context easier to read, easier to question, and slightly less spreadsheet-haunted.
 </p>
