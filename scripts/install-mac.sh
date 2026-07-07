@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # One-command Mac installer.
-# Usage: curl -fsSL https://raw.githubusercontent.com/udhawan97/FolioSenseAI/release-v4.1/scripts/install-mac.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/udhawan97/FolioSenseAI/release-v4.2/scripts/install-mac.sh | bash
 set -euo pipefail
 
 INSTALL_DIR="$HOME/Applications/FolioSenseAI"
 SHORTCUT="$HOME/Desktop/FolioSenseAI.command"
-RELEASE_URL="https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v4.1.zip"
-EXTRACT_NAME="FolioSenseAI-release-v4.1"
+RELEASE_URL="https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v4.2.zip"
+EXTRACT_NAME="FolioSenseAI-release-v4.2"
 
 echo ""
 echo "  FolioSenseAI Installer"
@@ -38,7 +38,7 @@ echo "  ✓ $("$PYTHON_BIN" --version)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-echo "  Downloading FolioSenseAI v4.1..."
+echo "  Downloading FolioSenseAI v4.2..."
 curl -fsSL --progress-bar "$RELEASE_URL" -o "$TMP/folio.zip"
 
 echo "  Extracting..."

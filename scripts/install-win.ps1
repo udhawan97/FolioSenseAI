@@ -1,11 +1,11 @@
 # One-command Windows installer.
-# Usage (PowerShell): irm https://raw.githubusercontent.com/udhawan97/FolioSenseAI/release-v4.1/scripts/install-win.ps1 | iex
+# Usage (PowerShell): irm https://raw.githubusercontent.com/udhawan97/FolioSenseAI/release-v4.2/scripts/install-win.ps1 | iex
 $ErrorActionPreference = "Stop"
 
 $installDir  = "$HOME\FolioSenseAI"
 $shortcut    = "$HOME\Desktop\FolioSenseAI.lnk"
-$releaseUrl  = "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v4.1.zip"
-$extractName = "FolioSenseAI-release-v4.1"
+$releaseUrl  = "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v4.2.zip"
+$extractName = "FolioSenseAI-release-v4.2"
 
 Write-Host ""
 Write-Host "  FolioSenseAI Installer"
@@ -49,7 +49,7 @@ Write-Host "  OK $pyVer"
 $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ([System.IO.Path]::GetRandomFileName())
 New-Item -ItemType Directory -Path $tmp | Out-Null
 
-Write-Host "  Downloading FolioSenseAI v4.1..."
+Write-Host "  Downloading FolioSenseAI v4.2..."
 Invoke-WebRequest $releaseUrl -OutFile "$tmp\folio.zip" -UseBasicParsing
 
 Write-Host "  Extracting..."
