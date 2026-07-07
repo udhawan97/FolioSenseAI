@@ -5,9 +5,10 @@ AI-powered summary endpoints using Claude, plus move-explanation endpoints.
 # pylint: disable=too-many-lines
 import json
 import logging
+import os
 import re
+import stat
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -16,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models import AISummary, Holding, VerdictSnapshot
+from app.paths import data_dir
 from app.services.ai_service import (
     MODEL,
     ACTION_PLAN_MODEL,
@@ -419,8 +421,17 @@ class _ApiKeyBody(BaseModel):
 
 
 def _update_env_file(key: str, value: str) -> None:
-    """Write or overwrite a single KEY=value line in the local .env file."""
-    env_path = Path(".env")
+    """Write or overwrite a single KEY=value line in the local .env file.
+
+    The file holds secrets (e.g. ANTHROPIC_API_KEY), so it's restricted to
+    owner-only read/write (0600) on every write, including first creation —
+    other local accounts on the machine can't read it even though it's
+    plaintext, which is the standard mitigation for local secret files (same
+    approach used by ~/.netrc, ~/.aws/credentials, etc). This is intentional,
+    local-only storage: FolioSenseAI is a single-user, local-first app with no
+    server-side secrets store, so the key never leaves the user's machine.
+    """
+    env_path = data_dir() / ".env"
     if env_path.exists():
         lines = env_path.read_text(encoding="utf-8").splitlines(keepends=True)
     else:
@@ -439,6 +450,7 @@ def _update_env_file(key: str, value: str) -> None:
         lines.append(new_line)
 
     env_path.write_text("".join(lines), encoding="utf-8")
+    os.chmod(env_path, stat.S_IRUSR | stat.S_IWUSR)
 
 
 @router.post("/configure-key")

@@ -18,6 +18,16 @@ import SenpaiTip from '../../components/SenpaiTip.astro';
 | Pylint command fails on Windows | Use Git Bash, WSL, or run `pylint app tests run.py` |
 | Senpai stopped talking | It's probably hidden — check the overflow menu's Intelligence section and toggle it back on |
 
+## Installing the desktop app
+
+| Symptom | Try this |
+| --- | --- |
+| macOS: *"Apple cannot check it for malicious software"* | Expected for unsigned builds. Open **System Settings → Privacy &amp; Security → Open Anyway**. Full steps: [Install on macOS](/FolioSenseAI/install-macos/#first-launch-the-gatekeeper-warning) |
+| Windows: *"Windows protected your PC"* (SmartScreen) | Click **More info → Run anyway**. Full steps: [Install on Windows](/FolioSenseAI/install-windows/#first-launch-the-smartscreen-warning) |
+| Windows: app window is blank or won't open | Install the [Microsoft WebView2 runtime](https://developer.microsoft.com/microsoft-edge/webview2/) and relaunch |
+| Not sure a download is genuine | [Verify it](/FolioSenseAI/download/#verify-your-download) against the release's `SHA256SUMS.txt`, and only download from [GitHub Releases](https://github.com/udhawan97/FolioSenseAI/releases) |
+| Where did my portfolio go after updating? | It didn't — data lives outside the app. See [macOS](/FolioSenseAI/install-macos/#where-your-data-lives) / [Windows](/FolioSenseAI/install-windows/#where-your-data-lives) locations |
+
 <SenpaiTip>
 	Menu → Documentation opens this site in a new tab any time, and `?` pulls up the full
 	keyboard shortcut list right in the dashboard — no need to come back here for those.

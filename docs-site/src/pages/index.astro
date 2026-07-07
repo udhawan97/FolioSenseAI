@@ -1,0 +1,595 @@
+---
+/**
+ * FolioSenseAI landing / download page.
+ *
+ * Standalone Astro page (not the Starlight docs layout) that takes over the
+ * site root. Release metadata is fetched client-side from the GitHub API with
+ * static fallbacks, so the download buttons always work even with JS disabled
+ * or the API unreachable. Keep it dependency-free and fast.
+ */
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const REPO = 'udhawan97/FolioSenseAI';
+const GITHUB = `https://github.com/${REPO}`;
+const RELEASES = `${GITHUB}/releases`;
+const RELEASES_LATEST = `${RELEASES}/latest`;
+
+const asset = (p: string) => `${base}/assets/${p}`;
+const doc = (slug: string) => `${base}/${slug}/`;
+
+const features = [
+	{ icon: '🔒', title: 'Local-first', body: 'Your portfolio database and config never leave your machine. Nothing ships anywhere without your key.' },
+	{ icon: '🤖', title: 'Claude optional', body: 'Local Intelligence runs the dashboard by default. Claude adds narration on top — never a requirement.' },
+	{ icon: '📈', title: 'Live market context', body: 'Quotes, history, market regime, and world indices, refreshed and cached for a fast first paint.' },
+	{ icon: '🧭', title: 'Risk analytics', body: 'Exposure, beta, drawdown, volatility, sector tilt, and a Hold / Add / Trim / Exit verdict per ticker.' },
+	{ icon: '🗞️', title: 'News themes', body: 'Grouped headlines for everything you hold or watch, with optional Claude-written portfolio themes.' },
+	{ icon: '🐣', title: 'Meet Senpai', body: 'The dashboard orb that watches your portfolio and has opinions about it, whether you asked or not.' },
+];
+
+const macCommands = `curl -fsSL ${'https://raw.githubusercontent.com'}/${REPO}/main/scripts/install-mac.sh | bash`;
+const winCommands = `irm ${'https://raw.githubusercontent.com'}/${REPO}/main/scripts/install-win.ps1 | iex`;
+---
+
+<!doctype html>
+<html lang="en" data-theme="dark">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>FolioSenseAI — Your folio, finally making sense.</title>
+		<meta name="description" content="A local-first portfolio intelligence dashboard. Download for macOS or Windows — runs entirely on your machine, with Claude as an optional layer on top." />
+		<link rel="icon" type="image/svg+xml" href={asset('folio-orbit-icon.svg')} />
+		<meta property="og:title" content="FolioSenseAI" />
+		<meta property="og:description" content="Your folio, finally making sense. A local-first portfolio intelligence dashboard for macOS and Windows." />
+		<meta property="og:type" content="website" />
+	</head>
+	<body>
+		<div class="backdrop" aria-hidden="true"></div>
+
+		<header class="topbar">
+			<a class="brand" href={base + '/'}>
+				<img src={asset('folio-orbit-icon.svg')} alt="" width="28" height="28" />
+				<span>FolioSenseAI</span>
+			</a>
+			<nav class="topnav">
+				<a href={doc('get-started/introduction')}>Docs</a>
+				<a href={RELEASES}>Releases</a>
+				<a href={GITHUB} class="ghost">GitHub ↗</a>
+			</nav>
+		</header>
+
+		<main>
+			<!-- ── Hero ─────────────────────────────────────────────────────── -->
+			<section class="hero">
+				<img class="hero-mark reveal" src={asset('folio-orbit-mark-dark-animated.svg')} alt="FolioSenseAI" width="240" height="150" />
+				<h1 class="reveal">Your folio, finally making sense.</h1>
+				<p class="lede reveal">
+					A local-first portfolio intelligence dashboard that turns holdings, live market data,
+					risk signals, and news into plain-English answers — running entirely on your machine.
+				</p>
+
+				<div class="cta-row reveal">
+					<a id="dl-mac" class="btn btn-primary" href={RELEASES_LATEST} data-os="mac">
+						<span class="btn-title">Download for macOS</span>
+						<span class="btn-sub" data-role="meta">Apple Silicon · .dmg</span>
+					</a>
+					<a id="dl-win" class="btn btn-primary" href={RELEASES_LATEST} data-os="win">
+						<span class="btn-title">Download for Windows</span>
+						<span class="btn-sub" data-role="meta">64-bit .exe installer</span>
+					</a>
+				</div>
+
+				<div class="cta-secondary reveal">
+					<a href={doc('get-started/introduction')}>View Docs</a>
+					<span>·</span>
+					<a href={GITHUB}>View GitHub</a>
+					<span>·</span>
+					<a href={RELEASES}>Release Notes</a>
+					<details class="dev-builds">
+						<summary>Development builds</summary>
+						<div class="dev-panel">
+							<p>Rolling builds from the latest <code>main</code> merge. Unstable — for testing only.</p>
+							<a href={`${RELEASES}/tag/latest-main`}>Get the latest-main build ↗</a>
+						</div>
+					</details>
+				</div>
+
+				<div id="release-strip" class="release-strip reveal" hidden>
+					<span class="chip" data-role="version">—</span>
+					<span class="chip" data-role="date">—</span>
+					<span class="chip" data-role="sha" hidden>—</span>
+					<span class="chip" data-role="platforms">macOS · Windows</span>
+					<a class="chip chip-link" data-role="release-link" href={RELEASES_LATEST}>View release ↗</a>
+				</div>
+			</section>
+
+			<!-- ── Screenshot ───────────────────────────────────────────────── -->
+			<section class="shot reveal">
+				<div class="window-chrome">
+					<div class="window-bar"><span></span><span></span><span></span></div>
+					<img src={asset('dashboard.png')} alt="The FolioSenseAI dashboard showing holdings, analytics, and market context." loading="lazy" />
+				</div>
+			</section>
+
+			<!-- ── Platform cards ───────────────────────────────────────────── -->
+			<section class="cards">
+				<article class="card reveal">
+					<div class="card-head">
+						<h2>macOS</h2>
+						<span class="arch">arm64 · Apple Silicon</span>
+					</div>
+					<p>A native app window — no Python, no terminal. Runs on macOS 11 Big Sur and newer.</p>
+					<a class="card-btn" href={RELEASES_LATEST} data-os="mac" data-role="card-dl">Download .dmg</a>
+					<a class="card-more" href={doc('install-macos')}>Install guide →</a>
+				</article>
+				<article class="card reveal">
+					<div class="card-head">
+						<h2>Windows</h2>
+						<span class="arch">x64 · Windows 10/11</span>
+					</div>
+					<p>A clean per-user installer — no admin rights required. Uninstalls cleanly from Apps &amp; Features.</p>
+					<a class="card-btn" href={RELEASES_LATEST} data-os="win" data-role="card-dl">Download .exe</a>
+					<a class="card-more" href={doc('install-windows')}>Install guide →</a>
+				</article>
+			</section>
+
+			<!-- ── Feature grid ─────────────────────────────────────────────── -->
+			<section class="features">
+				<h2 class="section-title reveal">What it does</h2>
+				<div class="feature-grid">
+					{features.map((f) => (
+						<div class="feature reveal">
+							<span class="feature-icon" aria-hidden="true">{f.icon}</span>
+							<h3>{f.title}</h3>
+							<p>{f.body}</p>
+						</div>
+					))}
+				</div>
+			</section>
+
+			<!-- ── Install & troubleshooting ────────────────────────────────── -->
+			<section class="install">
+				<h2 class="section-title reveal">Install</h2>
+
+				<details class="acc reveal" open>
+					<summary>macOS (Apple Silicon)</summary>
+					<div class="acc-body">
+						<ol>
+							<li>Download the <strong>.dmg</strong> and open it.</li>
+							<li>Drag <strong>FolioSenseAI</strong> into <strong>Applications</strong>.</li>
+							<li>Launch it. First launch is unsigned — see Gatekeeper below.</li>
+						</ol>
+						<p class="hint">Full walkthrough: <a href={doc('install-macos')}>macOS install guide</a>.</p>
+					</div>
+				</details>
+
+				<details class="acc reveal">
+					<summary>macOS (Intel)</summary>
+					<div class="acc-body">
+						<p>An Intel-native download isn't published yet. On an Intel Mac, run from source or the install script — both work today.</p>
+						<div class="code" data-copy={macCommands}>
+							<code>{macCommands}</code>
+							<button class="copy" type="button" aria-label="Copy command">Copy</button>
+						</div>
+						<p class="hint"><a href={doc('build-from-source')}>Build from source →</a></p>
+					</div>
+				</details>
+
+				<details class="acc reveal">
+					<summary>Windows</summary>
+					<div class="acc-body">
+						<ol>
+							<li>Download the <strong>-Setup.exe</strong> installer and run it.</li>
+							<li>SmartScreen may warn on an unsigned app — see below.</li>
+							<li>Launch from the Start menu. Data lives in <code>%APPDATA%\FolioSenseAI</code>.</li>
+						</ol>
+						<p class="hint">Full walkthrough: <a href={doc('install-windows')}>Windows install guide</a>.</p>
+					</div>
+				</details>
+
+				<details class="acc reveal">
+					<summary>One-line install (advanced)</summary>
+					<div class="acc-body">
+						<p>Prefer a script? These download the source and set up a local Python environment. Read them first — they're short and open-source: <a href={`${GITHUB}/blob/main/scripts/install-mac.sh`}>mac</a> · <a href={`${GITHUB}/blob/main/scripts/install-win.ps1`}>win</a>.</p>
+						<p class="mini">macOS / Linux</p>
+						<div class="code" data-copy={macCommands}>
+							<code>{macCommands}</code>
+							<button class="copy" type="button" aria-label="Copy command">Copy</button>
+						</div>
+						<p class="mini">Windows PowerShell</p>
+						<div class="code" data-copy={winCommands}>
+							<code>{winCommands}</code>
+							<button class="copy" type="button" aria-label="Copy command">Copy</button>
+						</div>
+					</div>
+				</details>
+
+				<details class="acc reveal">
+					<summary>Build from source</summary>
+					<div class="acc-body">
+						<div class="code" data-copy={`git clone ${GITHUB}.git\ncd FolioSenseAI\n./scripts/setup.sh`}>
+							<code>git clone {GITHUB}.git<br/>cd FolioSenseAI<br/>./scripts/setup.sh</code>
+							<button class="copy" type="button" aria-label="Copy command">Copy</button>
+						</div>
+						<p class="hint">Windows: use <code>.\scripts\setup.ps1</code>. Full guide: <a href={doc('build-from-source')}>Build from source</a>.</p>
+					</div>
+				</details>
+			</section>
+
+			<!-- ── Trust / security ─────────────────────────────────────────── -->
+			<section class="trust">
+				<h2 class="section-title reveal">Built in the open</h2>
+				<div class="trust-grid">
+					<div class="trust-item reveal">
+						<h3>Every build is traceable</h3>
+						<p>Each download links back to its GitHub Release, the commit it was built from, and the Actions run that produced it.</p>
+					</div>
+					<div class="trust-item reveal">
+						<h3>Verify your download</h3>
+						<p>Each release ships a <code>SHA256SUMS.txt</code>. Check your file matches before opening it:</p>
+						<div class="code" data-copy={'shasum -a 256 -c SHA256SUMS.txt'}>
+							<code>shasum -a 256 -c SHA256SUMS.txt</code>
+							<button class="copy" type="button" aria-label="Copy command">Copy</button>
+						</div>
+					</div>
+					<div class="trust-item reveal">
+						<h3>Heads up: early builds are unsigned</h3>
+						<p>macOS Gatekeeper and Windows SmartScreen will warn you. That's expected for an open-source app without a paid signing certificate yet — the <a href={doc('install-macos')}>install guides</a> show exactly what you'll see and how to proceed safely.</p>
+					</div>
+				</div>
+			</section>
+		</main>
+
+		<footer class="footer">
+			<div class="footer-inner">
+				<div class="footer-brand">
+					<img src={asset('folio-orbit-icon.svg')} alt="" width="32" height="32" id="senpai-egg" />
+					<div>
+						<strong>FolioSenseAI</strong>
+						<p id="senpai-quip">Not financial advice. Very much a dashboard.</p>
+					</div>
+				</div>
+				<nav class="footer-links">
+					<a href={GITHUB}>GitHub</a>
+					<a href={doc('get-started/introduction')}>Docs</a>
+					<a href={RELEASES}>Releases</a>
+					<a href={`${GITHUB}/blob/main/LICENSE`}>MIT License</a>
+				</nav>
+			</div>
+		</footer>
+
+		<script define:vars={{ API: `https://api.github.com/repos/${REPO}/releases/latest`, TAGS_API: `https://api.github.com/repos/${REPO}/git/refs/tags` }}>
+			// ── OS-aware CTA ──────────────────────────────────────────────────
+			function detectOS() {
+				const p = (navigator.userAgentData?.platform || navigator.platform || navigator.userAgent || '').toLowerCase();
+				if (p.includes('mac')) return 'mac';
+				if (p.includes('win')) return 'win';
+				return 'other';
+			}
+			const os = detectOS();
+			if (os !== 'other') {
+				document.querySelectorAll('.btn[data-os]').forEach((b) => {
+					if (b.getAttribute('data-os') === os) b.classList.add('is-preferred');
+					else b.classList.add('is-secondary');
+				});
+			}
+
+			// ── Live release metadata (with graceful fallback) ───────────────
+			function fmtBytes(n) {
+				if (!n) return '';
+				const mb = n / (1024 * 1024);
+				return mb >= 1 ? `${mb.toFixed(0)} MB` : `${(n / 1024).toFixed(0)} KB`;
+			}
+			function fmtDate(iso) {
+				try { return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); }
+				catch { return ''; }
+			}
+			function pickAsset(assets, ext) {
+				return assets.find((a) => a.name.toLowerCase().endsWith(ext));
+			}
+			function applyRelease(data) {
+				if (!data || !data.assets) return;
+				const dmg = pickAsset(data.assets, '.dmg');
+				const exe = pickAsset(data.assets, '.exe');
+				const setBtn = (id, assetObj, fallbackMeta) => {
+					const btn = document.getElementById(id);
+					if (!btn) return;
+					if (assetObj) {
+						btn.href = assetObj.browser_download_url;
+						const meta = btn.querySelector('[data-role="meta"]');
+						if (meta) meta.textContent = `${data.tag_name} · ${fmtBytes(assetObj.size)}`;
+					}
+				};
+				setBtn('dl-mac', dmg);
+				setBtn('dl-win', exe);
+				document.querySelectorAll('[data-role="card-dl"]').forEach((el) => {
+					const wantMac = el.getAttribute('data-os') === 'mac';
+					const a = wantMac ? dmg : exe;
+					if (a) el.href = a.browser_download_url;
+				});
+
+				const strip = document.getElementById('release-strip');
+				if (strip) {
+					const set = (role, text) => { const el = strip.querySelector(`[data-role="${role}"]`); if (el) el.textContent = text; };
+					set('version', data.tag_name || '—');
+					set('date', fmtDate(data.published_at));
+					const plats = [dmg && 'macOS', exe && 'Windows'].filter(Boolean).join(' · ') || 'macOS · Windows';
+					set('platforms', plats);
+					const link = strip.querySelector('[data-role="release-link"]');
+					if (link && data.html_url) link.href = data.html_url;
+					strip.hidden = false;
+					// Best-effort commit SHA from the tag ref (non-blocking).
+					// Lightweight tags point straight at a commit (object.type === "commit").
+					// Annotated tags point at a tag object whose own .sha is NOT a commit — it
+					// has to be dereferenced one level via object.url to reach the commit.
+					if (data.tag_name) {
+						fetch(`${TAGS_API}/${data.tag_name}`, { headers: { Accept: 'application/vnd.github+json' } })
+							.then((r) => (r.ok ? r.json() : null))
+							.then((ref) => {
+								if (!ref?.object) return null;
+								if (ref.object.type === 'commit') return ref.object.sha;
+								return fetch(ref.object.url, { headers: { Accept: 'application/vnd.github+json' } })
+									.then((r) => (r.ok ? r.json() : null))
+									.then((tagObj) => tagObj?.object?.sha || null);
+							})
+							.then((sha) => {
+								if (sha) {
+									const el = strip.querySelector('[data-role="sha"]');
+									if (el) { el.textContent = sha.slice(0, 7); el.hidden = false; }
+								}
+							})
+							.catch(() => {});
+					}
+				}
+			}
+			async function loadRelease() {
+				const key = 'fs-release-latest';
+				try {
+					const cached = sessionStorage.getItem(key);
+					if (cached) { applyRelease(JSON.parse(cached)); return; }
+					const r = await fetch(API, { headers: { Accept: 'application/vnd.github+json' } });
+					if (!r.ok) return; // keep static fallback links
+					const data = await r.json();
+					sessionStorage.setItem(key, JSON.stringify(data));
+					applyRelease(data);
+				} catch { /* offline / rate-limited → static fallbacks remain */ }
+			}
+			loadRelease();
+
+			// ── Copy buttons ─────────────────────────────────────────────────
+			document.querySelectorAll('.code .copy').forEach((btn) => {
+				btn.addEventListener('click', async () => {
+					const text = btn.closest('.code')?.getAttribute('data-copy') || '';
+					try {
+						await navigator.clipboard.writeText(text);
+						const prev = btn.textContent;
+						btn.textContent = '✓ Copied';
+						btn.classList.add('copied');
+						setTimeout(() => { btn.textContent = prev; btn.classList.remove('copied'); }, 1400);
+					} catch { /* clipboard blocked — no-op */ }
+				});
+			});
+
+			// ── Scroll reveal (respects reduced motion) ──────────────────────
+			const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+			if (reduce) {
+				document.querySelectorAll('.reveal').forEach((el) => el.classList.add('shown'));
+			} else if ('IntersectionObserver' in window) {
+				const io = new IntersectionObserver((entries) => {
+					entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('shown'); io.unobserve(e.target); } });
+				}, { threshold: 0.12 });
+				document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+			} else {
+				document.querySelectorAll('.reveal').forEach((el) => el.classList.add('shown'));
+			}
+
+			// ── Senpai footer easter egg ─────────────────────────────────────
+			const quips = [
+				'Not financial advice. Very much a dashboard.',
+				'Your "diversified" portfolio is four tech stocks in a trench coat.',
+				'The line went up. I have theories about why.',
+				'I watch your portfolio so you don’t have to stare at it alone.',
+				'Green Tuesday? I’ll take partial credit.',
+			];
+			let qi = 0;
+			const egg = document.getElementById('senpai-egg');
+			const quip = document.getElementById('senpai-quip');
+			egg?.addEventListener('click', () => { qi = (qi + 1) % quips.length; if (quip) quip.textContent = quips[qi]; });
+		</script>
+
+		<style>
+			:root {
+				--cyan: #6fd6f0;
+				--peri: #97acec;
+				--bg: #050508;
+				--bg-soft: #0c0c12;
+				--panel: rgba(255, 255, 255, 0.04);
+				--panel-border: rgba(255, 255, 255, 0.09);
+				--text: #f5f5f7;
+				--muted: #9a9aa6;
+				--radius: 16px;
+				--maxw: 1080px;
+			}
+			* { box-sizing: border-box; }
+			html { scroll-behavior: smooth; }
+			body {
+				margin: 0;
+				background: var(--bg);
+				color: var(--text);
+				font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+				line-height: 1.6;
+				-webkit-font-smoothing: antialiased;
+				overflow-x: hidden;
+			}
+			a { color: var(--cyan); text-decoration: none; }
+			a:hover { text-decoration: underline; }
+			code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; }
+
+			.backdrop {
+				position: fixed; inset: 0; z-index: -1;
+				background:
+					radial-gradient(60% 50% at 50% -10%, rgba(111, 214, 240, 0.16), transparent 70%),
+					radial-gradient(50% 40% at 85% 15%, rgba(151, 172, 236, 0.12), transparent 70%),
+					radial-gradient(40% 40% at 10% 30%, rgba(111, 214, 240, 0.08), transparent 70%),
+					var(--bg);
+			}
+
+			.topbar {
+				display: flex; align-items: center; justify-content: space-between;
+				max-width: var(--maxw); margin: 0 auto; padding: 1.1rem 1.5rem;
+			}
+			.brand { display: flex; align-items: center; gap: 0.55rem; color: var(--text); font-weight: 650; }
+			.brand:hover { text-decoration: none; }
+			.topnav { display: flex; align-items: center; gap: 1.3rem; font-size: 0.94rem; }
+			.topnav a { color: var(--muted); }
+			.topnav a:hover { color: var(--text); text-decoration: none; }
+			.topnav .ghost { color: var(--text); }
+
+			main { max-width: var(--maxw); margin: 0 auto; padding: 0 1.5rem; }
+			section { padding: 3.5rem 0; }
+			.section-title { font-size: 1.7rem; text-align: center; margin: 0 0 2rem; letter-spacing: -0.02em; }
+
+			.hero { text-align: center; padding-top: 2rem; }
+			.hero-mark { width: min(240px, 62vw); height: auto; margin-bottom: 1.2rem; }
+			.hero h1 {
+				font-size: clamp(2.1rem, 5.5vw, 3.4rem); line-height: 1.08; margin: 0 auto 1rem;
+				max-width: 15ch; letter-spacing: -0.03em; font-weight: 700;
+				background: linear-gradient(120deg, var(--cyan), var(--peri));
+				-webkit-background-clip: text; background-clip: text; color: transparent;
+			}
+			.lede { max-width: 60ch; margin: 0 auto 2rem; color: var(--muted); font-size: 1.1rem; }
+
+			.cta-row { display: flex; gap: 0.9rem; justify-content: center; flex-wrap: wrap; }
+			.btn {
+				display: inline-flex; flex-direction: column; align-items: center;
+				padding: 0.7rem 1.5rem; border-radius: 12px; min-width: 220px;
+				border: 1px solid var(--panel-border); transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+			}
+			.btn:hover { text-decoration: none; transform: translateY(-2px); }
+			.btn-primary { background: linear-gradient(135deg, rgba(111,214,240,0.16), rgba(151,172,236,0.16)); color: var(--text); }
+			.btn-primary:hover { border-color: var(--cyan); box-shadow: 0 8px 30px rgba(111, 214, 240, 0.18); }
+			.btn-title { font-weight: 640; font-size: 1rem; }
+			.btn-sub { font-size: 0.8rem; color: var(--muted); margin-top: 0.15rem; }
+			.btn.is-preferred { background: linear-gradient(135deg, var(--cyan), var(--peri)); color: #04121a; border-color: transparent; }
+			.btn.is-preferred .btn-sub { color: rgba(4, 18, 26, 0.7); }
+			.btn.is-secondary { opacity: 0.82; }
+
+			.cta-secondary { margin-top: 1.3rem; color: var(--muted); font-size: 0.94rem; display: flex; gap: 0.7rem; justify-content: center; align-items: center; flex-wrap: wrap; }
+			.dev-builds { position: relative; }
+			.dev-builds summary { cursor: pointer; color: var(--muted); list-style: none; }
+			.dev-builds summary::-webkit-details-marker { display: none; }
+			.dev-builds summary:hover { color: var(--text); }
+			.dev-panel {
+				position: absolute; top: 1.8rem; left: 50%; transform: translateX(-50%);
+				width: 260px; padding: 0.9rem 1rem; z-index: 5;
+				background: var(--bg-soft); border: 1px solid var(--panel-border); border-radius: 12px;
+				font-size: 0.85rem; text-align: left; box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+			}
+			.dev-panel p { margin: 0 0 0.5rem; color: var(--muted); }
+
+			.release-strip { margin-top: 1.8rem; display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; }
+			.chip {
+				font-size: 0.8rem; color: var(--muted); background: var(--panel);
+				border: 1px solid var(--panel-border); border-radius: 999px; padding: 0.28rem 0.75rem;
+			}
+			.chip-link { color: var(--cyan); }
+			.chip-link:hover { text-decoration: none; border-color: var(--cyan); }
+
+			.shot { display: flex; justify-content: center; }
+			.window-chrome {
+				width: 100%; max-width: 940px; border-radius: var(--radius); overflow: hidden;
+				border: 1px solid var(--panel-border); background: var(--bg-soft);
+				box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 0 60px rgba(111, 214, 240, 0.06);
+			}
+			.window-bar { display: flex; gap: 0.5rem; padding: 0.8rem 1rem; border-bottom: 1px solid var(--panel-border); }
+			.window-bar span { width: 11px; height: 11px; border-radius: 50%; background: #3a3a42; }
+			.window-bar span:first-child { background: #ff5f57; }
+			.window-bar span:nth-child(2) { background: #febc2e; }
+			.window-bar span:nth-child(3) { background: #28c840; }
+			.window-chrome img { display: block; width: 100%; height: auto; }
+
+			.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; }
+			.card {
+				background: var(--panel); border: 1px solid var(--panel-border); border-radius: var(--radius);
+				padding: 1.6rem; backdrop-filter: blur(8px); transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+			}
+			.card:hover { transform: translateY(-3px); border-color: rgba(111, 214, 240, 0.4); box-shadow: 0 12px 40px rgba(111, 214, 240, 0.1); }
+			.card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+			.card-head h2 { margin: 0; font-size: 1.5rem; }
+			.arch { font-size: 0.8rem; color: var(--muted); }
+			.card p { color: var(--muted); font-size: 0.95rem; }
+			.card-btn {
+				display: inline-block; margin-top: 0.4rem; padding: 0.5rem 1.1rem; border-radius: 10px;
+				background: linear-gradient(135deg, var(--cyan), var(--peri)); color: #04121a; font-weight: 620;
+			}
+			.card-btn:hover { text-decoration: none; opacity: 0.92; }
+			.card-more { display: inline-block; margin-top: 0.9rem; margin-left: 0.9rem; font-size: 0.9rem; }
+
+			.feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+			.feature { background: var(--panel); border: 1px solid var(--panel-border); border-radius: var(--radius); padding: 1.3rem; }
+			.feature-icon { font-size: 1.5rem; }
+			.feature h3 { margin: 0.6rem 0 0.35rem; font-size: 1.05rem; }
+			.feature p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+
+			.acc {
+				max-width: 720px; margin: 0 auto 0.7rem; background: var(--panel);
+				border: 1px solid var(--panel-border); border-radius: 12px; overflow: hidden;
+			}
+			.acc summary {
+				cursor: pointer; padding: 0.9rem 1.2rem; font-weight: 600; list-style: none;
+				display: flex; align-items: center; justify-content: space-between;
+			}
+			.acc summary::-webkit-details-marker { display: none; }
+			.acc summary::after { content: '+'; color: var(--muted); font-size: 1.2rem; }
+			.acc[open] summary::after { content: '−'; }
+			.acc-body { padding: 0 1.2rem 1.1rem; color: var(--muted); font-size: 0.94rem; }
+			.acc-body ol { padding-left: 1.2rem; }
+			.acc-body .hint { font-size: 0.88rem; }
+			.acc-body .mini { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0.9rem 0 0.3rem; }
+
+			.code {
+				position: relative; background: #0a0a0f; border: 1px solid var(--panel-border);
+				border-radius: 10px; padding: 0.8rem 3.5rem 0.8rem 0.9rem; margin: 0.4rem 0;
+				overflow-x: auto;
+			}
+			.code code { color: #d8e8ff; white-space: pre-wrap; word-break: break-all; }
+			.copy {
+				position: absolute; top: 0.55rem; right: 0.55rem; padding: 0.25rem 0.6rem;
+				font-size: 0.75rem; border-radius: 7px; cursor: pointer;
+				background: var(--panel); border: 1px solid var(--panel-border); color: var(--muted);
+			}
+			.copy:hover { color: var(--text); border-color: var(--cyan); }
+			.copy.copied { color: var(--cyan); border-color: var(--cyan); }
+
+			.trust-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.2rem; }
+			.trust-item { background: var(--panel); border: 1px solid var(--panel-border); border-radius: var(--radius); padding: 1.4rem; }
+			.trust-item h3 { margin: 0 0 0.5rem; font-size: 1.05rem; }
+			.trust-item p { color: var(--muted); font-size: 0.9rem; margin: 0 0 0.5rem; }
+
+			.footer { border-top: 1px solid var(--panel-border); margin-top: 2rem; }
+			.footer-inner {
+				max-width: var(--maxw); margin: 0 auto; padding: 2rem 1.5rem;
+				display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap;
+			}
+			.footer-brand { display: flex; align-items: center; gap: 0.8rem; }
+			.footer-brand img { cursor: pointer; }
+			.footer-brand strong { font-size: 0.98rem; }
+			.footer-brand p { margin: 0.1rem 0 0; color: var(--muted); font-size: 0.85rem; max-width: 42ch; }
+			.footer-links { display: flex; gap: 1.3rem; font-size: 0.9rem; }
+			.footer-links a { color: var(--muted); }
+			.footer-links a:hover { color: var(--text); text-decoration: none; }
+
+			.reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.6s ease, transform 0.6s ease; }
+			.reveal.shown { opacity: 1; transform: none; }
+
+			@media (max-width: 760px) {
+				.cards, .feature-grid, .trust-grid { grid-template-columns: 1fr; }
+				.topnav { gap: 0.9rem; }
+				.btn { min-width: 0; flex: 1 1 100%; }
+			}
+			@media (prefers-reduced-motion: reduce) {
+				html { scroll-behavior: auto; }
+				.reveal { transition: none; }
+				.btn:hover, .card:hover { transform: none; }
+			}
+		</style>
+	</body>
+</html>

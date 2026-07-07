@@ -1,0 +1,240 @@
+name: Release
+
+# Two channels from one pipeline:
+#   • push a tag v*   → stable GitHub Release with DMG + EXE + checksums
+#   • push to main    → refresh the rolling "latest-main" prerelease
+# Installers are published only after both platform builds AND their smoke
+# tests pass, so a red build can never replace a good release.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Resolve channel & version
+    runs-on: ubuntu-latest
+    outputs:
+      channel: ${{ steps.vars.outputs.channel }}
+      app_version: ${{ steps.vars.outputs.app_version }}
+      asset_token: ${{ steps.vars.outputs.asset_token }}
+      release_tag: ${{ steps.vars.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve build variables
+        id: vars
+        run: |
+          set -euo pipefail
+          APP_VERSION="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' app/version.py)"
+          if [[ -z "$APP_VERSION" ]]; then
+            echo "Could not read __version__ from app/version.py" >&2
+            exit 1
+          fi
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAG_VERSION="${GITHUB_REF_NAME#v}"
+            if [[ "$TAG_VERSION" != "$APP_VERSION" ]]; then
+              echo "Tag ${GITHUB_REF_NAME} does not match app/version.py (${APP_VERSION})." >&2
+              echo "Bump app/version.py before tagging, or fix the tag." >&2
+              exit 1
+            fi
+            echo "channel=stable"            >> "$GITHUB_OUTPUT"
+            echo "app_version=$APP_VERSION"  >> "$GITHUB_OUTPUT"
+            echo "asset_token=v$APP_VERSION" >> "$GITHUB_OUTPUT"
+            echo "release_tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            SHORT="$(git rev-parse --short HEAD)"
+            echo "channel=dev"                    >> "$GITHUB_OUTPUT"
+            echo "app_version=$APP_VERSION"       >> "$GITHUB_OUTPUT"
+            echo "asset_token=main-$SHORT"        >> "$GITHUB_OUTPUT"
+            echo "release_tag=latest-main"        >> "$GITHUB_OUTPUT"
+          fi
+
+  test:
+    name: Test gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest
+      - name: Run tests
+        env:
+          ANTHROPIC_API_KEY: ""
+          DATABASE_URL: sqlite:///./database/release-test.db
+        run: python -m pytest -q
+
+  build-macos:
+    name: Build macOS DMG (arm64)
+    needs: [prepare, test]
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-desktop.txt
+      - name: Build app bundle
+        run: python -m PyInstaller --noconfirm packaging/pyinstaller/FolioSenseAI.spec
+      - name: Repair macOS bundle data symlinks
+        # PyInstaller's macOS BUNDLE step can leave dangling Frameworks -> Resources
+        # symlinks for pure-data package trees (observed with static/, templates/,
+        # and pytz's zoneinfo data). See the script for the full explanation.
+        run: python packaging/pyinstaller/fix_macos_bundle_symlinks.py dist
+      - name: Smoke test the frozen bundle
+        run: |
+          dist/FolioSenseAI.app/Contents/MacOS/FolioSenseAI --smoke
+      - name: Build DMG
+        env:
+          ASSET_TOKEN: ${{ needs.prepare.outputs.asset_token }}
+        run: |
+          set -euo pipefail
+          brew install create-dmg
+          mkdir -p dist/dmg-src dist/out
+          cp -R dist/FolioSenseAI.app dist/dmg-src/
+          DMG="dist/out/FolioSenseAI-macOS-arm64-${ASSET_TOKEN}.dmg"
+          create-dmg \
+            --volname "FolioSenseAI" \
+            --volicon packaging/icons/FolioSenseAI.icns \
+            --window-size 540 380 \
+            --icon-size 110 \
+            --icon "FolioSenseAI.app" 150 190 \
+            --app-drop-link 390 190 \
+            --hide-extension "FolioSenseAI.app" \
+            "$DMG" "dist/dmg-src/" || true
+          if [[ ! -f "$DMG" ]]; then
+            echo "DMG was not produced" >&2
+            exit 1
+          fi
+          echo "Built $DMG"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: dist/out/*.dmg
+          if-no-files-found: error
+          retention-days: 7
+
+  build-windows:
+    name: Build Windows installer (x64)
+    needs: [prepare, test]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-desktop.txt
+      - name: Build app bundle
+        run: python -m PyInstaller --noconfirm packaging/pyinstaller/FolioSenseAI.spec
+      - name: Smoke test the frozen bundle
+        shell: pwsh
+        run: |
+          $proc = Start-Process -FilePath "dist\FolioSenseAI\FolioSenseAI.exe" -ArgumentList "--smoke" -Wait -PassThru
+          if ($proc.ExitCode -ne 0) {
+            Write-Error "Smoke test failed with exit code $($proc.ExitCode)"
+            exit 1
+          }
+      - name: Build installer
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ needs.prepare.outputs.app_version }}
+          ASSET_TOKEN: ${{ needs.prepare.outputs.asset_token }}
+        run: |
+          choco install innosetup -y --no-progress
+          $outputName = "FolioSenseAI-Windows-x64-$env:ASSET_TOKEN-Setup"
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $iscc "/DMyAppVersion=$env:APP_VERSION" "/DMyOutputName=$outputName" packaging\windows\installer.iss
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: dist/installer/*.exe
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish release
+    needs: [prepare, build-macos, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Assemble assets and checksums
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          find artifacts -type f \( -name '*.dmg' -o -name '*.exe' \) -exec cp {} release/ \;
+          cd release
+          shasum -a 256 * > SHA256SUMS.txt
+          echo "Assets:"; ls -la
+      - name: Publish stable release
+        if: needs.prepare.outputs.channel == 'stable'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$TAG" release/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "FolioSenseAI $TAG" \
+              --generate-notes \
+              --verify-tag
+          fi
+      - name: Refresh latest-main prerelease
+        if: needs.prepare.outputs.channel == 'dev'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TOKEN: ${{ needs.prepare.outputs.asset_token }}
+        run: |
+          set -euo pipefail
+          BUILT="$(date -u '+%Y-%m-%d %H:%M UTC')"
+          NOTES=$(cat <<EOF
+          **Rolling development build from \`main\`.**
+
+          - Commit: \`${GITHUB_SHA}\`
+          - Build: \`${TOKEN}\`
+          - Built: ${BUILT}
+
+          > ⚠️ These builds come straight from the latest \`main\` merge and may be
+          > unstable. For everyday use, grab the [latest stable release](https://github.com/${GITHUB_REPOSITORY}/releases/latest).
+          >
+          > Builds are not yet code-signed — see the install docs for the expected
+          > macOS/Windows warnings and how to verify your download with SHA256SUMS.txt.
+          EOF
+          )
+          # Recreate so the prerelease only ever holds the newest build.
+          gh release delete latest-main --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest-main release/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Latest main build" \
+            --notes "$NOTES" \
+            --prerelease \
+            --target "$GITHUB_SHA"

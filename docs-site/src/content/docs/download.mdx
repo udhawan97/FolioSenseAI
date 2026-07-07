@@ -1,0 +1,59 @@
+---
+title: Download
+description: Download FolioSenseAI for macOS or Windows, understand the release channels, and verify your download.
+---
+
+import { Aside, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+FolioSenseAI ships as a native desktop app — no Python, no terminal required.
+
+<CardGrid>
+	<LinkCard title="Download for macOS" description="Apple Silicon .dmg" href="https://github.com/udhawan97/FolioSenseAI/releases/latest" />
+	<LinkCard title="Download for Windows" description="64-bit .exe installer" href="https://github.com/udhawan97/FolioSenseAI/releases/latest" />
+</CardGrid>
+
+The buttons above always resolve to the newest **stable** release. You can also browse
+[every release](https://github.com/udhawan97/FolioSenseAI/releases) or use the
+[landing page](https://udhawan97.github.io/FolioSenseAI/) with platform-aware download buttons.
+
+## Release channels
+
+| Channel | Where it comes from | Who it's for |
+| --- | --- | --- |
+| **Stable** | A version tag (`v4.3.0`), cut manually | Everyone. This is the default download. |
+| **latest-main** | Refreshed automatically on every merge to `main` | Testing the newest changes; may be unstable. |
+
+The `latest-main` prerelease is offered under **Development builds** on the website and in
+the [releases list](https://github.com/udhawan97/FolioSenseAI/releases). It always holds a
+single, newest build straight from `main`.
+
+<Aside type="caution" title="Early builds are unsigned">
+FolioSenseAI doesn't have a paid Apple or Windows code-signing certificate yet, so macOS
+and Windows will show a warning the first time you open it. This is expected for an
+open-source app. The [macOS](/FolioSenseAI/install-macos/) and
+[Windows](/FolioSenseAI/install-windows/) guides show exactly what you'll see and how to
+proceed. See [Releases &amp; versioning](/FolioSenseAI/releases-and-versioning/) for the
+signing roadmap.
+</Aside>
+
+## Verify your download
+
+Every release includes a `SHA256SUMS.txt`. After downloading, confirm your file matches:
+
+```bash
+# macOS / Linux — run in the folder holding the download + SHA256SUMS.txt
+shasum -a 256 -c SHA256SUMS.txt
+```
+
+```powershell
+# Windows PowerShell — compare against the line in SHA256SUMS.txt
+Get-FileHash .\FolioSenseAI-Windows-x64-v4.3.0-Setup.exe -Algorithm SHA256
+```
+
+A match confirms the file is byte-for-byte what CI published to GitHub Releases.
+
+## Prefer to run from source?
+
+The [install scripts](/FolioSenseAI/build-from-source/#one-line-install-scripts) and the
+[build-from-source](/FolioSenseAI/build-from-source/) guide still work on any platform with
+Python 3.11+ — including Intel Macs and Linux.

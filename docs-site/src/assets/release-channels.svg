@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 240" role="img" aria-label="Two release channels: version tags produce stable releases that the website points to by default; every main merge refreshes a single rolling latest-main prerelease offered behind a development-builds dropdown.">
+  <defs>
+    <linearGradient id="fs-accent2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#6fd6f0"/>
+      <stop offset="1" stop-color="#97acec"/>
+    </linearGradient>
+    <marker id="fs-arrow2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#6fd6f0"/>
+    </marker>
+    <style>
+      .box2 { fill: #0c0c12; stroke: #2b2b38; stroke-width: 1.5; }
+      .lbl2 { fill: #f5f5f7; font: 600 13px -apple-system, 'Segoe UI', sans-serif; }
+      .sub2 { fill: #9a9aa6; font: 400 11px -apple-system, 'Segoe UI', sans-serif; }
+      .hdr2 { fill: #6fd6f0; font: 650 12px -apple-system, 'Segoe UI', sans-serif; letter-spacing: 0.04em; }
+      .edge2 { stroke: #6fd6f0; stroke-width: 1.6; fill: none; opacity: 0.8; }
+    </style>
+  </defs>
+
+  <text class="hdr2" x="20" y="34">STABLE CHANNEL — DEFAULT</text>
+  <rect class="box2" x="20" y="46" width="150" height="46" rx="10"/>
+  <text class="lbl2" x="95" y="66" text-anchor="middle">Push tag v4.3.0</text>
+  <text class="sub2" x="95" y="82" text-anchor="middle">cut manually</text>
+
+  <rect class="box2" x="230" y="46" width="160" height="46" rx="10"/>
+  <text class="lbl2" x="310" y="66" text-anchor="middle">Stable Release</text>
+  <text class="sub2" x="310" y="82" text-anchor="middle">v4.3.0 · permanent</text>
+
+  <rect x="452" y="46" width="180" height="46" rx="10" fill="#12222c" stroke="url(#fs-accent2)" stroke-width="1.8"/>
+  <text class="lbl2" x="542" y="66" text-anchor="middle">Main download buttons</text>
+  <text class="sub2" x="542" y="82" text-anchor="middle">what everyone gets</text>
+
+  <path class="edge2" d="M170 69 H226" marker-end="url(#fs-arrow2)"/>
+  <path class="edge2" d="M390 69 H448" marker-end="url(#fs-arrow2)"/>
+
+  <text class="hdr2" x="20" y="158">DEV CHANNEL — BEHIND A DROPDOWN</text>
+  <rect class="box2" x="20" y="170" width="150" height="46" rx="10"/>
+  <text class="lbl2" x="95" y="190" text-anchor="middle">Every main merge</text>
+  <text class="sub2" x="95" y="206" text-anchor="middle">automatic</text>
+
+  <rect class="box2" x="230" y="170" width="160" height="46" rx="10"/>
+  <text class="lbl2" x="310" y="190" text-anchor="middle">latest-main</text>
+  <text class="sub2" x="310" y="206" text-anchor="middle">prerelease · rolling</text>
+
+  <rect class="box2" x="452" y="170" width="180" height="46" rx="10"/>
+  <text class="lbl2" x="542" y="190" text-anchor="middle">"Development builds"</text>
+  <text class="sub2" x="542" y="206" text-anchor="middle">opt-in, with warning</text>
+
+  <path class="edge2" d="M170 193 H226" marker-end="url(#fs-arrow2)"/>
+  <path class="edge2" d="M390 193 H448" marker-end="url(#fs-arrow2)"/>
+</svg>

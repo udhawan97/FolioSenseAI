@@ -1,17 +1,44 @@
 #!/usr/bin/env bash
-# One-command Mac installer.
-# Usage: curl -fsSL https://raw.githubusercontent.com/udhawan97/FolioSenseAI/release-v4.2/scripts/install-mac.sh | bash
+# One-command Mac installer (runs FolioSenseAI from source).
+# Usage: curl -fsSL https://raw.githubusercontent.com/udhawan97/FolioSenseAI/main/scripts/install-mac.sh | bash
+#
+# By default this installs the latest stable release. Override the ref to pin a
+# tag or track the dev channel:
+#   FOLIO_REF=v4.3.0      curl ... | bash     # a specific release
+#   FOLIO_REF=latest-main curl ... | bash     # newest main build
+#   FOLIO_REF=main        curl ... | bash     # current main branch
+#
+# Prefer the .dmg for a no-Python install: https://github.com/udhawan97/FolioSenseAI/releases/latest
 set -euo pipefail
 
+REPO="udhawan97/FolioSenseAI"
 INSTALL_DIR="$HOME/Applications/FolioSenseAI"
 SHORTCUT="$HOME/Desktop/FolioSenseAI.command"
-RELEASE_URL="https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v4.2.zip"
-EXTRACT_NAME="FolioSenseAI-release-v4.2"
 
 echo ""
 echo "  FolioSenseAI Installer"
 echo "  ─────────────────────"
 echo ""
+
+# ── Resolve which ref to download ─────────────────────────────────────────────
+# Default to the latest published release tag; fall back to main if the API is
+# unreachable or no release exists yet.
+REF="${FOLIO_REF:-}"
+if [[ -z "$REF" ]]; then
+  REF="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null \
+        | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n1 || true)"
+fi
+if [[ -z "$REF" ]]; then
+  echo "  Could not resolve the latest release — falling back to 'main'."
+  REF="main"
+fi
+echo "  Installing ref: $REF"
+
+RELEASE_URL="https://github.com/$REPO/archive/refs/tags/$REF.zip"
+# Branch refs (e.g. main) live under a different archive path than tags.
+if [[ "$REF" == "main" ]]; then
+  RELEASE_URL="https://github.com/$REPO/archive/refs/heads/main.zip"
+fi
 
 # ── Python ────────────────────────────────────────────────────────────────────
 find_python() {
@@ -38,11 +65,19 @@ echo "  ✓ $("$PYTHON_BIN" --version)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-echo "  Downloading FolioSenseAI v4.2..."
+echo "  Downloading FolioSenseAI ($REF)..."
 curl -fsSL --progress-bar "$RELEASE_URL" -o "$TMP/folio.zip"
 
 echo "  Extracting..."
 unzip -q "$TMP/folio.zip" -d "$TMP/"
+
+# GitHub names the extracted folder after the ref (and strips a leading "v" on
+# version tags), so locate it instead of guessing the name.
+EXTRACTED="$(find "$TMP" -maxdepth 1 -type d -name 'FolioSenseAI-*' | head -n1)"
+if [[ -z "$EXTRACTED" ]]; then
+  echo "  Download did not contain the expected FolioSenseAI folder." >&2
+  exit 1
+fi
 
 # ── Preserve existing data ────────────────────────────────────────────────────
 if [[ -d "$INSTALL_DIR/database" ]]; then
@@ -56,7 +91,7 @@ fi
 # ── Install ───────────────────────────────────────────────────────────────────
 mkdir -p "$HOME/Applications"
 rm -rf "$INSTALL_DIR"
-mv "$TMP/$EXTRACT_NAME" "$INSTALL_DIR"
+mv "$EXTRACTED" "$INSTALL_DIR"
 
 [[ -f "$TMP/env_backup" ]] && cp "$TMP/env_backup" "$INSTALL_DIR/.env" && echo "  ✓ Settings restored"
 

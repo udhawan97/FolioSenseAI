@@ -3,10 +3,16 @@ from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 from app.config import settings
 
-# Create the database directory if it doesn't already exist
-os.makedirs("database", exist_ok=True)
-
 _IS_SQLITE = settings.DATABASE_URL.startswith("sqlite")
+
+# Ensure the directory that will hold the SQLite file exists. The path is
+# derived from DATABASE_URL so this works for a source checkout (./database),
+# a frozen desktop app (per-user data dir), and any custom override alike.
+if _IS_SQLITE:
+    _db_file = settings.DATABASE_URL.replace("sqlite:///", "", 1)
+    _db_parent = os.path.dirname(_db_file)
+    if _db_parent:
+        os.makedirs(_db_parent, exist_ok=True)
 
 # Create the database engine — this is the single connection to our SQLite file.
 # check_same_thread=False is required by SQLite when used with FastAPI's async workers.

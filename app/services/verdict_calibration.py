@@ -10,6 +10,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.models import VerdictSnapshot
+from app.services.log_safety import sanitize_for_log
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,9 @@ def log_verdict_snapshot(
             generated_at=datetime.now(timezone.utc),
         ))
     except Exception as exc:
-        logger.debug("Snapshot log failed for %s: %s", ticker, type(exc).__name__)
+        logger.debug(
+            "Snapshot log failed for %s: %s", sanitize_for_log(ticker), type(exc).__name__
+        )
 
 
 def _action_hit(action: str, forward_return_pct: float) -> bool:

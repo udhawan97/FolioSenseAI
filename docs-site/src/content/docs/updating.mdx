@@ -1,0 +1,38 @@
+---
+title: Updating
+description: How to update FolioSenseAI and why your portfolio data survives every update.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Updating is just installing the newer version over the old one. Your database and config
+live in a separate per-user data directory, so they're preserved automatically.
+
+## Desktop app
+
+- **macOS** — download the newer `.dmg` and drag the app into Applications, replacing the
+  old copy.
+- **Windows** — run the newer `-Setup.exe`; it upgrades the existing install in place.
+
+Your holdings, snapshots, cached AI output, and `.env` all carry over. See where that data
+lives for [macOS](/FolioSenseAI/install-macos/#where-your-data-lives) and
+[Windows](/FolioSenseAI/install-windows/#where-your-data-lives).
+
+<Aside type="tip">
+Not sure whether you're on the latest version? Compare the version shown on the
+[releases page](https://github.com/udhawan97/FolioSenseAI/releases) with the app's — it's
+reported at `http://localhost:8000/health` while the app is running, and in the API docs
+title at `/docs`.
+</Aside>
+
+## Installed from source or a script?
+
+```bash
+cd FolioSenseAI
+git pull
+python -m pip install -r requirements.txt
+python run.py
+```
+
+Re-running the [install scripts](/FolioSenseAI/build-from-source/#one-line-install-scripts)
+is also safe — they preserve your existing `.env` and `database/` files.
