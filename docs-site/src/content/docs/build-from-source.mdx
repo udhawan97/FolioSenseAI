@@ -1,0 +1,120 @@
+---
+title: Build from source
+description: Run FolioSenseAI from source on any platform, and build the desktop installers yourself.
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+Everything you need to run or package FolioSenseAI is in the repository. This works on
+macOS (Apple Silicon or Intel), Windows, and Linux with **Python 3.11+**.
+
+## Run from source
+
+<Tabs>
+	<TabItem label="macOS / Linux">
+	```bash
+	git clone https://github.com/udhawan97/FolioSenseAI.git
+	cd FolioSenseAI
+	./scripts/setup.sh
+	```
+	</TabItem>
+	<TabItem label="Windows">
+	```powershell
+	git clone https://github.com/udhawan97/FolioSenseAI.git
+	cd FolioSenseAI
+	.\scripts\setup.ps1
+	```
+	</TabItem>
+</Tabs>
+
+The setup script creates a virtual environment, installs dependencies, writes a local
+`.env`, prepares the `database/` folder, and starts the app at `http://localhost:8000`.
+For day-to-day use afterwards, run `./scripts/start.sh` (or `.\scripts\start.ps1`).
+
+### Manual setup
+
+```bash
+python3 -m venv venv
+source venv/bin/activate            # Windows: .\venv\Scripts\activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+cp .env.example .env                # Windows: copy .env.example .env
+python run.py
+```
+
+## One-line install scripts
+
+For a quick source install without cloning manually, these download the latest release and
+set up a local environment. They're short and readable — open them first
+([mac](https://github.com/udhawan97/FolioSenseAI/blob/main/scripts/install-mac.sh),
+[win](https://github.com/udhawan97/FolioSenseAI/blob/main/scripts/install-win.ps1)).
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/udhawan97/FolioSenseAI/main/scripts/install-mac.sh | bash
+```
+
+```powershell
+irm https://raw.githubusercontent.com/udhawan97/FolioSenseAI/main/scripts/install-win.ps1 | iex
+```
+
+Set `FOLIO_REF` to install a specific tag or the dev channel, e.g.
+`FOLIO_REF=latest-main`.
+
+## Build the desktop installers
+
+The DMG and EXE are produced by [PyInstaller](https://pyinstaller.org) plus native
+installer tooling. You can reproduce a build locally on the matching OS.
+
+```bash
+# Both platforms: freeze the app (onedir bundle)
+python -m pip install -r requirements.txt -r requirements-desktop.txt
+python -m PyInstaller packaging/pyinstaller/FolioSenseAI.spec
+
+# macOS only: repair a PyInstaller BUNDLE quirk that can leave data-only
+# directories (static/, templates/, pytz's timezone data) as dangling
+# symlinks instead of real files — see the script for the full explanation.
+python packaging/pyinstaller/fix_macos_bundle_symlinks.py dist
+
+# Sanity-check the frozen bundle boots
+#   macOS:   dist/FolioSenseAI.app/Contents/MacOS/FolioSenseAI --smoke
+#   Windows: dist\FolioSenseAI\FolioSenseAI.exe --smoke
+```
+
+<Tabs>
+	<TabItem label="macOS .dmg">
+	```bash
+	brew install create-dmg
+	mkdir -p dist/dmg-src && cp -R dist/FolioSenseAI.app dist/dmg-src/
+	create-dmg \
+	  --volname "FolioSenseAI" \
+	  --volicon packaging/icons/FolioSenseAI.icns \
+	  --app-drop-link 390 190 \
+	  --icon "FolioSenseAI.app" 150 190 \
+	  "dist/FolioSenseAI-macOS-arm64-local.dmg" "dist/dmg-src/"
+	```
+	</TabItem>
+	<TabItem label="Windows .exe">
+	```powershell
+	choco install innosetup -y
+	& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+	  /DMyAppVersion=4.3.0 `
+	  /DMyOutputName=FolioSenseAI-Windows-x64-local-Setup `
+	  packaging\windows\installer.iss
+	```
+	</TabItem>
+</Tabs>
+
+<Aside type="note">
+CI runs exactly these steps on GitHub-hosted macOS and Windows runners for every release —
+see [Releases &amp; versioning](/FolioSenseAI/releases-and-versioning/). Icons are
+regenerated from the brand PNG with `scripts/make-icons.sh` (macOS only) and committed, so a
+build never needs cross-platform icon tooling.
+</Aside>
+
+## Useful local URLs
+
+| URL | Purpose |
+| --- | --- |
+| `http://localhost:8000` | Dashboard |
+| `http://localhost:8000/docs` | Interactive Swagger API docs |
+| `http://localhost:8000/health` | Health check |

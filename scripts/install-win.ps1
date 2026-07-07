@@ -1,16 +1,43 @@
-# One-command Windows installer.
-# Usage (PowerShell): irm https://raw.githubusercontent.com/udhawan97/FolioSenseAI/release-v4.2/scripts/install-win.ps1 | iex
+# One-command Windows installer (runs FolioSenseAI from source).
+# Usage (PowerShell): irm https://raw.githubusercontent.com/udhawan97/FolioSenseAI/main/scripts/install-win.ps1 | iex
+#
+# Installs the latest stable release by default. Set $env:FOLIO_REF to pin a tag
+# or track the dev channel before running, e.g.:
+#   $env:FOLIO_REF = "v4.3.0"       # a specific release
+#   $env:FOLIO_REF = "latest-main"  # newest main build
+#   $env:FOLIO_REF = "main"         # current main branch
+#
+# Prefer the .exe for a no-Python install: https://github.com/udhawan97/FolioSenseAI/releases/latest
 $ErrorActionPreference = "Stop"
 
+$repo        = "udhawan97/FolioSenseAI"
 $installDir  = "$HOME\FolioSenseAI"
 $shortcut    = "$HOME\Desktop\FolioSenseAI.lnk"
-$releaseUrl  = "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v4.2.zip"
-$extractName = "FolioSenseAI-release-v4.2"
 
 Write-Host ""
 Write-Host "  FolioSenseAI Installer"
 Write-Host "  ---------------------"
 Write-Host ""
+
+# -- Resolve which ref to download --------------------------------------------
+$ref = $env:FOLIO_REF
+if (-not $ref) {
+    try {
+        $latest = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest" -UseBasicParsing
+        $ref = $latest.tag_name
+    } catch { $ref = $null }
+}
+if (-not $ref) {
+    Write-Host "  Could not resolve the latest release - falling back to 'main'."
+    $ref = "main"
+}
+Write-Host "  Installing ref: $ref"
+
+if ($ref -eq "main") {
+    $releaseUrl = "https://github.com/$repo/archive/refs/heads/main.zip"
+} else {
+    $releaseUrl = "https://github.com/$repo/archive/refs/tags/$ref.zip"
+}
 
 # ── Python ────────────────────────────────────────────────────────────────────
 function Find-Python {
@@ -49,11 +76,19 @@ Write-Host "  OK $pyVer"
 $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ([System.IO.Path]::GetRandomFileName())
 New-Item -ItemType Directory -Path $tmp | Out-Null
 
-Write-Host "  Downloading FolioSenseAI v4.2..."
+Write-Host "  Downloading FolioSenseAI ($ref)..."
 Invoke-WebRequest $releaseUrl -OutFile "$tmp\folio.zip" -UseBasicParsing
 
 Write-Host "  Extracting..."
 Expand-Archive "$tmp\folio.zip" -DestinationPath $tmp
+
+# GitHub names the extracted folder after the ref (and strips a leading "v" on
+# version tags), so locate it instead of guessing the name.
+$extracted = Get-ChildItem -Path $tmp -Directory -Filter "FolioSenseAI-*" | Select-Object -First 1
+if (-not $extracted) {
+    Write-Host "  Download did not contain the expected FolioSenseAI folder."
+    exit 1
+}
 
 # ── Preserve existing data ────────────────────────────────────────────────────
 if (Test-Path "$installDir\database") {
@@ -66,7 +101,7 @@ if (Test-Path "$installDir\.env") {
 
 # ── Install ───────────────────────────────────────────────────────────────────
 if (Test-Path $installDir) { Remove-Item $installDir -Recurse -Force }
-Move-Item "$tmp\$extractName" $installDir
+Move-Item $extracted.FullName $installDir
 
 if (Test-Path "$tmp\env_backup") {
     Copy-Item "$tmp\env_backup" "$installDir\.env"

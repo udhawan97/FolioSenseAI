@@ -7,6 +7,8 @@ import logging
 from datetime import date, datetime, timezone
 from typing import Optional
 
+from app.services.log_safety import sanitize_for_log
+
 logger = logging.getLogger(__name__)
 
 _EARNINGS_WINDOW_DAYS = 14
@@ -39,7 +41,9 @@ def fetch_next_earnings(ticker: str) -> Optional[date]:
         info = get_ticker_info(ticker)
         return _parse_earnings_date(info)
     except Exception as exc:
-        logger.debug("Earnings fetch failed for %s: %s", ticker, type(exc).__name__)
+        logger.debug(
+            "Earnings fetch failed for %s: %s", sanitize_for_log(ticker), type(exc).__name__
+        )
         return None
 
 

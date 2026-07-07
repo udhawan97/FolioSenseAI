@@ -10,7 +10,16 @@ from app.routers import stocks, portfolio, ai
 from app.routers import news
 from app.config import settings
 from app.database import engine, ensure_startup_migrations
+from app.paths import resource_dir
+from app.version import __version__
 from app import models
+
+# Absolute paths to bundled resources so the app works whether it is run from a
+# source checkout or a frozen desktop bundle (where the working directory and the
+# resource location are not the same).
+_RESOURCE_DIR = resource_dir()
+_STATIC_DIR = _RESOURCE_DIR / "static"
+_TEMPLATE_FILE = _RESOURCE_DIR / "templates" / "index.html"
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +70,7 @@ app = FastAPI(
         "FolioSenseAI helps explain portfolio movement by surfacing "
         "market context and AI-generated insights for holdings."
     ),
-    version="4.2.0",
+    version=__version__,
     lifespan=lifespan,
 )
 
@@ -77,9 +86,9 @@ app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # Serve static files (CSS, JS, images) from the /static folder
 # Files at static/css/style.css → URL: /static/css/style.css
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
-with open("templates/index.html", encoding="utf-8") as _f:
+with open(_TEMPLATE_FILE, encoding="utf-8") as _f:
     _dashboard_html = _f.read()
 
 # Register the route groups defined in our router files

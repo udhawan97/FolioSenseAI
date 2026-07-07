@@ -23,7 +23,11 @@ venv/
 venv2/
 .venv/
 env/
- 
+
+# === Desktop build output (PyInstaller / installers) ===
+/build/
+/dist/
+
 # === Database ===
 *.db
 *.db-*

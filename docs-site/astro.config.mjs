@@ -13,6 +13,7 @@ export default defineConfig({
         src: './src/assets/folio-orbit-icon.svg',
         replacesTitle: false,
       },
+      favicon: '/assets/folio-orbit-icon.svg',
       social: [
         { icon: 'github', label: 'GitHub', href: 'https://github.com/udhawan97/FolioSenseAI' },
       ],
@@ -21,6 +22,17 @@ export default defineConfig({
         baseUrl: 'https://github.com/udhawan97/FolioSenseAI/edit/main/docs-site/',
       },
       sidebar: [
+        {
+          label: 'Download & Install',
+          items: [
+            { label: 'Download', slug: 'download' },
+            { label: 'Install on macOS', slug: 'install-macos' },
+            { label: 'Install on Windows', slug: 'install-windows' },
+            { label: 'Updating', slug: 'updating' },
+            { label: 'Build from source', slug: 'build-from-source' },
+            { label: 'Releases & versioning', slug: 'releases-and-versioning' },
+          ],
+        },
         {
           label: 'Get Started',
           items: [

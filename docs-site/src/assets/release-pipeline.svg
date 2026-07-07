@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 200" role="img" aria-label="Release pipeline: a merge to main triggers tests, then parallel macOS and Windows builds, each smoke-tested, then published to a GitHub Release that feeds the website download buttons.">
+  <defs>
+    <linearGradient id="fs-accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#6fd6f0"/>
+      <stop offset="1" stop-color="#97acec"/>
+    </linearGradient>
+    <marker id="fs-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#6fd6f0"/>
+    </marker>
+    <style>
+      .box { fill: #0c0c12; stroke: #2b2b38; stroke-width: 1.5; rx: 10; }
+      .lbl { fill: #f5f5f7; font: 600 13px -apple-system, 'Segoe UI', sans-serif; }
+      .sub { fill: #9a9aa6; font: 400 11px -apple-system, 'Segoe UI', sans-serif; }
+      .edge { stroke: #6fd6f0; stroke-width: 1.6; fill: none; opacity: 0.8; }
+    </style>
+  </defs>
+
+  <!-- merge -->
+  <rect class="box" x="12" y="78" width="118" height="44" rx="10"/>
+  <text class="lbl" x="71" y="98" text-anchor="middle">Merge to main</text>
+  <text class="sub" x="71" y="114" text-anchor="middle">or push a v* tag</text>
+
+  <!-- tests -->
+  <rect class="box" x="176" y="78" width="104" height="44" rx="10"/>
+  <text class="lbl" x="228" y="104" text-anchor="middle">Run tests</text>
+
+  <!-- builds -->
+  <rect class="box" x="326" y="28" width="150" height="44" rx="10"/>
+  <text class="lbl" x="401" y="48" text-anchor="middle">Build macOS .dmg</text>
+  <text class="sub" x="401" y="63" text-anchor="middle">+ smoke test</text>
+
+  <rect class="box" x="326" y="128" width="150" height="44" rx="10"/>
+  <text class="lbl" x="401" y="148" text-anchor="middle">Build Windows .exe</text>
+  <text class="sub" x="401" y="163" text-anchor="middle">+ smoke test</text>
+
+  <!-- release -->
+  <rect class="box" x="522" y="78" width="140" height="44" rx="10"/>
+  <text class="lbl" x="592" y="98" text-anchor="middle">GitHub Release</text>
+  <text class="sub" x="592" y="114" text-anchor="middle">assets + SHA256SUMS</text>
+
+  <!-- website -->
+  <rect x="708" y="78" width="140" height="44" rx="10" fill="#12222c" stroke="url(#fs-accent)" stroke-width="1.8"/>
+  <text class="lbl" x="778" y="98" text-anchor="middle">Website buttons</text>
+  <text class="sub" x="778" y="114" text-anchor="middle">always current</text>
+
+  <!-- edges -->
+  <path class="edge" d="M130 100 H172" marker-end="url(#fs-arrow)"/>
+  <path class="edge" d="M280 96 C300 96, 306 50, 322 50" marker-end="url(#fs-arrow)"/>
+  <path class="edge" d="M280 104 C300 104, 306 150, 322 150" marker-end="url(#fs-arrow)"/>
+  <path class="edge" d="M476 50 C498 50, 504 96, 518 96" marker-end="url(#fs-arrow)"/>
+  <path class="edge" d="M476 150 C498 150, 504 104, 518 104" marker-end="url(#fs-arrow)"/>
+  <path class="edge" d="M662 100 H704" marker-end="url(#fs-arrow)"/>
+</svg>
