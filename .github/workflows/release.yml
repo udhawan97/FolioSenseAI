@@ -151,7 +151,18 @@ jobs:
       - name: Smoke test the frozen bundle
         shell: pwsh
         run: |
-          $proc = Start-Process -FilePath "dist\FolioSenseAI\FolioSenseAI.exe" -ArgumentList "--smoke" -Wait -PassThru
+          # Start-Process alone doesn't pipe the child's stdout/stderr back to
+          # this shell, so failures show up as a bare exit code with no
+          # message. Redirect to files and print them so a failure is
+          # actually diagnosable from the workflow log.
+          $outFile = "smoke-stdout.log"
+          $errFile = "smoke-stderr.log"
+          $proc = Start-Process -FilePath "dist\FolioSenseAI\FolioSenseAI.exe" -ArgumentList "--smoke" `
+            -RedirectStandardOutput $outFile -RedirectStandardError $errFile -Wait -PassThru
+          Write-Host "--- stdout ---"
+          if (Test-Path $outFile) { Get-Content $outFile }
+          Write-Host "--- stderr ---"
+          if (Test-Path $errFile) { Get-Content $errFile }
           if ($proc.ExitCode -ne 0) {
             Write-Error "Smoke test failed with exit code $($proc.ExitCode)"
             exit 1
