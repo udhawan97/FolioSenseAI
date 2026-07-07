@@ -17,6 +17,16 @@ import threading
 import time
 import urllib.request
 
+# PyInstaller's --windowed/console=False mode sets sys.stdout/sys.stderr to
+# None (no console attached, no pipe to redirect to). Any print() call would
+# then raise AttributeError and crash the app before it even gets to show a
+# window. This is a documented PyInstaller gotcha, not specific to this app —
+# guard it unconditionally so every print() below is safe on every platform.
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w", encoding="utf-8")  # pylint: disable=consider-using-with
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w", encoding="utf-8")  # pylint: disable=consider-using-with
+
 # When run from a source checkout (python desktop/main.py), the repo root isn't
 # on sys.path, so the `app` package can't be imported. A frozen build gets its
 # path set up by PyInstaller, so only patch this in the non-frozen case.
@@ -28,6 +38,11 @@ if not getattr(sys, "frozen", False):
 HOST = "127.0.0.1"
 PREFERRED_PORT = 8000
 HEALTH_TIMEOUT_SECONDS = 40.0
+
+# Holds the server thread's startup exception, if any. A dict (rather than a
+# module-level name rebound via `global`) so _run_server can record into it
+# without a global statement.
+_STARTUP_STATE: dict = {"error": None}
 
 
 def _find_free_port(preferred: int) -> int:
@@ -56,12 +71,20 @@ def _wait_for_health(base_url: str, timeout: float) -> bool:
 
 
 def _run_server(port: int) -> None:
-    # Imported lazily and inside the thread so the CORS origin below is already
-    # set in the environment before app.config builds its settings singleton.
-    import uvicorn
-    from app.main import app
+    try:
+        # Imported lazily and inside the thread so the CORS origin below is
+        # already set in the environment before app.config builds its
+        # settings singleton.
+        import uvicorn
+        from app.main import app
 
-    uvicorn.run(app, host=HOST, port=port, log_level="warning")
+        uvicorn.run(app, host=HOST, port=port, log_level="warning")
+    except Exception as exc:  # pylint: disable=broad-except
+        # A daemon thread's default exception hook only prints to stderr,
+        # which can be a devnull-backed guard on a windowed build (see the
+        # sys.stderr None handling above) — capture it so main() can surface
+        # a real reason instead of a generic "timed out" message.
+        _STARTUP_STATE["error"] = f"{type(exc).__name__}: {exc}"
 
 
 def main() -> int:
@@ -76,7 +99,10 @@ def main() -> int:
     threading.Thread(target=_run_server, args=(port,), daemon=True).start()
 
     if not _wait_for_health(base_url, HEALTH_TIMEOUT_SECONDS):
-        print("FolioSenseAI failed to start within the timeout.", file=sys.stderr)
+        if _STARTUP_STATE["error"]:
+            print(f"FolioSenseAI failed to start: {_STARTUP_STATE['error']}", file=sys.stderr)
+        else:
+            print("FolioSenseAI failed to start within the timeout.", file=sys.stderr)
         return 1
 
     if smoke:
