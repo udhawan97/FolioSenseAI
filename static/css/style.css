@@ -12468,6 +12468,14 @@ tr.research-holding-row:hover {
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
+    /* `visibility: hidden` keeps the pane in the layout tree — a large Holdings
+       table still pays its full (table-layout: auto) column-width computation
+       on every layout pass even while a different zone is showing. content-
+       visibility skips layout/paint entirely for hidden content and restores
+       instantly on switch, so it's a pure performance win with the same
+       visible behavior; visibility:hidden stays as the fallback for engines
+       that don't support it. */
+    content-visibility: hidden;
 }
 .dashboard-zone-pane--active {
     position: relative;

@@ -83,6 +83,12 @@ const _REGIME_CHIP_CLASS = {
 };
 
 let _trendObserver = null;
+// Canvas -> last history array reference the trend observer actually drew.
+// Lets the observer's hot path (fires on every row's visibility-threshold
+// crossing while scrolling) skip straight past unchanged rows via a reference
+// check, instead of rebuilding a signature string from the price history on
+// every firing just to discover nothing changed.
+const _trendObserverLastHistory = new WeakMap();
 const THEME_KEY = "foliosense-theme";
 const TEXT_SIZE_KEY = "foliosense-text-size";
 const TEXT_SIZES = ["compact", "standard", "comfortable"];
@@ -3480,10 +3486,25 @@ function ensureTrendObserver() {
             if (!row || !canvas) return;
             const ticker = row.dataset.ticker;
             const history = latestTrendData[ticker] || [];
-            if (history.length >= 2) {
-                delete canvas.dataset.trendSig;
-                drawTrend(canvas, history);
-            }
+            if (history.length < 2) return;
+            // Fast path: while scrolling, this callback fires again for every
+            // row whose sparkline cell crosses the 1% threshold, even when its
+            // data hasn't changed since the last time. `latestTrendData[ticker]`
+            // keeps a stable array reference between fetches, so a reference
+            // check lets a table full of holdings skip straight past unchanged
+            // rows without touching their price history at all.
+            if (_trendObserverLastHistory.get(canvas) === history) return;
+            // Skip the redraw (canvas resize + gradient rebuild) when this cell
+            // already shows the current data — the sig check mirrors the direct
+            // render path below. Without it, every row's sparkline redraws on
+            // every visibility-threshold crossing, so a table with many holdings
+            // pays for a full canvas resize+repaint per row on every scroll pass
+            // even though nothing changed.
+            const sig = trendSignature(history);
+            _trendObserverLastHistory.set(canvas, history);
+            if (canvas.dataset.trendSig === sig) return;
+            canvas.dataset.trendSig = sig;
+            drawTrend(canvas, history);
         });
     }, { root: null, threshold: 0.01 });
 }
@@ -3593,6 +3614,7 @@ function updateHoldingRow(row, h, index, trendData = {}) {
     }
     canvas.setAttribute("aria-label", `${h.ticker} ${TREND_DAYS}-day trend`);
     const sig = trendSignature(history);
+    _trendObserverLastHistory.set(canvas, history);
     if (canvas.dataset.trendSig !== sig) {
         canvas.dataset.trendSig = sig;
         drawTrend(canvas, history);
