@@ -3,9 +3,13 @@
  * FolioSenseAI landing / download page.
  *
  * Standalone Astro page (not the Starlight docs layout) that takes over the
- * site root. Release metadata is fetched client-side from the GitHub API with
- * static fallbacks, so the download buttons always work even with JS disabled
- * or the API unreachable. Keep it dependency-free and fast.
+ * site root. Built as a "product demo disguised as a landing page": real,
+ * retina app screenshots (captured via docs-site/scripts/capture.sh) anchor
+ * every section, with CSS-only motion and a tiny bit of vanilla JS.
+ *
+ * Release metadata is fetched client-side from the GitHub API with static
+ * fallbacks, so the download buttons always work even with JS disabled or the
+ * API unreachable. No runtime dependencies; keep it fast on GitHub Pages.
  */
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const REPO = 'udhawan97/FolioSenseAI';
@@ -13,20 +17,50 @@ const GITHUB = `https://github.com/${REPO}`;
 const RELEASES = `${GITHUB}/releases`;
 const RELEASES_LATEST = `${RELEASES}/latest`;
 
-const asset = (p: string) => `${base}/assets/${p}`;
-const doc = (slug: string) => `${base}/${slug}/`;
-
-const features = [
-	{ icon: '🔒', title: 'Local-first', body: 'Your portfolio database and config never leave your machine. Nothing ships anywhere without your key.' },
-	{ icon: '🤖', title: 'Claude optional', body: 'Local Intelligence runs the dashboard by default. Claude adds narration on top — never a requirement.' },
-	{ icon: '📈', title: 'Live market context', body: 'Quotes, history, market regime, and world indices, refreshed and cached for a fast first paint.' },
-	{ icon: '🧭', title: 'Risk analytics', body: 'Exposure, beta, drawdown, volatility, sector tilt, and a Hold / Add / Trim / Exit verdict per ticker.' },
-	{ icon: '🗞️', title: 'News themes', body: 'Grouped headlines for everything you hold or watch, with optional Claude-written portfolio themes.' },
-	{ icon: '🐣', title: 'Meet Senpai', body: 'The dashboard orb that watches your portfolio and has opinions about it, whether you asked or not.' },
-];
+const asset = (p) => `${base}/assets/${p}`;
+const shot = (p) => `${base}/assets/shots/${p}`;
+const doc = (slug) => `${base}/${slug}/`;
 
 const macCommands = `curl -fsSL ${'https://raw.githubusercontent.com'}/${REPO}/main/scripts/install-mac.sh | bash`;
 const winCommands = `irm ${'https://raw.githubusercontent.com'}/${REPO}/main/scripts/install-win.ps1 | iex`;
+
+// Feature spotlights that pair a real screenshot crop with one clear sentence.
+const spotlights = [
+  {
+    key: 'risk',
+    kicker: 'Risk analytics',
+    title: 'See the risk behind the return',
+    body: 'Risk-vs-return scatter, correlation matrix, concentration, beta, and drawdown — every number explained in a plain-English line beneath it.',
+    img: 'risk-analytics-demo.webp',
+    alt: 'FolioSenseAI risk analytics: risk-return scatter, correlation matrix, concentration dial, and beta.',
+    focus: 'top',
+  },
+  {
+    key: 'verdicts',
+    kicker: 'Hold / Add / Trim / Exit',
+    title: 'A verdict for every position',
+    body: 'Each holding gets a rating, trend read, and ETF-quality or analyst context — so the table tells you what to do, not just what it is worth.',
+    img: 'verdicts-demo.webp',
+    alt: 'FolioSenseAI holdings table with per-ticker verdicts, trend sense, ratings, and 7-day sparklines.',
+    focus: 'top',
+  },
+  {
+    key: 'news',
+    kicker: 'News themes',
+    title: 'The headlines that actually touch your book',
+    body: 'Grouped, deduplicated news for everything you hold or watch — with optional Claude-written portfolio themes when a key is connected.',
+    img: 'news-themes-demo.webp',
+    alt: 'FolioSenseAI news feed grouped by holding, with headlines relevant to the demo portfolio.',
+    focus: 'top',
+  },
+];
+
+// Small, crisp vector icons (no emoji, no raster) for the icon cards.
+const icons = {
+  lock: '<path d="M6 10V7a6 6 0 0 1 12 0v3" /><rect x="4" y="10" width="16" height="10" rx="2" /><circle cx="12" cy="15" r="1.4" fill="currentColor" stroke="none"/>',
+  spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/>',
+  pulse: '<path d="M3 12h4l2.5-6 4 12 2.5-6H21"/>',
+};
 ---
 
 <!doctype html>
@@ -34,12 +68,14 @@ const winCommands = `irm ${'https://raw.githubusercontent.com'}/${REPO}/main/scr
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<title>FolioSenseAI — Your folio, finally making sense.</title>
-		<meta name="description" content="A local-first portfolio intelligence dashboard. Download for macOS or Windows — runs entirely on your machine, with Claude as an optional layer on top." />
+		<title>FolioSenseAI — Your portfolio, finally speaking plain English.</title>
+		<meta name="description" content="A local-first portfolio intelligence dashboard for macOS and Windows. Turns holdings, risk, market context, and news into plain-English answers — running entirely on your machine, with Claude as an optional layer." />
 		<link rel="icon" type="image/svg+xml" href={asset('folio-orbit-icon.svg')} />
 		<meta property="og:title" content="FolioSenseAI" />
-		<meta property="og:description" content="Your folio, finally making sense. A local-first portfolio intelligence dashboard for macOS and Windows." />
+		<meta property="og:description" content="Your portfolio, finally speaking plain English. A local-first portfolio intelligence dashboard for macOS and Windows." />
 		<meta property="og:type" content="website" />
+		<meta property="og:image" content={shot('hero-dashboard-demo.webp')} />
+		<meta name="twitter:card" content="summary_large_image" />
 	</head>
 	<body>
 		<div class="backdrop" aria-hidden="true"></div>
@@ -59,132 +95,278 @@ const winCommands = `irm ${'https://raw.githubusercontent.com'}/${REPO}/main/scr
 		<main>
 			<!-- ── Hero ─────────────────────────────────────────────────────── -->
 			<section class="hero">
-				<img class="hero-mark reveal" src={asset('folio-orbit-mark-dark-animated.svg')} alt="FolioSenseAI" width="240" height="150" />
-				<h1 class="reveal">Your folio, finally making sense.</h1>
-				<p class="lede reveal">
-					A local-first portfolio intelligence dashboard that turns holdings, live market data,
-					risk signals, and news into plain-English answers — running entirely on your machine.
-				</p>
+				<div class="hero-copy">
+					<span class="eyebrow reveal">Local-first portfolio intelligence</span>
+					<h1 class="reveal">Your portfolio, finally speaking plain&nbsp;English.</h1>
+					<p class="lede reveal">
+						Holdings, risk, market context, and news — translated into plain-English answers,
+						running entirely on your machine. Claude adds narration when you want it, never as a requirement.
+					</p>
 
-				<div class="cta-row reveal">
-					<a id="dl-mac" class="btn btn-primary" href={RELEASES_LATEST} data-os="mac">
-						<span class="btn-title">Download for macOS</span>
-						<span class="btn-sub" data-role="meta">Apple Silicon · .dmg</span>
-					</a>
-					<a id="dl-win" class="btn btn-primary" href={RELEASES_LATEST} data-os="win">
-						<span class="btn-title">Download for Windows</span>
-						<span class="btn-sub" data-role="meta">64-bit .exe installer</span>
-					</a>
+					<div class="cta-row reveal">
+						<a id="dl-mac" class="btn btn-primary" href={RELEASES_LATEST} data-os="mac">
+							<span class="btn-title">Download for macOS</span>
+							<span class="btn-sub" data-role="meta">Apple Silicon · .dmg</span>
+						</a>
+						<a id="dl-win" class="btn btn-primary" href={RELEASES_LATEST} data-os="win">
+							<span class="btn-title">Download for Windows</span>
+							<span class="btn-sub" data-role="meta">64-bit .exe installer</span>
+						</a>
+					</div>
+
+					<div class="cta-secondary reveal">
+						<a href={doc('get-started/introduction')}>View Docs</a>
+						<span>·</span>
+						<a href={GITHUB}>View GitHub</a>
+						<span>·</span>
+						<a href={RELEASES}>Release Notes</a>
+						<details class="dev-builds">
+							<summary>Development builds</summary>
+							<div class="dev-panel">
+								<p>Rolling builds from the latest <code>main</code> merge. Unstable — for testing only.</p>
+								<a href={`${RELEASES}/tag/latest-main`}>Get the latest-main build ↗</a>
+							</div>
+						</details>
+					</div>
+
+					<ul class="trust-strip reveal" aria-label="At a glance">
+						<li>Local-first</li>
+						<li>Claude optional</li>
+						<li>Open source</li>
+						<li>SHA256 verifiable</li>
+						<li>macOS + Windows</li>
+					</ul>
+
+					<div id="release-strip" class="release-strip reveal" hidden>
+						<span class="chip" data-role="version">—</span>
+						<span class="chip" data-role="date">—</span>
+						<span class="chip" data-role="sha" hidden>—</span>
+						<a class="chip chip-link" data-role="release-link" href={RELEASES_LATEST}>View release ↗</a>
+					</div>
 				</div>
 
-				<div class="cta-secondary reveal">
-					<a href={doc('get-started/introduction')}>View Docs</a>
-					<span>·</span>
-					<a href={GITHUB}>View GitHub</a>
-					<span>·</span>
-					<a href={RELEASES}>Release Notes</a>
-					<details class="dev-builds">
-						<summary>Development builds</summary>
-						<div class="dev-panel">
-							<p>Rolling builds from the latest <code>main</code> merge. Unstable — for testing only.</p>
-							<a href={`${RELEASES}/tag/latest-main`}>Get the latest-main build ↗</a>
+				<!-- Product preview: real screenshot + floating insight chips + moving highlight -->
+				<div class="hero-stage reveal" id="hero-stage">
+					<div class="window-chrome" id="hero-window">
+						<div class="window-bar"><span></span><span></span><span></span></div>
+						<img src={shot('hero-dashboard-demo.webp')} width="2400" height="1508"
+							alt="The FolioSenseAI dashboard showing a demo portfolio: total value, today's P&L, sector map, and today's impact." />
+						<!-- Cursor-style moving highlight (JS-driven, reduced-motion safe) -->
+						<div class="spotlight" id="spotlight" aria-hidden="true">
+							<span class="spotlight-ring"></span>
+							<span class="spotlight-tip" id="spotlight-tip"></span>
 						</div>
-					</details>
-				</div>
-
-				<div id="release-strip" class="release-strip reveal" hidden>
-					<span class="chip" data-role="version">—</span>
-					<span class="chip" data-role="date">—</span>
-					<span class="chip" data-role="sha" hidden>—</span>
-					<span class="chip" data-role="platforms">macOS · Windows</span>
-					<a class="chip chip-link" data-role="release-link" href={RELEASES_LATEST}>View release ↗</a>
-				</div>
-			</section>
-
-			<!-- ── Screenshot ───────────────────────────────────────────────── -->
-			<section class="shot reveal">
-				<div class="window-chrome">
-					<div class="window-bar"><span></span><span></span><span></span></div>
-					<img src={asset('dashboard.png')} alt="The FolioSenseAI dashboard showing holdings, analytics, and market context." loading="lazy" />
-				</div>
-			</section>
-
-			<!-- ── Platform cards ───────────────────────────────────────────── -->
-			<section class="cards">
-				<article class="card reveal">
-					<div class="card-head">
-						<h2>macOS</h2>
-						<span class="arch">arm64 · Apple Silicon</span>
 					</div>
-					<p>A native app window — no Python, no terminal. Runs on macOS 11 Big Sur and newer.</p>
-					<a class="card-btn" href={RELEASES_LATEST} data-os="mac" data-role="card-dl">Download .dmg</a>
-					<a class="card-more" href={doc('install-macos')}>Install guide →</a>
-				</article>
-				<article class="card reveal">
-					<div class="card-head">
-						<h2>Windows</h2>
-						<span class="arch">x64 · Windows 10/11</span>
+
+					<div class="chip-float chip-float--tl" data-depth="18" aria-hidden="true">
+						<span class="dot dot-amber"></span> Risk · Moderate
 					</div>
-					<p>A clean per-user installer — no admin rights required. Uninstalls cleanly from Apps &amp; Features.</p>
-					<a class="card-btn" href={RELEASES_LATEST} data-os="win" data-role="card-dl">Download .exe</a>
-					<a class="card-more" href={doc('install-windows')}>Install guide →</a>
-				</article>
+					<div class="chip-float chip-float--tr" data-depth="-22" aria-hidden="true">
+						<span class="dot dot-green"></span> MSFT · Buy
+					</div>
+					<div class="chip-float chip-float--bl" data-depth="26" aria-hidden="true">
+						Beta · 0.85×
+					</div>
+					<div class="chip-float chip-float--br" data-depth="-16" aria-hidden="true">
+						<span class="dot dot-cyan"></span> Theme · dividend income
+					</div>
+				</div>
 			</section>
 
-			<!-- ── Feature grid ─────────────────────────────────────────────── -->
-			<section class="features">
-				<h2 class="section-title reveal">What it does</h2>
-				<div class="feature-grid">
-					{features.map((f) => (
-						<div class="feature reveal">
-							<span class="feature-icon" aria-hidden="true">{f.icon}</span>
+			<!-- ── Product story ────────────────────────────────────────────── -->
+			<section class="story">
+				<h2 class="section-title reveal">Know what you hold. Understand what changed. Decide what to do next.</h2>
+				<div class="story-grid">
+					<article class="story-step reveal">
+						<span class="step-num">1</span>
+						<h3>Add your holdings</h3>
+						<p>Enter tickers, shares, and cost basis — or add a watchlist. No account, no brokerage link, no sign-up.</p>
+					</article>
+					<article class="story-step reveal">
+						<span class="step-num">2</span>
+						<h3>It reads the whole picture</h3>
+						<p>Exposure, risk, market regime, and news are computed on-device — instantly, with no API key required.</p>
+					</article>
+					<article class="story-step reveal">
+						<span class="step-num">3</span>
+						<h3>You get plain-English answers</h3>
+						<p>Verdicts, drivers, and themes in language you can act on. Turn on Claude for narrated briefings and action plans.</p>
+					</article>
+				</div>
+			</section>
+
+			<!-- ── Feature spotlights (real screenshot crops) ───────────────── -->
+			<section class="spotlights">
+				{spotlights.map((f, i) => (
+					<article class={`spot ${i % 2 ? 'spot--rev' : ''} reveal`}>
+						<div class="spot-copy">
+							<span class="kicker">{f.kicker}</span>
 							<h3>{f.title}</h3>
 							<p>{f.body}</p>
 						</div>
-					))}
+						<figure class={`spot-shot focus-${f.focus}`}>
+							<div class="window-chrome window-chrome--sm">
+								<div class="window-bar"><span></span><span></span><span></span></div>
+								<img src={shot(f.img)} alt={f.alt} loading="lazy" />
+							</div>
+						</figure>
+					</article>
+				))}
+
+				<!-- Supporting capabilities as crisp icon cards (no screenshot needed) -->
+				<div class="mini-grid">
+					<div class="mini reveal">
+						<svg class="mini-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" set:html={icons.lock} />
+						<h4>Local-first by default</h4>
+						<p>Your database and config never leave your machine. Nothing ships anywhere without your key.</p>
+					</div>
+					<div class="mini reveal">
+						<svg class="mini-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" set:html={icons.pulse} />
+						<h4>Live market context</h4>
+						<p>Quotes, history, market regime, and world indices — cached for a fast first paint.</p>
+					</div>
+					<div class="mini reveal">
+						<svg class="mini-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" set:html={icons.spark} />
+						<h4>Claude, when you choose</h4>
+						<p>Add an Anthropic key for narrated briefings, action plans, and news themes. Everything else runs without it.</p>
+					</div>
 				</div>
 			</section>
 
-			<!-- ── Install & troubleshooting ────────────────────────────────── -->
-			<section class="install">
-				<h2 class="section-title reveal">Install</h2>
-
-				<details class="acc reveal" open>
-					<summary>macOS (Apple Silicon)</summary>
-					<div class="acc-body">
-						<ol>
-							<li>Download the <strong>.dmg</strong> and open it.</li>
-							<li>Drag <strong>FolioSenseAI</strong> into <strong>Applications</strong>.</li>
-							<li>Launch it. First launch is unsigned — see Gatekeeper below.</li>
-						</ol>
-						<p class="hint">Full walkthrough: <a href={doc('install-macos')}>macOS install guide</a>.</p>
+			<!-- ── Demo portfolio panel ─────────────────────────────────────── -->
+			<section class="demo">
+				<div class="demo-head reveal">
+					<h2 class="section-title">A worked example</h2>
+					<span class="demo-badge">Demo data only · no real portfolio required</span>
+				</div>
+				<div class="demo-card reveal">
+					<div class="demo-table" role="table" aria-label="Demo portfolio holdings">
+						<div class="demo-row demo-row--head" role="row">
+							<span role="columnheader">Holding</span>
+							<span role="columnheader">Type</span>
+							<span role="columnheader">Allocation</span>
+							<span role="columnheader">Verdict</span>
+						</div>
+						<div class="demo-row" role="row">
+							<span role="cell"><strong>VOO</strong> Vanguard S&amp;P 500</span>
+							<span role="cell">Core ETF</span>
+							<span role="cell"><span class="bar" style="--w:54%"></span>54.1%</span>
+							<span role="cell"><em class="v-hold">Hold</em></span>
+						</div>
+						<div class="demo-row" role="row">
+							<span role="cell"><strong>MSFT</strong> Microsoft</span>
+							<span role="cell">Stock</span>
+							<span role="cell"><span class="bar" style="--w:37%"></span>37.4%</span>
+							<span role="cell"><em class="v-buy">Buy</em></span>
+						</div>
+						<div class="demo-row" role="row">
+							<span role="cell"><strong>SCHD</strong> Schwab US Dividend</span>
+							<span role="cell">Dividend ETF</span>
+							<span role="cell"><span class="bar" style="--w:9%"></span>8.5%</span>
+							<span role="cell"><em class="v-hold">Hold</em></span>
+						</div>
+						<div class="demo-row demo-row--watch" role="row">
+							<span role="cell"><strong>NVDA</strong> NVIDIA</span>
+							<span role="cell">Watchlist</span>
+							<span role="cell">—</span>
+							<span role="cell"><em class="v-watch">Research</em></span>
+						</div>
 					</div>
-				</details>
+					<div class="demo-side">
+						<div class="demo-stat"><span>Risk</span><strong>Moderate · β 0.85×</strong></div>
+						<div class="demo-stat"><span>Sector tilt</span><strong>Technology 17%</strong></div>
+						<div class="demo-stat"><span>Concentration</span><strong>Well spread · HHI 21</strong></div>
+						<div class="demo-stat"><span>News theme</span><strong>Dividend income</strong></div>
+						<p class="demo-note">Risk, news, exposure, and market context — translated into plain English.</p>
+					</div>
+				</div>
+			</section>
 
-				<details class="acc reveal">
-					<summary>macOS (Intel)</summary>
-					<div class="acc-body">
-						<p>An Intel-native download isn't published yet. On an Intel Mac, run from source or the install script — both work today.</p>
-						<div class="code" data-copy={macCommands}>
-							<code>{macCommands}</code>
+			<!-- ── Senpai ───────────────────────────────────────────────────── -->
+			<section class="senpai">
+				<figure class="senpai-shot reveal">
+					<img src={shot('senpai-insight-demo.webp')} width="676" height="290"
+						alt="Senpai, the dashboard orb, delivering a one-line portfolio insight." loading="lazy" />
+				</figure>
+				<div class="senpai-copy reveal">
+					<span class="kicker">Meet Senpai</span>
+					<h3>An orb in the corner, with opinions</h3>
+					<p>
+						Senpai watches your portfolio and drops the occasional read — sharp when Claude is narrating,
+						dry on Local Intelligence, quietly sympathetic when Claude is offline. It doesn't manage your
+						money. It just makes sure you're not staring at a red Tuesday alone.
+					</p>
+					<a class="text-link" href={doc('meet-senpai')}>Say hello to Senpai →</a>
+				</div>
+			</section>
+
+			<!-- ── Download ─────────────────────────────────────────────────── -->
+			<section class="cards" id="download">
+				<h2 class="section-title reveal">Download</h2>
+				<div class="cards-grid">
+					<article class="card reveal">
+						<div class="card-head">
+							<h3>macOS</h3>
+							<span class="arch">arm64 · Apple Silicon</span>
+						</div>
+						<p>A native app window — no Python, no terminal. Runs on macOS 11 Big Sur and newer.</p>
+						<a class="card-btn" href={RELEASES_LATEST} data-os="mac" data-role="card-dl">Download .dmg</a>
+						<a class="card-more" href={doc('install-macos')}>Install guide →</a>
+					</article>
+					<article class="card reveal">
+						<div class="card-head">
+							<h3>Windows</h3>
+							<span class="arch">x64 · Windows 10/11</span>
+						</div>
+						<p>A clean per-user installer — no admin rights required. Uninstalls cleanly from Apps &amp; Features.</p>
+						<a class="card-btn" href={RELEASES_LATEST} data-os="win" data-role="card-dl">Download .exe</a>
+						<a class="card-more" href={doc('install-windows')}>Install guide →</a>
+					</article>
+				</div>
+				<p class="cards-note reveal">
+					Early builds aren't code-signed yet, so macOS and Windows show a first-launch warning. That's expected for
+					an open-source app — the <a href={doc('download')}>install guides</a> show exactly what you'll see.
+				</p>
+			</section>
+
+			<!-- ── Trust / security ─────────────────────────────────────────── -->
+			<section class="trust">
+				<h2 class="section-title reveal">Open source. Traceable builds. Your data stays on your machine.</h2>
+				<div class="trust-grid">
+					<div class="trust-item reveal">
+						<h3>Every build is traceable</h3>
+						<p>Each download links back to its GitHub Release, the commit it was built from, and the Actions run that produced it.</p>
+					</div>
+					<div class="trust-item reveal">
+						<h3>Verify your download</h3>
+						<p>Each release ships a <code>SHA256SUMS.txt</code>. Check your file matches before opening it:</p>
+						<div class="code" data-copy={'shasum -a 256 -c SHA256SUMS.txt'}>
+							<code>shasum -a 256 -c SHA256SUMS.txt</code>
 							<button class="copy" type="button" aria-label="Copy command">Copy</button>
 						</div>
-						<p class="hint"><a href={doc('build-from-source')}>Build from source →</a></p>
 					</div>
-				</details>
-
-				<details class="acc reveal">
-					<summary>Windows</summary>
-					<div class="acc-body">
-						<ol>
-							<li>Download the <strong>-Setup.exe</strong> installer and run it.</li>
-							<li>SmartScreen may warn on an unsigned app — see below.</li>
-							<li>Launch from the Start menu. Data lives in <code>%APPDATA%\FolioSenseAI</code>.</li>
-						</ol>
-						<p class="hint">Full walkthrough: <a href={doc('install-windows')}>Windows install guide</a>.</p>
+					<div class="trust-item reveal">
+						<h3>Your data stays local</h3>
+						<p>Holdings and config live in SQLite and a local <code>.env</code> on your machine. Market data comes from Yahoo Finance; Claude is called only when you enable it.</p>
 					</div>
-				</details>
+				</div>
+			</section>
 
+			<!-- ── For developers ───────────────────────────────────────────── -->
+			<section class="dev">
+				<h2 class="section-title reveal">For developers</h2>
+				<div class="dev-grid reveal">
+					<div class="code" data-copy={`git clone ${GITHUB}.git\ncd FolioSenseAI\n./scripts/setup.sh`}>
+						<code>git clone {GITHUB}.git<br/>cd FolioSenseAI<br/>./scripts/setup.sh</code>
+						<button class="copy" type="button" aria-label="Copy command">Copy</button>
+					</div>
+					<div class="dev-links">
+						<a href={doc('build-from-source')}>Build from source →</a>
+						<a href={doc('releases-and-versioning')}>Release &amp; versioning →</a>
+						<a href={`${RELEASES}/tag/latest-main`}>Latest-main build →</a>
+						<a href={GITHUB}>GitHub repository →</a>
+					</div>
+				</div>
 				<details class="acc reveal">
 					<summary>One-line install (advanced)</summary>
 					<div class="acc-body">
@@ -201,40 +383,6 @@ const winCommands = `irm ${'https://raw.githubusercontent.com'}/${REPO}/main/scr
 						</div>
 					</div>
 				</details>
-
-				<details class="acc reveal">
-					<summary>Build from source</summary>
-					<div class="acc-body">
-						<div class="code" data-copy={`git clone ${GITHUB}.git\ncd FolioSenseAI\n./scripts/setup.sh`}>
-							<code>git clone {GITHUB}.git<br/>cd FolioSenseAI<br/>./scripts/setup.sh</code>
-							<button class="copy" type="button" aria-label="Copy command">Copy</button>
-						</div>
-						<p class="hint">Windows: use <code>.\scripts\setup.ps1</code>. Full guide: <a href={doc('build-from-source')}>Build from source</a>.</p>
-					</div>
-				</details>
-			</section>
-
-			<!-- ── Trust / security ─────────────────────────────────────────── -->
-			<section class="trust">
-				<h2 class="section-title reveal">Built in the open</h2>
-				<div class="trust-grid">
-					<div class="trust-item reveal">
-						<h3>Every build is traceable</h3>
-						<p>Each download links back to its GitHub Release, the commit it was built from, and the Actions run that produced it.</p>
-					</div>
-					<div class="trust-item reveal">
-						<h3>Verify your download</h3>
-						<p>Each release ships a <code>SHA256SUMS.txt</code>. Check your file matches before opening it:</p>
-						<div class="code" data-copy={'shasum -a 256 -c SHA256SUMS.txt'}>
-							<code>shasum -a 256 -c SHA256SUMS.txt</code>
-							<button class="copy" type="button" aria-label="Copy command">Copy</button>
-						</div>
-					</div>
-					<div class="trust-item reveal">
-						<h3>Heads up: early builds are unsigned</h3>
-						<p>macOS Gatekeeper and Windows SmartScreen will warn you. That's expected for an open-source app without a paid signing certificate yet — the <a href={doc('install-macos')}>install guides</a> show exactly what you'll see and how to proceed safely.</p>
-					</div>
-				</div>
 			</section>
 		</main>
 
@@ -289,20 +437,17 @@ const winCommands = `irm ${'https://raw.githubusercontent.com'}/${REPO}/main/scr
 				if (!data || !data.assets) return;
 				const dmg = pickAsset(data.assets, '.dmg');
 				const exe = pickAsset(data.assets, '.exe');
-				const setBtn = (id, assetObj, fallbackMeta) => {
+				const setBtn = (id, assetObj) => {
 					const btn = document.getElementById(id);
-					if (!btn) return;
-					if (assetObj) {
-						btn.href = assetObj.browser_download_url;
-						const meta = btn.querySelector('[data-role="meta"]');
-						if (meta) meta.textContent = `${data.tag_name} · ${fmtBytes(assetObj.size)}`;
-					}
+					if (!btn || !assetObj) return;
+					btn.href = assetObj.browser_download_url;
+					const meta = btn.querySelector('[data-role="meta"]');
+					if (meta) meta.textContent = `${data.tag_name} · ${fmtBytes(assetObj.size)}`;
 				};
 				setBtn('dl-mac', dmg);
 				setBtn('dl-win', exe);
 				document.querySelectorAll('[data-role="card-dl"]').forEach((el) => {
-					const wantMac = el.getAttribute('data-os') === 'mac';
-					const a = wantMac ? dmg : exe;
+					const a = el.getAttribute('data-os') === 'mac' ? dmg : exe;
 					if (a) el.href = a.browser_download_url;
 				});
 
@@ -311,8 +456,6 @@ const winCommands = `irm ${'https://raw.githubusercontent.com'}/${REPO}/main/scr
 					const set = (role, text) => { const el = strip.querySelector(`[data-role="${role}"]`); if (el) el.textContent = text; };
 					set('version', data.tag_name || '—');
 					set('date', fmtDate(data.published_at));
-					const plats = [dmg && 'macOS', exe && 'Windows'].filter(Boolean).join(' · ') || 'macOS · Windows';
-					set('platforms', plats);
 					const link = strip.querySelector('[data-role="release-link"]');
 					if (link && data.html_url) link.href = data.html_url;
 					strip.hidden = false;
@@ -368,17 +511,58 @@ const winCommands = `irm ${'https://raw.githubusercontent.com'}/${REPO}/main/scr
 				});
 			});
 
-			// ── Scroll reveal (respects reduced motion) ──────────────────────
+			// ── Reduced-motion gate ──────────────────────────────────────────
 			const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-			if (reduce) {
+
+			// ── Scroll reveal ────────────────────────────────────────────────
+			if (reduce || !('IntersectionObserver' in window)) {
 				document.querySelectorAll('.reveal').forEach((el) => el.classList.add('shown'));
-			} else if ('IntersectionObserver' in window) {
+			} else {
 				const io = new IntersectionObserver((entries) => {
 					entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('shown'); io.unobserve(e.target); } });
 				}, { threshold: 0.12 });
 				document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
-			} else {
-				document.querySelectorAll('.reveal').forEach((el) => el.classList.add('shown'));
+			}
+
+			// ── Hero: floating-chip parallax (very subtle, pointer only) ─────
+			const stage = document.getElementById('hero-stage');
+			if (stage && !reduce && window.matchMedia('(pointer:fine)').matches) {
+				const chips = stage.querySelectorAll('.chip-float');
+				stage.addEventListener('pointermove', (e) => {
+					const r = stage.getBoundingClientRect();
+					const dx = (e.clientX - r.left) / r.width - 0.5;
+					const dy = (e.clientY - r.top) / r.height - 0.5;
+					chips.forEach((c) => {
+						const d = parseFloat(c.getAttribute('data-depth') || '0');
+						c.style.transform = `translate(${dx * d}px, ${dy * d}px)`;
+					});
+				});
+				stage.addEventListener('pointerleave', () => {
+					chips.forEach((c) => { c.style.transform = ''; });
+				});
+			}
+
+			// ── Hero: cursor-style moving highlight ──────────────────────────
+			const spot = document.getElementById('spotlight');
+			const tip = document.getElementById('spotlight-tip');
+			if (spot && tip) {
+				const hotspots = [
+					{ x: 14, y: 24, label: 'Live value & daily P&L' },
+					{ x: 24, y: 50, label: 'Look-through sector exposure' },
+					{ x: 66, y: 46, label: "What moved today, in plain English" },
+					{ x: 82, y: 80, label: 'Senpai reads the room' },
+				];
+				let hi = 0;
+				const place = (h) => {
+					spot.style.left = h.x + '%';
+					spot.style.top = h.y + '%';
+					tip.textContent = h.label;
+				};
+				place(hotspots[0]);
+				if (!reduce) {
+					spot.classList.add('is-live');
+					setInterval(() => { hi = (hi + 1) % hotspots.length; place(hotspots[hi]); }, 2600);
+				}
 			}
 
 			// ── Senpai footer easter egg ─────────────────────────────────────
@@ -402,11 +586,12 @@ const winCommands = `irm ${'https://raw.githubusercontent.com'}/${REPO}/main/scr
 				--bg: #050508;
 				--bg-soft: #0c0c12;
 				--panel: rgba(255, 255, 255, 0.04);
+				--panel-2: rgba(255, 255, 255, 0.06);
 				--panel-border: rgba(255, 255, 255, 0.09);
 				--text: #f5f5f7;
 				--muted: #9a9aa6;
 				--radius: 16px;
-				--maxw: 1080px;
+				--maxw: 1140px;
 			}
 			* { box-sizing: border-box; }
 			html { scroll-behavior: smooth; }
@@ -422,13 +607,14 @@ const winCommands = `irm ${'https://raw.githubusercontent.com'}/${REPO}/main/scr
 			a { color: var(--cyan); text-decoration: none; }
 			a:hover { text-decoration: underline; }
 			code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; }
+			:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; border-radius: 6px; }
 
 			.backdrop {
 				position: fixed; inset: 0; z-index: -1;
 				background:
 					radial-gradient(60% 50% at 50% -10%, rgba(111, 214, 240, 0.16), transparent 70%),
-					radial-gradient(50% 40% at 85% 15%, rgba(151, 172, 236, 0.12), transparent 70%),
-					radial-gradient(40% 40% at 10% 30%, rgba(111, 214, 240, 0.08), transparent 70%),
+					radial-gradient(50% 40% at 88% 8%, rgba(151, 172, 236, 0.13), transparent 70%),
+					radial-gradient(45% 45% at 8% 24%, rgba(111, 214, 240, 0.08), transparent 70%),
 					var(--bg);
 			}
 
@@ -444,23 +630,31 @@ const winCommands = `irm ${'https://raw.githubusercontent.com'}/${REPO}/main/scr
 			.topnav .ghost { color: var(--text); }
 
 			main { max-width: var(--maxw); margin: 0 auto; padding: 0 1.5rem; }
-			section { padding: 3.5rem 0; }
-			.section-title { font-size: 1.7rem; text-align: center; margin: 0 0 2rem; letter-spacing: -0.02em; }
+			section { padding: 4rem 0; }
+			.section-title { font-size: clamp(1.5rem, 3.2vw, 2rem); text-align: center; margin: 0 auto 2.2rem; letter-spacing: -0.02em; max-width: 22ch; line-height: 1.2; }
 
-			.hero { text-align: center; padding-top: 2rem; }
-			.hero-mark { width: min(240px, 62vw); height: auto; margin-bottom: 1.2rem; }
+			/* ── Hero ── */
+			.hero {
+				display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; align-items: center;
+				padding-top: 2.5rem; padding-bottom: 3rem;
+			}
+			.eyebrow {
+				display: inline-block; font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase;
+				color: var(--cyan); background: rgba(111,214,240,0.08); border: 1px solid rgba(111,214,240,0.25);
+				padding: 0.3rem 0.8rem; border-radius: 999px; margin-bottom: 1.1rem;
+			}
 			.hero h1 {
-				font-size: clamp(2.1rem, 5.5vw, 3.4rem); line-height: 1.08; margin: 0 auto 1rem;
-				max-width: 15ch; letter-spacing: -0.03em; font-weight: 700;
-				background: linear-gradient(120deg, var(--cyan), var(--peri));
+				font-size: clamp(2.1rem, 4.4vw, 3.3rem); line-height: 1.06; margin: 0 0 1.1rem;
+				letter-spacing: -0.03em; font-weight: 700;
+				background: linear-gradient(120deg, #fff 30%, var(--cyan) 75%, var(--peri));
 				-webkit-background-clip: text; background-clip: text; color: transparent;
 			}
-			.lede { max-width: 60ch; margin: 0 auto 2rem; color: var(--muted); font-size: 1.1rem; }
+			.lede { max-width: 52ch; margin: 0 0 1.8rem; color: var(--muted); font-size: 1.08rem; }
 
-			.cta-row { display: flex; gap: 0.9rem; justify-content: center; flex-wrap: wrap; }
+			.cta-row { display: flex; gap: 0.9rem; flex-wrap: wrap; }
 			.btn {
-				display: inline-flex; flex-direction: column; align-items: center;
-				padding: 0.7rem 1.5rem; border-radius: 12px; min-width: 220px;
+				display: inline-flex; flex-direction: column; align-items: flex-start;
+				padding: 0.7rem 1.4rem; border-radius: 12px; min-width: 210px;
 				border: 1px solid var(--panel-border); transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 			}
 			.btn:hover { text-decoration: none; transform: translateY(-2px); }
@@ -472,20 +666,26 @@ const winCommands = `irm ${'https://raw.githubusercontent.com'}/${REPO}/main/scr
 			.btn.is-preferred .btn-sub { color: rgba(4, 18, 26, 0.7); }
 			.btn.is-secondary { opacity: 0.82; }
 
-			.cta-secondary { margin-top: 1.3rem; color: var(--muted); font-size: 0.94rem; display: flex; gap: 0.7rem; justify-content: center; align-items: center; flex-wrap: wrap; }
+			.cta-secondary { margin-top: 1.2rem; color: var(--muted); font-size: 0.94rem; display: flex; gap: 0.7rem; align-items: center; flex-wrap: wrap; }
 			.dev-builds { position: relative; }
 			.dev-builds summary { cursor: pointer; color: var(--muted); list-style: none; }
 			.dev-builds summary::-webkit-details-marker { display: none; }
 			.dev-builds summary:hover { color: var(--text); }
 			.dev-panel {
-				position: absolute; top: 1.8rem; left: 50%; transform: translateX(-50%);
-				width: 260px; padding: 0.9rem 1rem; z-index: 5;
+				position: absolute; top: 1.8rem; left: 0; width: 260px; padding: 0.9rem 1rem; z-index: 5;
 				background: var(--bg-soft); border: 1px solid var(--panel-border); border-radius: 12px;
 				font-size: 0.85rem; text-align: left; box-shadow: 0 12px 40px rgba(0,0,0,0.5);
 			}
 			.dev-panel p { margin: 0 0 0.5rem; color: var(--muted); }
 
-			.release-strip { margin-top: 1.8rem; display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; }
+			.trust-strip {
+				list-style: none; display: flex; flex-wrap: wrap; gap: 0.5rem 1.2rem; padding: 0; margin: 1.6rem 0 0;
+				font-size: 0.85rem; color: var(--muted);
+			}
+			.trust-strip li { display: flex; align-items: center; gap: 0.4rem; }
+			.trust-strip li::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 8px rgba(111,214,240,0.6); }
+
+			.release-strip { margin-top: 1.5rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
 			.chip {
 				font-size: 0.8rem; color: var(--muted); background: var(--panel);
 				border: 1px solid var(--panel-border); border-radius: 999px; padding: 0.28rem 0.75rem;
@@ -493,27 +693,123 @@ const winCommands = `irm ${'https://raw.githubusercontent.com'}/${REPO}/main/scr
 			.chip-link { color: var(--cyan); }
 			.chip-link:hover { text-decoration: none; border-color: var(--cyan); }
 
-			.shot { display: flex; justify-content: center; }
+			/* ── Hero stage: screenshot + chips + highlight ── */
+			.hero-stage { position: relative; }
 			.window-chrome {
-				width: 100%; max-width: 940px; border-radius: var(--radius); overflow: hidden;
+				position: relative; width: 100%; border-radius: var(--radius); overflow: hidden;
 				border: 1px solid var(--panel-border); background: var(--bg-soft);
-				box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 0 60px rgba(111, 214, 240, 0.06);
+				box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 0 60px rgba(111, 214, 240, 0.07);
 			}
-			.window-bar { display: flex; gap: 0.5rem; padding: 0.8rem 1rem; border-bottom: 1px solid var(--panel-border); }
+			.window-bar { display: flex; gap: 0.5rem; padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--panel-border); background: rgba(0,0,0,0.2); }
 			.window-bar span { width: 11px; height: 11px; border-radius: 50%; background: #3a3a42; }
 			.window-bar span:first-child { background: #ff5f57; }
 			.window-bar span:nth-child(2) { background: #febc2e; }
 			.window-bar span:nth-child(3) { background: #28c840; }
 			.window-chrome img { display: block; width: 100%; height: auto; }
 
-			.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; }
+			.chip-float {
+				position: absolute; z-index: 3; display: inline-flex; align-items: center; gap: 0.45rem;
+				padding: 0.4rem 0.75rem; font-size: 0.82rem; font-weight: 560; color: var(--text);
+				background: rgba(14, 16, 24, 0.72); border: 1px solid var(--panel-border); border-radius: 10px;
+				backdrop-filter: blur(10px); box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+				transition: transform 0.25s ease; animation: chip-in 0.7s ease both;
+			}
+			.chip-float--tl { top: 8%; left: -6%; animation-delay: 0.2s; }
+			.chip-float--tr { top: 18%; right: -7%; animation-delay: 0.35s; }
+			.chip-float--bl { bottom: 16%; left: -5%; animation-delay: 0.5s; }
+			.chip-float--br { bottom: 6%; right: -6%; animation-delay: 0.65s; }
+			.dot { width: 7px; height: 7px; border-radius: 50%; }
+			.dot-amber { background: #febc2e; box-shadow: 0 0 8px #febc2e88; }
+			.dot-green { background: #28c840; box-shadow: 0 0 8px #28c84088; }
+			.dot-cyan { background: var(--cyan); box-shadow: 0 0 8px rgba(111,214,240,0.6); }
+			@keyframes chip-in { from { opacity: 0; transform: translateY(10px) scale(0.96); } to { opacity: 1; transform: none; } }
+
+			.spotlight { position: absolute; z-index: 2; transform: translate(-50%, -50%); transition: left 0.7s cubic-bezier(0.4,0,0.2,1), top 0.7s cubic-bezier(0.4,0,0.2,1); pointer-events: none; }
+			.spotlight-ring {
+				display: block; width: 46px; height: 46px; border-radius: 50%;
+				border: 2px solid var(--cyan); box-shadow: 0 0 0 6px rgba(111,214,240,0.12), 0 0 24px rgba(111,214,240,0.5);
+			}
+			.spotlight.is-live .spotlight-ring { animation: ring-pulse 2.6s ease-in-out infinite; }
+			@keyframes ring-pulse { 0%,100% { transform: scale(1); opacity: 0.9; } 50% { transform: scale(1.12); opacity: 1; } }
+			.spotlight-tip {
+				position: absolute; left: 50%; top: calc(100% + 8px); transform: translateX(-50%);
+				white-space: nowrap; font-size: 0.72rem; color: var(--text);
+				background: rgba(14,16,24,0.9); border: 1px solid var(--panel-border); border-radius: 7px;
+				padding: 0.25rem 0.55rem; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+			}
+
+			/* ── Product story ── */
+			.story-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.2rem; }
+			.story-step { position: relative; background: var(--panel); border: 1px solid var(--panel-border); border-radius: var(--radius); padding: 1.6rem; }
+			.step-num {
+				display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px;
+				border-radius: 10px; font-weight: 700; color: #04121a; margin-bottom: 0.8rem;
+				background: linear-gradient(135deg, var(--cyan), var(--peri));
+			}
+			.story-step h3 { margin: 0 0 0.4rem; font-size: 1.1rem; }
+			.story-step p { margin: 0; color: var(--muted); font-size: 0.94rem; }
+
+			/* ── Feature spotlights ── */
+			.spot { display: grid; grid-template-columns: 0.85fr 1.15fr; gap: 2.5rem; align-items: center; margin-bottom: 3rem; }
+			.spot--rev .spot-copy { order: 2; }
+			.spot--rev .spot-shot { order: 1; }
+			.kicker { font-size: 0.78rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--cyan); font-weight: 600; }
+			.spot-copy h3 { font-size: clamp(1.3rem, 2.6vw, 1.8rem); margin: 0.5rem 0 0.7rem; letter-spacing: -0.02em; }
+			.spot-copy p { margin: 0; color: var(--muted); font-size: 1rem; max-width: 42ch; }
+			.window-chrome--sm { box-shadow: 0 20px 50px rgba(0,0,0,0.5), 0 0 40px rgba(111, 214, 240, 0.05); }
+			.spot-shot { margin: 0; }
+			.spot-shot.focus-top .window-chrome--sm { max-height: 420px; }
+			.spot-shot.focus-top img { object-fit: cover; object-position: top; max-height: 380px; }
+
+			.mini-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.2rem; margin-top: 1rem; }
+			.mini { background: var(--panel); border: 1px solid var(--panel-border); border-radius: var(--radius); padding: 1.4rem; }
+			.mini-ic { width: 26px; height: 26px; color: var(--cyan); }
+			.mini h4 { margin: 0.7rem 0 0.35rem; font-size: 1.02rem; }
+			.mini p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+
+			/* ── Demo panel ── */
+			.demo-head { text-align: center; }
+			.demo-head .section-title { margin-bottom: 0.7rem; }
+			.demo-badge {
+				display: inline-block; font-size: 0.78rem; color: var(--cyan);
+				background: rgba(111,214,240,0.08); border: 1px solid rgba(111,214,240,0.25);
+				padding: 0.3rem 0.8rem; border-radius: 999px; margin-bottom: 2rem;
+			}
+			.demo-card { display: grid; grid-template-columns: 1.6fr 1fr; gap: 1.5rem; background: var(--panel); border: 1px solid var(--panel-border); border-radius: var(--radius); padding: 1.6rem; backdrop-filter: blur(8px); }
+			.demo-table { display: flex; flex-direction: column; }
+			.demo-row { display: grid; grid-template-columns: 2fr 1fr 1.4fr 0.9fr; gap: 0.8rem; align-items: center; padding: 0.7rem 0; border-bottom: 1px solid var(--panel-border); font-size: 0.92rem; }
+			.demo-row:last-child { border-bottom: none; }
+			.demo-row--head { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+			.demo-row strong { color: var(--text); font-weight: 660; margin-right: 0.35rem; }
+			.demo-row span[role="cell"] { color: var(--muted); }
+			.demo-row--watch { opacity: 0.78; }
+			.bar { display: inline-block; width: var(--w); max-width: 78px; height: 6px; border-radius: 3px; margin-right: 0.5rem; vertical-align: middle; background: linear-gradient(90deg, var(--cyan), var(--peri)); }
+			.v-buy { color: #28c840; font-style: normal; font-weight: 600; }
+			.v-hold { color: var(--cyan); font-style: normal; font-weight: 600; }
+			.v-watch { color: #febc2e; font-style: normal; font-weight: 600; }
+			.demo-side { display: flex; flex-direction: column; gap: 0.6rem; border-left: 1px solid var(--panel-border); padding-left: 1.5rem; }
+			.demo-stat { display: flex; flex-direction: column; }
+			.demo-stat span { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+			.demo-stat strong { font-size: 0.98rem; font-weight: 600; }
+			.demo-note { margin: 0.4rem 0 0; font-size: 0.85rem; color: var(--muted); font-style: italic; }
+
+			/* ── Senpai ── */
+			.senpai { display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 2.5rem; align-items: center; }
+			.senpai-shot { margin: 0; }
+			.senpai-shot img { width: 100%; height: auto; border-radius: 14px; border: 1px solid var(--panel-border); box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+			.senpai-copy h3 { font-size: clamp(1.3rem, 2.6vw, 1.8rem); margin: 0.5rem 0 0.7rem; letter-spacing: -0.02em; }
+			.senpai-copy p { margin: 0 0 1rem; color: var(--muted); }
+			.text-link { font-weight: 600; }
+
+			/* ── Download cards ── */
+			.cards-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; }
 			.card {
 				background: var(--panel); border: 1px solid var(--panel-border); border-radius: var(--radius);
 				padding: 1.6rem; backdrop-filter: blur(8px); transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 			}
 			.card:hover { transform: translateY(-3px); border-color: rgba(111, 214, 240, 0.4); box-shadow: 0 12px 40px rgba(111, 214, 240, 0.1); }
 			.card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
-			.card-head h2 { margin: 0; font-size: 1.5rem; }
+			.card-head h3 { margin: 0; font-size: 1.4rem; }
 			.arch { font-size: 0.8rem; color: var(--muted); }
 			.card p { color: var(--muted); font-size: 0.95rem; }
 			.card-btn {
@@ -522,33 +818,29 @@ const winCommands = `irm ${'https://raw.githubusercontent.com'}/${REPO}/main/scr
 			}
 			.card-btn:hover { text-decoration: none; opacity: 0.92; }
 			.card-more { display: inline-block; margin-top: 0.9rem; margin-left: 0.9rem; font-size: 0.9rem; }
+			.cards-note { text-align: center; color: var(--muted); font-size: 0.9rem; max-width: 60ch; margin: 1.5rem auto 0; }
 
-			.feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
-			.feature { background: var(--panel); border: 1px solid var(--panel-border); border-radius: var(--radius); padding: 1.3rem; }
-			.feature-icon { font-size: 1.5rem; }
-			.feature h3 { margin: 0.6rem 0 0.35rem; font-size: 1.05rem; }
-			.feature p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+			/* ── Trust ── */
+			.trust-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.2rem; }
+			.trust-item { background: var(--panel); border: 1px solid var(--panel-border); border-radius: var(--radius); padding: 1.4rem; }
+			.trust-item h3 { margin: 0 0 0.5rem; font-size: 1.05rem; }
+			.trust-item p { color: var(--muted); font-size: 0.9rem; margin: 0 0 0.5rem; }
 
-			.acc {
-				max-width: 720px; margin: 0 auto 0.7rem; background: var(--panel);
-				border: 1px solid var(--panel-border); border-radius: 12px; overflow: hidden;
-			}
-			.acc summary {
-				cursor: pointer; padding: 0.9rem 1.2rem; font-weight: 600; list-style: none;
-				display: flex; align-items: center; justify-content: space-between;
-			}
+			/* ── Dev ── */
+			.dev-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 1.5rem; align-items: center; margin-bottom: 1.2rem; }
+			.dev-links { display: grid; gap: 0.6rem; }
+			.dev-links a { font-size: 0.95rem; }
+			.acc { max-width: 760px; margin: 0 auto; background: var(--panel); border: 1px solid var(--panel-border); border-radius: 12px; overflow: hidden; }
+			.acc summary { cursor: pointer; padding: 0.9rem 1.2rem; font-weight: 600; list-style: none; display: flex; align-items: center; justify-content: space-between; }
 			.acc summary::-webkit-details-marker { display: none; }
 			.acc summary::after { content: '+'; color: var(--muted); font-size: 1.2rem; }
 			.acc[open] summary::after { content: '−'; }
 			.acc-body { padding: 0 1.2rem 1.1rem; color: var(--muted); font-size: 0.94rem; }
-			.acc-body ol { padding-left: 1.2rem; }
-			.acc-body .hint { font-size: 0.88rem; }
-			.acc-body .mini { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0.9rem 0 0.3rem; }
+			.acc-body .mini { background: none; border: none; padding: 0; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0.9rem 0 0.3rem; }
 
 			.code {
 				position: relative; background: #0a0a0f; border: 1px solid var(--panel-border);
-				border-radius: 10px; padding: 0.8rem 3.5rem 0.8rem 0.9rem; margin: 0.4rem 0;
-				overflow-x: auto;
+				border-radius: 10px; padding: 0.8rem 3.5rem 0.8rem 0.9rem; margin: 0.4rem 0; overflow-x: auto;
 			}
 			.code code { color: #d8e8ff; white-space: pre-wrap; word-break: break-all; }
 			.copy {
@@ -559,11 +851,7 @@ const winCommands = `irm ${'https://raw.githubusercontent.com'}/${REPO}/main/scr
 			.copy:hover { color: var(--text); border-color: var(--cyan); }
 			.copy.copied { color: var(--cyan); border-color: var(--cyan); }
 
-			.trust-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.2rem; }
-			.trust-item { background: var(--panel); border: 1px solid var(--panel-border); border-radius: var(--radius); padding: 1.4rem; }
-			.trust-item h3 { margin: 0 0 0.5rem; font-size: 1.05rem; }
-			.trust-item p { color: var(--muted); font-size: 0.9rem; margin: 0 0 0.5rem; }
-
+			/* ── Footer ── */
 			.footer { border-top: 1px solid var(--panel-border); margin-top: 2rem; }
 			.footer-inner {
 				max-width: var(--maxw); margin: 0 auto; padding: 2rem 1.5rem;
@@ -577,18 +865,34 @@ const winCommands = `irm ${'https://raw.githubusercontent.com'}/${REPO}/main/scr
 			.footer-links a { color: var(--muted); }
 			.footer-links a:hover { color: var(--text); text-decoration: none; }
 
-			.reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.6s ease, transform 0.6s ease; }
+			/* ── Reveal ── */
+			.reveal { opacity: 0; transform: translateY(16px); transition: opacity 0.6s ease, transform 0.6s ease; }
 			.reveal.shown { opacity: 1; transform: none; }
 
-			@media (max-width: 760px) {
-				.cards, .feature-grid, .trust-grid { grid-template-columns: 1fr; }
-				.topnav { gap: 0.9rem; }
+			/* ── Responsive ── */
+			@media (max-width: 940px) {
+				.hero { grid-template-columns: 1fr; gap: 2.5rem; }
+				.hero-stage { margin-top: 0.5rem; }
+				.chip-float--tl, .chip-float--bl { left: 2%; }
+				.chip-float--tr, .chip-float--br { right: 2%; }
+				.spot, .senpai, .demo-card, .dev-grid { grid-template-columns: 1fr; gap: 1.5rem; }
+				.spot--rev .spot-copy, .spot--rev .spot-shot { order: 0; }
+				.demo-side { border-left: none; border-top: 1px solid var(--panel-border); padding-left: 0; padding-top: 1.2rem; }
+			}
+			@media (max-width: 720px) {
+				.story-grid, .mini-grid, .trust-grid, .cards-grid { grid-template-columns: 1fr; }
 				.btn { min-width: 0; flex: 1 1 100%; }
+				.demo-row { grid-template-columns: 1.6fr 1.2fr; row-gap: 0.3rem; }
+				.demo-row span[role="columnheader"]:nth-child(3), .demo-row span[role="columnheader"]:nth-child(4),
+				.demo-row span[role="cell"]:nth-child(3), .demo-row span[role="cell"]:nth-child(4) { display: none; }
+				.chip-float { display: none; }
 			}
 			@media (prefers-reduced-motion: reduce) {
 				html { scroll-behavior: auto; }
 				.reveal { transition: none; }
 				.btn:hover, .card:hover { transform: none; }
+				.chip-float { animation: none; }
+				.spotlight { transition: none; }
 			}
 		</style>
 	</body>
