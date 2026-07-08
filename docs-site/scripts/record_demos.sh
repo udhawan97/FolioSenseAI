@@ -5,9 +5,10 @@
 # drive Playwright to record .webm → trim/encode to MP4/WebM + poster in
 # docs-site/public/assets/demos/. Dev-only; only the optimized outputs ship.
 #
-# Playwright is a devDependency; ffmpeg must be installed (brew install ffmpeg).
-# Install the browser once before first run:
-#     cd docs-site && npm i && npx playwright install chromium
+# Playwright is intentionally NOT a committed dependency (its postinstall pulls
+# a ~150 MB browser, which would bloat every Pages deploy). ffmpeg must be
+# installed (brew install ffmpeg). Install the tooling once before running:
+#     cd docs-site && npm i -D playwright && npx playwright install chromium
 #
 # Usage:  ./docs-site/scripts/record_demos.sh
 set -euo pipefail
