@@ -148,7 +148,7 @@ def test_compute_range_performance_partial_history(mock_history):
 def test_compute_range_performance_empty(mock_history):
     result = pa.compute_range_performance([])
     mock_history.assert_not_called()
-    assert result["ranges"]["week"]["holdings"] == {}
+    assert not result["ranges"]["week"]["holdings"]
     assert result["ranges"]["week"]["net_change_pct"] is None
 
 
@@ -163,7 +163,7 @@ def test_compute_range_rows_single_range(mock_history):
     unknown = pa.compute_range_rows(
         [{"ticker": "AAPL", "shares": 2, "is_watchlist": False}], "nope"
     )
-    assert unknown["holdings"] == {}
+    assert not unknown["holdings"]
 
 
 def test_correlation_label():

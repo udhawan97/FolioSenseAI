@@ -356,7 +356,7 @@ def test_range_performance_excludes_watchlist_and_inactive(monkeypatch):
 
     seen_tickers = []
 
-    def fake_history(tickers, period="1y"):
+    def fake_history(tickers, **_kwargs):
         seen_tickers.extend(tickers)
         closes = [100.0 + i for i in range(30)]
         return {t: closes for t in tickers}
