@@ -2,6 +2,9 @@
 dist/
 .astro/
 
+# throwaway screenshot-capture workspace (docs-site/scripts/capture.sh)
+_shots/
+
 # dependencies
 node_modules/
 
