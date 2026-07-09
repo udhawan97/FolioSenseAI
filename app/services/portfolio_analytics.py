@@ -49,7 +49,13 @@ def _log_returns(closes: list[float]) -> np.ndarray:
     if len(closes) < 2:
         return np.array([], dtype=float)
     prices = np.asarray(closes, dtype=float)
-    return np.diff(np.log(prices))
+    with np.errstate(divide="ignore", invalid="ignore"):
+        returns = np.diff(np.log(prices))
+    # A non-positive close (bad data — a delisted/halted ticker, a data glitch)
+    # makes log() emit -inf/nan, which would silently contaminate every
+    # downstream stat (annualized return/vol, correlation) with NaN. Treat that
+    # day as a flat 0% return instead of letting it propagate.
+    return np.nan_to_num(returns, nan=0.0, posinf=0.0, neginf=0.0)
 
 
 def _annualize_stats(daily_log_returns: np.ndarray) -> tuple[float, float]:
@@ -200,8 +206,19 @@ def compute_correlation_matrix(holdings: list[dict]) -> dict[str, Any]:
             "has_data": False,
         })
 
-    corr = np.corrcoef(mat)
-    corr = np.nan_to_num(corr, nan=0.0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        corr = np.corrcoef(mat)
+    if np.isnan(corr).any():
+        # Zero-variance data (e.g. a frozen/halted price series) makes
+        # correlation mathematically undefined — report "no data" honestly
+        # instead of silently faking a 0.0 correlation.
+        n = len(aligned_tickers)
+        identity = [[1.0 if i == j else 0.0 for j in range(n)] for i in range(n)]
+        return _cache_set(cache_key, {
+            "tickers": aligned_tickers,
+            "matrix": identity,
+            "has_data": False,
+        })
     matrix = [[round(float(corr[i, j]), 3) for j in range(corr.shape[1])]
               for i in range(corr.shape[0])]
 

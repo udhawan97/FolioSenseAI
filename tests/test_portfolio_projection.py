@@ -78,3 +78,10 @@ def test_projection_cache_reuses_payload(mock_hist):
     assert first["cached"] is False
     assert second["cached"] is True
     assert mock_hist.call_count == 2  # VOO + SPY fetched once
+
+
+def test_log_returns_non_positive_close_does_not_propagate_nan():
+    """A zero/negative close (bad data) must not turn a projection into NaN —
+    mirrors the same guard in portfolio_analytics._log_returns."""
+    assert np.isfinite(pp._log_returns([100.0, 0.0, 100.0])).all()
+    assert np.isfinite(pp._log_returns([100.0, -5.0, 100.0])).all()

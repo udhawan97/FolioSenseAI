@@ -2145,7 +2145,11 @@ async def get_analytics_insights(
 
 # ── Portfolio Action Plan endpoint ────────────────────────────────────────────
 
-_ACTION_PLAN_CACHE_TYPE = "action_plan_v2"
+# Bumped v2 → v3: portfolio_state_signature now folds in the secondary action
+# (fixing a cache collision between e.g. "2 hold, 1 add" and "2 hold, 1 trim"
+# books). Bumping the version cleanly orphans any pre-fix cached rows instead
+# of risking a stale, collision-prone entry being read under the old key.
+_ACTION_PLAN_CACHE_TYPE = "action_plan_v3"
 
 _GAP_TYPE_LABEL: dict[str, str] = {
     "heavy_hold":    "large position on hold",

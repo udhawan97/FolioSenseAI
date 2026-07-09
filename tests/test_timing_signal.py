@@ -1,3 +1,4 @@
+# pylint: disable=protected-access
 from concurrent.futures import Future
 
 from app.services import timing_signal
@@ -87,3 +88,16 @@ def test_batched_history_is_concurrent_deduped_and_cached(monkeypatch):
     assert second == first
     assert sorted(calls) == [("AAPL", "1y"), ("VOO", "1y")]
     assert executor_sizes == [2]
+
+
+def test_stale_day_cache_entries_are_pruned_on_next_call(monkeypatch):
+    """_HISTORY_CACHE keys on today's date; a prior day's entry is dead weight
+    (the lookup always uses today's date) and must not accumulate forever on a
+    long-running process."""
+    timing_signal.clear_history_cache()
+    timing_signal._HISTORY_CACHE[("OLD", "1y", "2020-01-01")] = [1.0, 2.0]
+    monkeypatch.setattr(timing_signal, "_fetch_history_closes", lambda *_a: [100.0, 101.0])
+
+    timing_signal.get_batched_history_closes(["AAPL"])
+
+    assert ("OLD", "1y", "2020-01-01") not in timing_signal._HISTORY_CACHE

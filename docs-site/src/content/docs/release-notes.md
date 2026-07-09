@@ -7,6 +7,26 @@ The full changelog lives in
 [`RELEASE_NOTES.md`](https://github.com/udhawan97/FolioSenseAI/blob/main/RELEASE_NOTES.md)
 in the repository. Highlights of the current release below.
 
+## v4.5.2 — Reliability patch
+
+A full-codebase bug audit and the fixes it surfaced — no new features, just
+sturdier numbers and safer data.
+
+- **Bad market data no longer poisons your analytics.** A zero or negative close
+  (a halted or delisted ticker, a data glitch) used to contaminate annualized
+  return, volatility, and correlation with `NaN`; those days are now treated as
+  flat. Correlation reports "no data" honestly when a frozen price series makes
+  it undefined, instead of faking a `0.0`.
+- **Trim verdicts score the right way round** — a cheap stock is no longer handed
+  a high-confidence *trim*.
+- **A failed rollback can never leave you with no database.** Restore now stages
+  and re-verifies the backup before touching your live database, and tells you
+  clearly if data restored but settings didn't.
+- **Watchlist edits never fabricate P&L**, the batch price-history endpoint
+  validates its `period`, plus assorted updater, cache, and logging hardening.
+
+No migration or `.env` change required.
+
 ## v4.5.1 — Export That Actually Exports
 
 - **Fixed: CSV export and the import template now download in the desktop app.** The

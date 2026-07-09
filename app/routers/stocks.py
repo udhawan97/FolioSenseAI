@@ -109,7 +109,7 @@ def get_price(ticker: str):
 @router.get("/history/batch")
 def get_batch_history(
     tickers: str | None = None,
-    period: str = "1mo"
+    period: str = Query("1mo", pattern="^(1d|5d|1mo|3mo|6mo|1y|2y|5y|10y|ytd)$"),
 ):
     """
     Fetch historical prices for multiple tickers at once.

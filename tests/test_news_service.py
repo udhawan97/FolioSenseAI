@@ -194,6 +194,15 @@ class TestFetchTickerNews:
         result = fetch_ticker_news("../../etc/passwd")
         assert result == []
 
+    def test_unsafe_ticker_is_sanitized_before_logging(self, caplog):
+        """A CR/LF in the rejected ticker must not inject a fake log line."""
+        with caplog.at_level("WARNING"):
+            fetch_ticker_news("AAPL\nFAKE LOG LINE INJECTED")
+        assert caplog.records, "expected a warning to be logged"
+        for record in caplog.records:
+            assert "\n" not in record.getMessage()
+            assert "\r" not in record.getMessage()
+
     def test_returns_empty_list_on_yfinance_failure(self, monkeypatch):
         # Clear the cache so this test hits the real fetch path.
         news_service._NEWS_CACHE.clear()

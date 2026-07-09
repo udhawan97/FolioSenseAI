@@ -19,6 +19,7 @@ from app.services.investment_signal import (
     _derive_etf_market_mood,
     _derive_stock_market_mood,
     _needs_data,
+    _valuation_component_score,
     build_investment_signal,
     signal_to_dict,
 )
@@ -779,3 +780,35 @@ def test_earnings_cap_on_add():
     sig = build_investment_signal(_stock_rec("buy"), event_context=event)
     if sig.action == "add":
         assert sig.confidence <= 55
+
+
+# ── Valuation component score: zone/action alignment ──────────────────────────
+# Bargain supports "add"; Rich supports "trim" (see TestEtfActionMapping above,
+# and _apply_anchor_override's own zone→action stance map). The trim score must
+# invert the add-scale, not reuse it verbatim, or a cheap (Bargain) stock scores
+# a HIGH confidence to trim it — backwards.
+
+class TestValuationComponentScoreZoneActionAlignment:
+    def test_trim_scores_low_on_bargain_zone(self):
+        score = _valuation_component_score(
+            action="trim", upside=None, zone="Bargain", percentile=15,
+        )
+        assert score < 50
+
+    def test_trim_scores_high_on_rich_zone(self):
+        score = _valuation_component_score(
+            action="trim", upside=None, zone="Rich", percentile=85,
+        )
+        assert score > 50
+
+    def test_add_still_scores_high_on_bargain_zone(self):
+        score = _valuation_component_score(
+            action="add", upside=None, zone="Bargain", percentile=15,
+        )
+        assert score > 50
+
+    def test_add_still_scores_low_on_rich_zone(self):
+        score = _valuation_component_score(
+            action="add", upside=None, zone="Rich", percentile=85,
+        )
+        assert score < 50

@@ -45,7 +45,12 @@ def _log_returns(closes: list[float]) -> np.ndarray:
     if len(closes) < 2:
         return np.array([], dtype=float)
     prices = np.asarray(closes, dtype=float)
-    return np.diff(np.log(prices))
+    with np.errstate(divide="ignore", invalid="ignore"):
+        returns = np.diff(np.log(prices))
+    # _fetch_closes already filters non-positive prices, but guard here too so a
+    # bad close (0/negative) can never turn a projection into NaN — mirrors the
+    # same defense in portfolio_analytics._log_returns. Treat a bad day as flat.
+    return np.nan_to_num(returns, nan=0.0, posinf=0.0, neginf=0.0)
 
 
 def _annualize_stats(daily_log_returns: np.ndarray) -> tuple[float, float]:

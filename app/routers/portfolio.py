@@ -647,8 +647,10 @@ async def update_holding(
         raise HTTPException(status_code=404, detail="Holding not found")
 
     # A drop in share count is a sale → record the realized gain/loss first,
-    # while we still know the old share count and avg cost.
-    if data.shares is not None and data.shares < holding.shares:
+    # while we still know the old share count and avg cost. Watchlist (research
+    # mode) holdings can hold nonzero shares too, but they're promised to never
+    # touch P&L — skip recording for them, matching remove_holding's guard below.
+    if data.shares is not None and data.shares < holding.shares and not holding.is_watchlist:
         _record_reduction(holding, holding.shares, data.shares, db)
 
     # Only update fields that were actually provided (not None)

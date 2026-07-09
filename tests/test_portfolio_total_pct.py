@@ -380,3 +380,44 @@ def test_range_performance_404_for_unknown_portfolio():
         assert False, "expected HTTPException for unknown portfolio"
     except HTTPException as exc:
         assert exc.status_code == 404
+
+
+def test_watchlist_share_reduction_does_not_record_realized_trade():
+    """Watchlist (research-mode) holdings are promised to never touch P&L.
+    They can hold nonzero shares (research position tracking), so reducing
+    one via the edit endpoint must skip realized-trade recording exactly
+    like the delete endpoint already does — not just when shares hit zero."""
+    db = make_db()
+    db.add(Holding(
+        portfolio_id=1, ticker="WATCH", shares=10, avg_cost=100,
+        is_active=True, is_watchlist=True,
+    ))
+    db.commit()
+    holding = db.query(Holding).filter(Holding.ticker == "WATCH").first()
+
+    asyncio.run(
+        portfolio_router.update_holding(holding.id, HoldingUpdate(shares=4), db)
+    )
+
+    assert db.query(RealizedTrade).filter(RealizedTrade.ticker == "WATCH").count() == 0
+    db.refresh(holding)
+    assert holding.shares == 4
+
+
+def test_non_watchlist_share_reduction_still_records_realized_trade(monkeypatch):
+    """Guard against over-correcting: a real (non-watchlist) position must
+    still record a realized trade on a share reduction."""
+    db = make_db()
+    add_holding(db, "REAL", shares=10, avg_cost=100)
+    holding = db.query(Holding).filter(Holding.ticker == "REAL").first()
+    monkeypatch.setattr(
+        portfolio_router, "get_stock_data", lambda _ticker: quote("REAL", 120)
+    )
+
+    asyncio.run(
+        portfolio_router.update_holding(holding.id, HoldingUpdate(shares=4), db)
+    )
+
+    trade = db.query(RealizedTrade).filter(RealizedTrade.ticker == "REAL").first()
+    assert trade is not None
+    assert trade.shares_sold == 6

@@ -73,6 +73,7 @@ def start_download() -> dict:
 
 def _run(info: dict) -> None:
     fallback_total = info.get("size_bytes") or 0
+    dest = None
     try:
         dest = update_downloader.pending_dir() / info["asset_name"]
 
@@ -125,6 +126,11 @@ def _run(info: dict) -> None:
         update_service.mark(UpdateStatus.ERROR, error="The download didn't complete.")
     except Exception:  # pylint: disable=broad-except
         logger.exception("Unexpected error during update download")
+        # An unverified (possibly truncated/corrupt) file may exist on disk even
+        # though _rt["path"] was never set — nothing can install it, but clean it
+        # up rather than leaving stray bytes in the pending-updates directory.
+        if dest is not None:
+            _safe_unlink(dest)
         update_service.mark(UpdateStatus.ERROR, error="The update didn't complete.")
 
 
@@ -278,8 +284,8 @@ def _signature_ok(sums: str, info: dict) -> bool:
 def _safe_unlink(path) -> None:
     try:
         path.unlink()
-    except OSError:
-        pass
+    except OSError as exc:
+        logger.debug("Could not remove %s: %s", path.name, type(exc).__name__)
 
 
 def _reset_for_tests() -> None:

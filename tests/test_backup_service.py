@@ -98,6 +98,32 @@ def test_restore_refuses_unverified_backup(tmp_path):
     assert _holdings(live) == ["KEEP"]
 
 
+def test_restore_failure_mid_copy_leaves_live_db_intact(tmp_path, monkeypatch):
+    """A copy failure during restore must never leave the live DB missing.
+
+    The backup is staged and re-verified before the live file is moved aside, so
+    a mid-restore failure (disk full, interrupted process) leaves the current
+    database exactly where it was rather than deleted with no replacement ready.
+    """
+    live = tmp_path / "portfolio.db"
+    _make_db(live, ["CURRENT1", "CURRENT2"])
+    backup = backup_service.create_backup(live, label="snap", dest_dir=tmp_path / "backups")
+
+    # Simulate the staging copy blowing up (e.g. disk fills) partway through.
+    def _boom(src, dst):
+        raise OSError("No space left on device")
+
+    monkeypatch.setattr(backup_service.shutil, "copyfile", _boom)
+
+    with pytest.raises(OSError):
+        backup_service.restore_backup(backup, live, ts="20260101-000000")
+
+    # Live DB is fully intact; nothing was moved aside because the copy failed
+    # before the swap step ever ran.
+    assert _holdings(live) == ["CURRENT1", "CURRENT2"]
+    assert not (tmp_path / "portfolio.db.failed-20260101-000000").exists()
+
+
 def test_count_holdings(tmp_path):
     db = tmp_path / "portfolio.db"
     _make_db(db, ["VOO", "AAPL"])

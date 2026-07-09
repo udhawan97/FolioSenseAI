@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import yfinance as yf
 
+from app.services.log_safety import sanitize_for_log
 from app.services.stock_service import (
     _market_is_open,
     normalize_ticker,
@@ -114,7 +115,10 @@ def fetch_ticker_news(ticker: str) -> list[dict]:
     """
     symbol = normalize_ticker(ticker)
     if not ticker_shape_is_safe(symbol):
-        logger.warning("news_service: unsafe ticker shape skipped; ticker=%s", ticker)
+        logger.warning(
+            "news_service: unsafe ticker shape skipped; ticker=%s",
+            sanitize_for_log(ticker),
+        )
         return []
 
     now    = time.monotonic()

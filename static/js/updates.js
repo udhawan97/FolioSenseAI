@@ -294,7 +294,10 @@
         }
 
         show(el.updateTertiary, true);
-        if (avail.release_url) {
+        // Only ever assign a plain http(s) URL to href — this value comes from
+        // the update-check API (ultimately GitHub's release metadata), so a
+        // scheme check is cheap insurance against a "javascript:" URI.
+        if (avail.release_url && /^https?:\/\//i.test(avail.release_url)) {
             el.updateNotesLink.href = avail.release_url;
             show(el.updateNotesLink, true);
         }

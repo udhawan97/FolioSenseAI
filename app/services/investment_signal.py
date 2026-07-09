@@ -632,19 +632,27 @@ def _valuation_component_score(
     percentile: float | None,
 ) -> int:
     if zone is not None:
-        zone_base = {
+        # Bargain supports "add"; Rich supports "trim" (see the zone/action
+        # alignment used elsewhere, e.g. _apply_anchor_override's stance map and
+        # the zone→expected-action table). For "trim" the scale must run the
+        # other way: cheap (Bargain) should score LOW confidence to trim, rich
+        # should score HIGH — the mirror image of the "add" table below.
+        add_zone_base = {
             "Bargain": 86,
             "Fair": 54,
             "Elevated": 44,
             "Rich": 24,
             "Unavailable": 50,
-        }.get(zone, 50)
+        }
+        zone_base = (
+            {"Bargain": 24, "Fair": 44, "Elevated": 54, "Rich": 86, "Unavailable": 50}
+            if action == "trim"
+            else add_zone_base
+        ).get(zone, 50)
         score = zone_base
         if percentile is not None:
             edge = abs(50 - percentile) / 50.0
-            if action == "add":
-                score = min(95, score + round(edge * 12))
-            elif action == "trim":
+            if action in ("add", "trim"):
                 score = min(95, score + round(edge * 12))
         return _clamp(score)
 

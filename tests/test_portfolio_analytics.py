@@ -253,3 +253,32 @@ def test_compute_conviction_gaps():
     result = pa.compute_conviction_gaps(holdings, signals)
     assert result["has_data"] is True
     assert result["gaps"][0]["ticker"] == "BIG"
+
+
+def test_log_returns_non_finite_close_does_not_propagate_nan():
+    """A zero/negative close (bad data — delisted/halted ticker) must not
+    contaminate the return series with -inf/nan."""
+    rets = pa._log_returns([100.0, 0.0, 100.0])
+    assert np.isfinite(rets).all()
+
+
+def test_log_returns_negative_close_does_not_propagate_nan():
+    rets = pa._log_returns([100.0, -5.0, 100.0])
+    assert np.isfinite(rets).all()
+
+
+@patch.object(pa, "get_batched_history_closes")
+def test_correlation_matrix_reports_no_data_on_zero_variance(mock_history):
+    """A frozen/halted price series makes correlation mathematically undefined
+    (corrcoef returns NaN) — must be reported as has_data=False, not a fake 0.0."""
+    pa._cache.clear()
+    flat = [100.0] * 10
+    mock_history.return_value = {"AAA": flat, "BBB": flat}
+    holdings = [
+        {"ticker": "AAA", "current_value": 5000, "is_watchlist": False},
+        {"ticker": "BBB", "current_value": 5000, "is_watchlist": False},
+    ]
+
+    result = pa.compute_correlation_matrix(holdings)
+
+    assert result["has_data"] is False

@@ -293,6 +293,14 @@ def get_batched_history_closes(
         return {}
 
     today = date.today().isoformat()
+    # Every lookup keys on TODAY's date, so a prior day's entries are provably
+    # dead weight — they can never be read again. Without this prune, a
+    # long-running desktop process accumulates one stale entry per
+    # (ticker, period) for every calendar day it's ever been used.
+    stale = [key for key in _HISTORY_CACHE if key[2] != today]
+    for key in stale:
+        del _HISTORY_CACHE[key]
+
     results: dict[str, list[float]] = {}
     missing: list[str] = []
     for symbol in symbols:

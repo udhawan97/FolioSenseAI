@@ -1,3 +1,64 @@
+# FolioSenseAI v4.5.2 Release Notes
+
+**Release date:** July 9, 2026
+
+## Headline
+
+v4.5.2 is a **reliability patch** — no new features, just a full-codebase bug
+audit and the fixes it surfaced. The theme: your numbers stay honest and your
+data stays safe, even when the market data feeding them doesn't.
+
+## Fixes
+
+### Analytics & verdicts — no more silently-wrong numbers
+
+- **A bad price no longer poisons your risk math.** A zero or negative close from
+  the data feed (a halted or delisted ticker, a data glitch) used to turn a
+  logarithmic return into `-inf`/`NaN` and quietly contaminate annualized return,
+  volatility, and correlation for the whole portfolio. Those bad days are now
+  treated as flat, in both the risk analytics and the growth projection.
+- **Correlation tells the truth when it can't compute.** A frozen or zero-variance
+  price series makes correlation mathematically undefined; the matrix used to
+  paper over that with a fake `0.0`. It now reports "no data" honestly instead.
+- **Trim verdicts score the right way round.** The valuation confidence for a
+  *trim* was using the *add* scale, so a cheap ("Bargain") stock could be handed
+  a high-confidence trim. Trim now scores the mirror image — low confidence to
+  trim something cheap, high to trim something rich.
+- **Action Plan cache no longer confuses two different books.** Two portfolios
+  with the same dominant verdict but a different secondary lean (e.g. "mostly
+  hold, then add" vs "mostly hold, then trim") could share one cached plan. The
+  cache key now accounts for the secondary action.
+
+### Your data & the updater
+
+- **A failed restore can never leave you with no database.** Rolling back now
+  copies the backup to a staging file and re-verifies it *before* moving your
+  live database aside — so an interrupted or out-of-space restore leaves your
+  current data exactly where it was instead of half-swapped.
+- **Honest rollback messaging.** If your data restores but the saved settings
+  (`.env`) don't, you're told exactly that, instead of a misleading "nothing
+  happened."
+- **Watchlist edits never fabricate P&L.** Reducing shares on a research-mode
+  (watchlist) holding no longer records a phantom realized trade — matching how
+  deleting one already behaved.
+- Unverified partial downloads are cleaned up on error, and a long-running
+  desktop session no longer accumulates dead price-cache entries.
+
+### Hardening
+
+- The batch price-history endpoint validates its `period` like the single-ticker
+  one does; an out-of-range value is rejected cleanly instead of quietly
+  returning nothing.
+- The in-app release-notes link is scheme-checked before it's used, and a
+  rejected ticker is sanitized before it reaches the logs.
+
+## Upgrade Notes
+
+No database migration or `.env` change required. Update in-app from **Settings →
+Software Update**, or download the installer from the releases page.
+
+---
+
 # FolioSenseAI v4.5.1 Release Notes
 
 **Release date:** July 9, 2026

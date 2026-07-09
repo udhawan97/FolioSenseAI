@@ -99,14 +99,27 @@ def rollback(restore_data: bool = False) -> dict:  # pylint: disable=too-many-re
             backup_service.restore_backup(
                 rollback_point["db_backup"], backup_service.live_db_path()
             )
-            if rollback_point.get("env_backup"):
-                backup_service.restore_env(rollback_point["env_backup"])
-            update_log.event("rollback restored pre-update data snapshot")
         except Exception:  # pylint: disable=broad-except
             logger.exception("Failed to restore pre-update snapshot")
             return update_service.mark(
                 UpdateStatus.ERROR, error="Couldn't restore the earlier data snapshot."
             )
+        # The database is already restored at this point — a failure here is a
+        # narrower, less alarming problem than the message above, and must not
+        # be reported as "nothing happened" when the DB restore actually succeeded.
+        if rollback_point.get("env_backup"):
+            try:
+                backup_service.restore_env(rollback_point["env_backup"])
+            except Exception:  # pylint: disable=broad-except
+                logger.exception("Database restored, but .env restore failed")
+                return update_service.mark(
+                    UpdateStatus.ERROR,
+                    error=(
+                        "Your data was restored, but the saved settings (.env) "
+                        "couldn't be. You may need to reconfigure your API key."
+                    ),
+                )
+        update_log.event("rollback restored pre-update data snapshot")
 
     # 3. Reinstall the previous binary.
     installer = _resolve_previous_installer(rollback_point)

@@ -167,9 +167,13 @@ def verify_backup(backup_path: Path, expected_min_holdings: int | None = None) -
 def restore_backup(backup_path: Path, target_db: Path, ts: str | None = None) -> bool:
     """Restore ``backup_path`` over ``target_db`` without destroying the current file.
 
-    Refuses to restore an unverified backup. The existing database and its WAL
-    sidecars are moved aside as ``*.failed-<timestamp>`` before the verified
-    backup is copied into place. Returns True on success.
+    Refuses to restore an unverified backup. The backup is first copied to a
+    staging file and re-verified there — only once that copy is confirmed intact
+    are the existing database and its WAL sidecars moved aside as
+    ``*.failed-<timestamp>`` and the staged copy swapped into place. This way a
+    failed copy (disk full, interrupted process) never leaves the live database
+    missing with no verified replacement ready — it's untouched instead.
+    Returns True on success.
     """
     backup_path = Path(backup_path)
     target_db = Path(target_db)
@@ -177,15 +181,28 @@ def restore_backup(backup_path: Path, target_db: Path, ts: str | None = None) ->
         raise ValueError("Refusing to restore an unverified backup")
 
     stamp = ts or _timestamp()
+    target_db.parent.mkdir(parents=True, exist_ok=True)
+    staging = target_db.parent / f"{target_db.name}.staging-{stamp}"
+    shutil.copyfile(backup_path, staging)
+    if not verify_backup(staging):
+        _safe_remove(staging)
+        raise ValueError("Restored copy failed verification — live database left untouched")
+
     for suffix in ("", "-wal", "-shm"):
         current = Path(str(target_db) + suffix)
         if current.exists():
             current.replace(Path(f"{current}.failed-{stamp}"))
 
-    target_db.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(backup_path, target_db)
+    staging.replace(target_db)
     logger.info("Restored database from backup %s", backup_path.name)
     return True
+
+
+def _safe_remove(path: Path) -> None:
+    try:
+        path.unlink()
+    except OSError as exc:
+        logger.debug("Could not remove staging file %s: %s", path.name, type(exc).__name__)
 
 
 def prune_backups(dest_dir: Path | None = None, keep: int = DEFAULT_KEEP) -> list[Path]:
