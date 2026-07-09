@@ -127,6 +127,22 @@ def main() -> int:
         min_size=(1024, 720),
     )
 
+    # Let the update installer quit the app so a launched installer can replace
+    # files the running app would otherwise hold open. Falls back to a hard exit
+    # if the window can't be destroyed cleanly.
+    def _quit_app() -> None:
+        try:
+            window.destroy()
+        except Exception:  # pylint: disable=broad-except
+            os._exit(0)  # pylint: disable=protected-access
+
+    try:
+        from app.services import update_installer
+
+        update_installer.register_exit_hook(_quit_app)
+    except Exception:  # pylint: disable=broad-except
+        pass
+
     def _check_for_updates() -> None:
         # Drive the in-page update sheet from the native menu. Guarded inside JS
         # so it's a no-op if the page hasn't finished loading updates.js.

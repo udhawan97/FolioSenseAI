@@ -70,3 +70,15 @@ def test_put_settings_ignores_unknown_fields(client):
 def test_skip_version_endpoint(client):
     body = client.post("/api/system/update/skip", json={"version": "4.4.0"}).json()
     assert body["skipped_version"] == "4.4.0"
+
+
+def test_download_cancel_install_endpoints_return_state(client, monkeypatch):
+    from app.services import update_installer, update_service
+
+    monkeypatch.setattr(update_installer, "start_download", lambda: {"status": "downloading"})
+    monkeypatch.setattr(update_installer, "cancel_download", lambda: {"status": "available"})
+    monkeypatch.setattr(update_installer, "install", lambda: {"status": "installing"})
+
+    assert client.post("/api/system/update/download").json()["status"] == "downloading"
+    assert client.post("/api/system/update/cancel").json()["status"] == "available"
+    assert client.post("/api/system/update/install").json()["status"] == "installing"

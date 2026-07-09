@@ -269,6 +269,15 @@ def _set_state(**changes: Any) -> dict[str, Any]:
         return _state.snapshot()
 
 
+def mark(status: "UpdateStatus", **fields: Any) -> dict[str, Any]:
+    """Set the lifecycle status (and any extra state fields) from other services.
+
+    Used by the download/install orchestrator to drive the state machine through
+    downloading → verifying → backing_up → ready → installing.
+    """
+    return _set_state(status=status, **fields)
+
+
 def check_for_updates(force: bool = False) -> dict[str, Any]:
     """Check GitHub for a newer release and update the shared state.
 

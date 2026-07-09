@@ -12,7 +12,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app import app_settings, paths
-from app.services import update_service
+from app.services import update_installer, update_service
 from app.version import __version__
 
 router = APIRouter(prefix="/api/system", tags=["system"])
@@ -69,3 +69,21 @@ def put_update_settings(payload: UpdateSettingsIn) -> dict:
 def skip_version(payload: SkipVersionIn) -> dict:
     """Record a version the user chose to skip so the pill stays hidden for it."""
     return app_settings.save_settings({"skipped_version": payload.version})
+
+
+@router.post("/update/download")
+def start_download() -> dict:
+    """Begin downloading the available update (background) and return the state."""
+    return update_installer.start_download()
+
+
+@router.post("/update/cancel")
+def cancel_download() -> dict:
+    """Cancel an in-progress download; the partial file is kept for resume."""
+    return update_installer.cancel_download()
+
+
+@router.post("/update/install")
+def install_update() -> dict:
+    """Hand the verified installer to the OS and quit the app (when ready)."""
+    return update_installer.install()
