@@ -9,10 +9,10 @@ from starlette.middleware.gzip import GZipMiddleware
 from app.routers import stocks, portfolio, ai
 from app.routers import news
 from app.config import settings
-from app.database import engine, ensure_startup_migrations
+from app.database import engine
+from app.schema_meta import apply_migrations_safely
 from app.paths import resource_dir
 from app.version import __version__
-from app import models
 
 # Absolute paths to bundled resources so the app works whether it is run from a
 # source checkout or a frozen desktop bundle (where the working directory and the
@@ -57,8 +57,17 @@ def _run_startup_warmup() -> None:
 # We use it to create all database tables before the app begins accepting requests.
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    models.Base.metadata.create_all(bind=engine)
-    ensure_startup_migrations()
+    # Create tables and apply migrations inside a protected sequence: a version
+    # bump on an existing database is preceded by a verified backup and, on
+    # failure, restored automatically. See app/schema_meta.py.
+    result = apply_migrations_safely(engine)
+    if result.ran_migration:
+        logger.info(
+            "Schema migrated v%d -> v%d (backed_up=%s)",
+            result.previous_schema_version,
+            result.schema_version,
+            result.backed_up,
+        )
     # Warm caches off the main thread so startup isn't blocked on Yahoo.
     threading.Thread(target=_run_startup_warmup, daemon=True).start()
     yield  # The app runs while we're "inside" this yield
