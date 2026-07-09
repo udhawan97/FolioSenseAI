@@ -96,6 +96,17 @@ def main() -> int:
     # thread imports app.main (which reads CORS_ALLOWED_ORIGINS at import time).
     os.environ["CORS_ALLOWED_ORIGINS"] = f"http://127.0.0.1:{port},http://localhost:{port}"
 
+    # Count this launch so a run that dies before it's healthy (e.g. a bad
+    # update that won't start) is detected and rollback can be offered. Skipped
+    # in smoke mode so CI doesn't perturb the counter.
+    if not smoke:
+        try:
+            from app.services import launch_health
+
+            launch_health.record_launch_attempt()
+        except Exception:  # pylint: disable=broad-except
+            pass
+
     threading.Thread(target=_run_server, args=(port,), daemon=True).start()
 
     if not _wait_for_health(base_url, HEALTH_TIMEOUT_SECONDS):
@@ -111,21 +122,46 @@ def main() -> int:
         print(f"FolioSenseAI {__version__} started and healthy at {base_url}")
         return 0
 
+    return _launch_window(base_url)
+
+
+def _launch_window(base_url: str) -> int:
+    """Create the native window (with menu + exit hook) and run the UI loop."""
     import webbrowser
 
     import webview
+
+    # After several failed launches with a rollback available, open straight to
+    # the rollback offer so a broken update is recoverable.
+    offer_rollback = False
+    try:
+        from app.services import launch_health
+
+        offer_rollback = launch_health.should_offer_rollback()
+    except Exception:  # pylint: disable=broad-except
+        pass
 
     # `?app=1` tells the dashboard it's running inside the native WebView so it
     # can switch to a lighter rendering profile (no backdrop-filter, fewer
     # ambient animations) for smooth scrolling. The in-browser experience is
     # unaffected. Tab switching is client-side, so this query persists.
+    start_url = f"{base_url}/?app=1" + ("&rollback=1" if offer_rollback else "")
     window = webview.create_window(
         "FolioSenseAI",
-        f"{base_url}/?app=1",
+        start_url,
         width=1440,
         height=920,
         min_size=(1024, 720),
     )
+
+    # The server is up and the window is created: this launch is healthy, so
+    # clear the failed-launch counter.
+    try:
+        from app.services import launch_health
+
+        launch_health.mark_launch_healthy()
+    except Exception:  # pylint: disable=broad-except
+        pass
 
     # Let the update installer quit the app so a launched installer can replace
     # files the running app would otherwise hold open. Falls back to a hard exit

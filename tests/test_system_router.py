@@ -82,3 +82,20 @@ def test_download_cancel_install_endpoints_return_state(client, monkeypatch):
     assert client.post("/api/system/update/download").json()["status"] == "downloading"
     assert client.post("/api/system/update/cancel").json()["status"] == "available"
     assert client.post("/api/system/update/install").json()["status"] == "installing"
+
+
+def test_rollback_endpoints(client, monkeypatch):
+    from app.services import launch_health, rollback_service
+
+    monkeypatch.setattr(rollback_service, "can_rollback", lambda: True)
+    monkeypatch.setattr(launch_health, "should_offer_rollback", lambda: False)
+    status = client.get("/api/system/rollback/status").json()
+    assert status["can_rollback"] is True
+    assert status["offer_rollback"] is False
+
+    monkeypatch.setattr(
+        rollback_service, "rollback", lambda restore_data=False: {"status": "installing", "restore": restore_data}
+    )
+    body = client.post("/api/system/rollback", json={"restore_data": True}).json()
+    assert body["status"] == "installing"
+    assert body["restore"] is True

@@ -2135,6 +2135,14 @@
                 <span id="update-trust-text">Your holdings and settings are preserved. A backup is saved automatically before anything changes.</span>
             </div>
 
+            <div class="fs-update-rollback" id="update-rollback" hidden>
+                <label class="fs-update-rollback-choice">
+                    <input type="checkbox" id="update-rollback-restore-data">
+                    <span>Also restore my data from before the update</span>
+                </label>
+                <div class="fs-update-rollback-note">A copy of today's data is saved first, so nothing is lost either way.</div>
+            </div>
+
             <div class="fs-update-actions" id="update-actions">
                 <button class="fs-update-btn fs-update-btn--primary" id="update-primary" type="button" hidden></button>
                 <button class="fs-update-btn fs-update-btn--ghost" id="update-secondary" type="button" hidden></button>
@@ -2172,7 +2180,7 @@
     <script defer src="https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@3.0.0/dist/chartjs-chart-treemap.min.js"></script>
     <script defer src="/static/js/analytics-charts.js?v=15"></script>
     <script defer src="/static/js/dashboard.js?v=96"></script>
-    <script defer src="/static/js/updates.js?v=1"></script>
+    <script defer src="/static/js/updates.js?v=2"></script>
 
     <!-- Tip Popover (singleton) -->
     <div id="tip-popover" role="tooltip" aria-hidden="true"></div>

@@ -27,6 +27,7 @@ def test_update_markup_present():
         'id="update-notes"', 'id="update-trust"', 'id="update-primary"',
         'id="update-secondary"', 'id="update-skip"', 'id="update-restore"',
         'id="update-pref-auto"', 'id="update-pref-notify"',
+        'id="update-rollback"', 'id="update-rollback-restore-data"',
     ):
         assert marker in html, marker
 
@@ -63,6 +64,10 @@ def test_updates_js_exposes_api_and_states():
     # Post-update confirmation.
     assert "showUpdatedToast" in js
     assert "just_updated" in js
+    # Rollback flow.
+    assert "openRollbackConfirm" in js
+    assert "/api/system/rollback" in js
+    assert "rollback=1" in js
 
 
 def test_update_styles_present():

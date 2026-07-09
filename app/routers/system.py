@@ -12,7 +12,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app import app_settings, paths
-from app.services import update_installer, update_service
+from app.services import launch_health, rollback_service, update_installer, update_service
 from app.version import __version__
 
 router = APIRouter(prefix="/api/system", tags=["system"])
@@ -28,6 +28,12 @@ class UpdateSettingsIn(BaseModel):
 
 class SkipVersionIn(BaseModel):
     version: str
+
+
+class RollbackIn(BaseModel):
+    # Default False = keep current data (compatible with the older binary via the
+    # additive-only migration rule). True = also restore the pre-update snapshot.
+    restore_data: bool = False
 
 
 @router.get("/version")
@@ -90,3 +96,21 @@ def cancel_download() -> dict:
 def install_update() -> dict:
     """Hand the verified installer to the OS and quit the app (when ready)."""
     return update_installer.install()
+
+
+@router.get("/rollback/status")
+def rollback_status() -> dict:
+    """Whether a rollback is available and whether it should be offered proactively."""
+    settings = app_settings.load_settings()
+    rollback = settings.get("rollback_point") or {}
+    return {
+        "can_rollback": rollback_service.can_rollback(),
+        "previous_version": rollback.get("version"),
+        "offer_rollback": launch_health.should_offer_rollback(),
+    }
+
+
+@router.post("/rollback")
+def do_rollback(payload: RollbackIn) -> dict:
+    """Restore the previous version; optionally also restore the pre-update data."""
+    return rollback_service.rollback(restore_data=payload.restore_data)

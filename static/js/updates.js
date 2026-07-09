@@ -22,6 +22,8 @@
     var state = null;          // latest state snapshot from the backend
     var settings = null;       // update preferences
     var versionInfo = null;    // { version, is_frozen, platform }
+    var rollbackInfo = null;   // { can_rollback, previous_version, offer_rollback }
+    var rollbackMode = false;  // showing the rollback-confirm view
     var pollTimer = null;
     var sheetOpen = false;
     var lastFocus = null;
@@ -35,6 +37,7 @@
             "update-mark", "update-spinner", "update-sheet-title", "update-sub",
             "update-progress", "update-progress-fill", "update-progress-meta",
             "update-notes-wrap", "update-notes", "update-trust", "update-trust-text",
+            "update-rollback", "update-rollback-restore-data",
             "update-actions", "update-primary", "update-secondary",
             "update-tertiary", "update-notes-link", "update-skip", "update-releases-link",
             "update-pref-auto", "update-pref-notify", "update-version-line", "update-restore"
@@ -178,6 +181,7 @@
     }
 
     function render() {
+        if (rollbackMode) { renderRollbackConfirm(); return; }
         if (!state) { return; }
         var status = state.status;
         var cur = (versionInfo && versionInfo.version) || state.current_version || "";
@@ -188,6 +192,7 @@
         show(el.updateProgress, false);
         show(el.updateNotesWrap, false);
         show(el.updateTrust, false);
+        show(el.updateRollback, false);
         show(el.updateNotesLink, false);
         show(el.updateSkip, false);
         show(el.updateReleasesLink, false);
@@ -378,6 +383,38 @@
             .catch(function () { close(); });
     }
 
+    /* ------------------------------------------------------------ rollback */
+    function openRollbackConfirm() {
+        rollbackMode = true;
+        if (!sheetOpen) { open(); } else { renderRollbackConfirm(); }
+    }
+
+    function renderRollbackConfirm() {
+        show(el.updateProgress, false);
+        show(el.updateNotesWrap, false);
+        show(el.updateTrust, false);
+        show(el.updateTertiary, false);
+        setMark("neutral", false);
+
+        var prev = (rollbackInfo && rollbackInfo.previous_version) || "the previous version";
+        el.updateSheetTitle.textContent = "Restore FolioSenseAI " + prev;
+        el.updateSub.textContent = "A safety copy of your current data is saved first. Your "
+            + "holdings will be exactly as they are now unless you choose to restore the "
+            + "earlier snapshot too.";
+        show(el.updateRollback, true);
+        setPrimary("Restore Previous Version", doRollback);
+        setSecondary("Cancel", function () { rollbackMode = false; render(); });
+        renderPrefs();
+    }
+
+    function doRollback() {
+        rollbackMode = false;
+        var restore = !!(el.updateRollbackRestoreData && el.updateRollbackRestoreData.checked);
+        postJSON("/api/system/rollback", { restore_data: restore })
+            .then(function (s) { state = s; render(); })
+            .catch(function () { showReleasesFallback(); });
+    }
+
     function toggleSetting(key, node) {
         var next = node.getAttribute("aria-checked") !== "true";
         setSwitch(node, next);
@@ -421,6 +458,11 @@
         getJSON("/api/system/update/settings")
             .then(function (s) { settings = s; renderPrefs(); })
             .catch(function () {});
+
+        if (rollbackMode) {
+            renderRollbackConfirm();
+            return;
+        }
         if (!state || state.status === "idle" || !state.last_checked_at) {
             runCheck(false);
         } else {
@@ -485,23 +527,35 @@
         el.updatePrefNotify.addEventListener("click", function () {
             toggleSetting("notify_updates", el.updatePrefNotify);
         });
+        el.updateRestore.addEventListener("click", function () {
+            if (!el.updateRestore.disabled) { openRollbackConfirm(); }
+        });
 
         // Prime version + settings + any cached update state so the pill can
         // appear without opening the sheet.
         Promise.all([
             getJSON("/api/system/version").catch(function () { return null; }),
             getJSON("/api/system/update/settings").catch(function () { return null; }),
-            getJSON("/api/system/update/status").catch(function () { return null; })
+            getJSON("/api/system/update/status").catch(function () { return null; }),
+            getJSON("/api/system/rollback/status").catch(function () { return null; })
         ]).then(function (r) {
             versionInfo = r[0];
             settings = r[1];
             state = r[2];
+            rollbackInfo = r[3];
             if (el.navUpdateVersion && versionInfo) {
                 el.navUpdateVersion.textContent = "v" + versionInfo.version;
             }
             refreshPassiveIndicators();
             if (versionInfo && versionInfo.just_updated) {
                 showUpdatedToast(versionInfo.version);
+            }
+            // The desktop shell opens with ?rollback=1 after repeated failed
+            // launches; surface the rollback offer immediately.
+            var wantsRollback = /[?&]rollback=1\b/.test(window.location.search)
+                || (rollbackInfo && rollbackInfo.offer_rollback);
+            if (wantsRollback && rollbackInfo && rollbackInfo.can_rollback) {
+                openRollbackConfirm();
             }
         });
     }

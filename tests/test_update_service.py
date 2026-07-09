@@ -184,3 +184,17 @@ def test_note_launch_quiet_on_same_version():
     app_settings.save_settings({"last_seen_version": __version__})
     info = update_service.note_launch()
     assert info["just_updated"] is False
+
+
+def test_fetch_release_info_for_version(monkeypatch):
+    monkeypatch.setattr(update_service, "current_platform_key", lambda: "macos")
+    _patch_response(monkeypatch, _release("v4.3.0", _macos_assets("4.3.0")))
+    info = update_service.fetch_release_info("4.3.0")
+    assert info is not None
+    assert info.version == "4.3.0"
+    assert info.download_url.endswith("a.dmg")
+
+
+def test_fetch_release_info_missing_tag_returns_none(monkeypatch):
+    monkeypatch.setattr(update_service, "_http_get", lambda url, headers: (404, {}, b""))
+    assert update_service.fetch_release_info("9.9.9") is None

@@ -150,11 +150,22 @@ def install() -> dict:
         update_log.event(f"install handoff from={__version__}")
         update_service.mark(UpdateStatus.INSTALLING)
 
-    # Quit shortly after so the HTTP response flushes and the installer can
-    # replace files that the running app would otherwise hold open.
+    schedule_exit()
+    return update_service.get_state()
+
+
+def launch_installer(path) -> None:
+    """Public handoff so other services (rollback) can launch an installer."""
+    _launch_installer(path)
+
+
+def schedule_exit() -> None:
+    """Quit the app shortly after so a launched installer can replace files.
+
+    The delay lets the triggering HTTP response flush first.
+    """
     if _rt["exit_hook"]:
         threading.Timer(1.0, _rt["exit_hook"]).start()
-    return update_service.get_state()
 
 
 def _create_rollback_point() -> dict | None:

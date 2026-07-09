@@ -261,6 +261,27 @@ def _fetch_latest_release(force: bool) -> dict[str, Any]:
     raise UpdateError(f"Unexpected response status {status}")
 
 
+def fetch_release_info(version: str) -> UpdateInfo | None:
+    """Resolve the release for a specific version tag (used for rollback installers).
+
+    Returns the platform's :class:`UpdateInfo` for ``v<version>``, or None if the
+    tag or its asset can't be found / reached. Not cached — this is a rare path.
+    """
+    url = f"{API_BASE}/repos/{REPO}/releases/tags/v{version}"
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": _USER_AGENT}
+    try:
+        status, _headers, body = _http_get(url, headers)
+    except UpdateOffline:
+        return None
+    if status != 200:
+        return None
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    return _release_to_info(payload)
+
+
 def _release_to_info(payload: dict[str, Any]) -> UpdateInfo:
     """Convert a GitHub release payload into an :class:`UpdateInfo`."""
     tag = str(payload.get("tag_name", ""))
