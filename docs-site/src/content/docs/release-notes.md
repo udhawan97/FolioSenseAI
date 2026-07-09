@@ -7,6 +7,33 @@ The full changelog lives in
 [`RELEASE_NOTES.md`](https://github.com/udhawan97/FolioSenseAI/blob/main/RELEASE_NOTES.md)
 in the repository. Highlights of the current release below.
 
+## v4.5.1 — Export That Actually Exports
+
+- **Fixed: CSV export and the import template now download in the desktop app.** The
+  packaged app is a native window with no download chrome, so **Export CSV** and **Download
+  template** used to open the file inline as raw text — no Save dialog, no back button. Both
+  now route through a native **Save As…** dialog and write a real `.csv` (UTF-8 with the BOM
+  Excel expects). Browsers download exactly as before. Either way, you get a file, not a
+  dead end.
+- **Website polish** — Senpai gets his own animated spotlight above the footer, a refreshed
+  one-liner pill, and CSV import is now called out in the workflow walkthrough.
+- Installing over v4.5.0 keeps all holdings, settings, and `.env`. Nothing about your data
+  changes.
+
+## v4.5.0 — The Spreadsheet Release
+
+- **Export your holdings as CSV.** One click in the portfolio manager downloads your active
+  holdings and watchlist as a clean, Excel-ready CSV — with every cell escaped against
+  spreadsheet formula injection. The file you get *is* the import template.
+- **Import holdings, two ways.** *Local* (always available, no API key) does a strict,
+  exact-schema parse of the template — deterministic, free, offline, and never gated.
+  *Claude assist* (when a key is set) maps almost any brokerage export onto the FolioSense
+  format for you, and every mapped row still passes the same strict validation before it
+  touches your book. Clean template files skip Claude entirely.
+- **A per-row report either way** — added, skipped (duplicates are skipped, never
+  overwritten), or errored with a plain-English reason — plus a Senpai-narrated recap in
+  Claude mode. Safety as usual: a 256 KB / 200-row import cap and content-type checks.
+
 ## v4.4.1 — Software Update, done right
 
 - **Fixed: the updater falsely showing "You're offline."** The packaged app's bundled OpenSSL

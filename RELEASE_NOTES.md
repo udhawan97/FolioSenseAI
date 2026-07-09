@@ -1,3 +1,35 @@
+# FolioSenseAI v4.5.1 Release Notes
+
+**Release date:** July 9, 2026
+
+## Headline
+
+v4.5.1 is a **polish patch** on the spreadsheet release: CSV export and the
+import template now hand you a real file in the desktop app, instead of opening
+as a wall of text with no way back.
+
+## What's Fixed
+
+### 📥 Export & template actually download in the desktop app
+
+The packaged app is a native window, not a browser tab — and it has no download
+chrome. So clicking **Export CSV** or **Download template** used to *navigate* to
+the file and render it inline as raw text: no Save dialog, no download, no back
+button. Both now route through a native **Save As…** dialog and write an actual
+`.csv` (UTF-8 with the byte-order mark Excel likes). In a regular browser,
+downloads work exactly as they always did. Either way you get a file, not a dead end.
+
+## Also in this release
+
+- **Website polish** — Senpai now gets his own animated spotlight above the
+  footer, a refreshed one-liner pill, and CSV import is called out directly in
+  the workflow walkthrough.
+
+Nothing about your data, holdings, or configuration changes in this update.
+Installing over v4.5.0 or earlier keeps everything in place.
+
+---
+
 # FolioSenseAI v4.5.0 Release Notes
 
 **Release date:** July 9, 2026
