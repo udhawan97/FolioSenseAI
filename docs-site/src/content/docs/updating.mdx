@@ -1,29 +1,62 @@
 ---
 title: Updating
-description: How to update FolioSenseAI and why your portfolio data survives every update.
+description: How FolioSenseAI updates itself with your permission, and why your portfolio data survives every update.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Updating is just installing the newer version over the old one. Your database and config
-live in a separate per-user data directory, so they're preserved automatically.
+FolioSenseAI can update itself — with your permission, and without ever putting your holdings
+at risk. Your database and config live in a separate per-user data directory, so they're
+preserved automatically, and a verified backup is taken before anything is installed.
 
-## Desktop app
+## In-app updates (v4.4.0+)
 
-- **macOS** — download the newer `.dmg` and drag the app into Applications, replacing the
-  old copy.
+The app checks quietly for new versions a little after launch and then about once a day. When
+one is available you'll see a calm **Update available** indicator — nothing installs on its
+own, and nothing downloads until you say so.
+
+You can also check any time:
+
+- **Check for Updates…** in the app menu (macOS/Windows desktop app), or
+- **Settings → Software Update** inside the app.
+
+Opening it shows a Software Update panel with the current and latest versions, what changed,
+the download size, and whether a relaunch is needed. Choose **Update Now** to download and
+install, or **Later** to dismiss.
+
+<Aside type="tip" title="Your data is protected at every step">
+Before an update installs, FolioSenseAI takes a verified backup of your portfolio database and
+your settings. If that backup can't be made, the update is **paused** rather than risking your
+data. After updating, a quiet confirmation notes your holdings came through intact.
+</Aside>
+
+Every download is checked against the checksums published with the release before it's
+installed; a corrupted or interrupted download is rejected or resumed automatically.
+
+### If an update misbehaves
+
+Open **Settings → Software Update → Restore previous version…** to roll back to the version you
+were on before. FolioSenseAI always snapshots your current data first, so nothing is lost
+either way — you choose whether to also restore your pre-update data. If the app fails to start
+after an update, it offers the rollback for you automatically.
+
+### Update preferences
+
+Under **Settings → Software Update** you can turn off **Automatically check for updates** or
+**Notify me when updates are available** at any time. There is deliberately no "install updates
+automatically" option — updates always wait for your explicit go-ahead.
+
+## Updating manually
+
+You can always update by hand instead:
+
+- **macOS** — download the newer `.dmg` and drag the app into Applications, replacing the old
+  copy.
 - **Windows** — run the newer `-Setup.exe`; it upgrades the existing install in place.
 
 Your holdings, snapshots, cached AI output, and `.env` all carry over. See where that data
 lives for [macOS](/FolioSenseAI/install-macos/#where-your-data-lives) and
 [Windows](/FolioSenseAI/install-windows/#where-your-data-lives).
-
-<Aside type="tip">
-Not sure whether you're on the latest version? Compare the version shown on the
-[releases page](https://github.com/udhawan97/FolioSenseAI/releases) with the app's — it's
-reported at `http://localhost:8000/health` while the app is running, and in the API docs
-title at `/docs`.
-</Aside>
 
 ## Installed from source or a script?
 
