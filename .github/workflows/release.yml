@@ -110,6 +110,15 @@ jobs:
           brew install create-dmg
           mkdir -p dist/dmg-src dist/out
           cp -R dist/FolioOrb.app dist/dmg-src/
+          # Back-compat for pre-rename (<= v4.x) macOS auto-updaters: their baked
+          # swap script mounts this DMG and looks for a bundle named literally
+          # "FolioSenseAI.app". A relative symlink to the real app lets those old
+          # installs complete the update to FolioOrb — the swap's `ditto`
+          # dereferences the symlink into a real copy and its `[ -d ]` follows it
+          # (both verified). It's parked off-window below so new users only ever
+          # see FolioOrb.app; the current FolioOrb updater globs *.app and picks
+          # FolioOrb.app (sorts first), so it's unaffected.
+          ln -s FolioOrb.app dist/dmg-src/FolioSenseAI.app
           DMG="dist/out/FolioOrb-macOS-arm64-${ASSET_TOKEN}.dmg"
           create-dmg \
             --volname "FolioOrb" \
@@ -119,6 +128,7 @@ jobs:
             --icon "FolioOrb.app" 150 190 \
             --app-drop-link 390 190 \
             --hide-extension "FolioOrb.app" \
+            --icon "FolioSenseAI.app" 620 999 \
             "$DMG" "dist/dmg-src/" || true
           if [[ ! -f "$DMG" ]]; then
             echo "DMG was not produced" >&2

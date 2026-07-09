@@ -7,6 +7,22 @@ The full changelog lives in
 [`RELEASE_NOTES.md`](https://github.com/udhawan97/FolioOrb/blob/main/RELEASE_NOTES.md)
 in the repository. Highlights of the current release below.
 
+## v5.0.1 — Auto-update from FolioSenseAI 4.x
+
+A follow-up to the rebrand: older **FolioSenseAI 4.x** macOS installs can now
+auto-update to FolioOrb in place.
+
+- **Fixes the "The update couldn't be installed" failure** some macOS users saw
+  updating to v5.0.0. The app bundle was renamed (`FolioSenseAI.app` →
+  `FolioOrb.app`), so the old app's updater couldn't find it inside the download.
+  The DMG now includes a hidden compatibility symlink so the old updater
+  succeeds — no data was ever at risk.
+- **What to do:** just check for updates again (**Settings → Software Update**).
+  Your portfolio and settings migrate automatically.
+- Heads-up: an auto-updated Mac may still show the app named *FolioSenseAI* in
+  Finder/the Dock (the old updater installs in place) — everything else is
+  FolioOrb. Download once from the releases page to get the FolioOrb icon too.
+
 ## v5.0.0 — FolioSenseAI is now FolioOrb
 
 Same app, new name. "FolioSense" was already taken, so the product is now
