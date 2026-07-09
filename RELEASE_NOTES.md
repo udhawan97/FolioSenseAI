@@ -1,3 +1,55 @@
+# FolioSenseAI v4.5.0 Release Notes
+
+**Release date:** July 9, 2026
+
+## Headline
+
+v4.5.0 is the **spreadsheet release**: your holdings move in and out as CSV, so
+setting up FolioSenseAI no longer means retyping thirty tickers by hand — and
+neither does backing them up.
+
+## What's New
+
+### 📤 Export your holdings as CSV
+
+One click in the portfolio manager downloads your active holdings as a clean,
+tidy CSV — positions and watchlist alike. It's UTF-8 with the columns Excel
+expects, and every cell is escaped against spreadsheet formula injection. The
+file you get *is* the import template, so it round-trips straight back in.
+
+### 📥 Import holdings — two ways, one set of rules
+
+- **Local (always available, no API key):** a strict, exact-schema parse of the
+  template. Deterministic, free, offline. This is the default and it is never
+  gated.
+- **Claude assist (when a key is configured):** drop in almost any brokerage
+  export — `Symbol`/`Qty`/`Cost`-style columns and currency symbols and all —
+  and Claude maps the columns onto the FolioSense format for you. Every mapped
+  row still passes the *same* strict validation before it touches your book, and
+  clean template files skip Claude entirely (zero tokens). If Claude is slow or
+  unavailable, the import quietly falls back to the strict local parse and tells
+  you it did — it never fails just because Claude did.
+
+Either way you get a per-row report — added, skipped (duplicates are skipped,
+never overwritten), or errored with a plain-English reason — plus, in Claude
+mode, a short Senpai-narrated recap. The portfolio manager shows which mode
+you're in and updates live when you connect or disconnect a key.
+
+### Safety, as usual
+
+Formula-injection escaping on export, a 256 KB / 200-row import cap, content-type
+and encoding checks (UTF-8 BOM and Windows `cp1252` both welcome), ticker
+shape-validation before any network call, duplicate-column and non-finite-number
+rejection, and Claude only ever sees a small, capped sample of the file — never
+the whole thing.
+
+## Upgrade Notes
+
+No database migration or `.env` change required. Existing holdings are untouched;
+importing a file you exported earlier is a safe no-op (every row dup-skips).
+
+---
+
 # FolioSenseAI v4.4.1 Release Notes
 
 **Release date:** July 9, 2026

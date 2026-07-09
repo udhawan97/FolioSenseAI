@@ -39,3 +39,38 @@ Expanding a ticker surfaces deeper context:
 None of this requires Claude. It's all part of Local Intelligence, running deterministically
 against live market data. Claude, when connected, adds narration on top — not a replacement
 for the underlying numbers.
+
+## Import & export (CSV)
+
+Open the portfolio manager (press **M**) and you'll find **Export CSV** and **Import
+CSV** next to the holdings search.
+
+**Export** downloads your active holdings — positions and watchlist alike — as a clean
+CSV with six columns: `ticker, shares, avg_cost, is_watchlist, hold_class, notes`. It
+opens correctly in Excel, and it *is* the import template, so whatever you export imports
+straight back in.
+
+**Import** reads holdings back in, and how forgiving it is depends on whether Claude is
+connected — the panel tells you which mode you're in:
+
+- **Local mode (no API key needed).** Uses the exact template above: plain numbers, the
+  six known columns, up to 200 rows. Predictable and completely offline. If your file
+  has columns it doesn't recognize, it says so plainly and points you at the template —
+  it never fails silently.
+- **Claude assist (when a key is configured).** Drop in almost any brokerage export —
+  differing headers like `Symbol` or `Qty`, currency symbols, extra columns — and Claude
+  maps the columns onto the FolioSense format for you. Every row still passes the *same*
+  strict checks before it's added, so Claude only ever *widens* what's accepted; it never
+  skips validation. Clean template files skip Claude entirely (and cost nothing), and if
+  Claude is ever slow or unavailable the import falls back to the strict local parse and
+  tells you it did.
+
+Either way, you get a per-row summary: what was added, what was skipped (existing holdings
+are skipped, never overwritten), and what errored and why. In Claude mode, Senpai adds a
+one-line recap on top.
+
+<SenpaiTip>
+	Editing a CSV in Excel? Watch out for tickers like `MAR26` — Excel loves to "helpfully"
+	reformat those into dates. If a row bounces on import with a date-looking ticker, format
+	that column as **Text** and re-export.
+</SenpaiTip>

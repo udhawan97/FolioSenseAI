@@ -69,6 +69,7 @@ FolioSenseAI closes that gap: holdings, live prices, risk math, market regime, n
 | ✅ Check the action plan | Bucketed portfolio moves with thesis text, priorities, and regime context |
 | 📈 Open Analytics | Performance, risk, exposure, beta, drawdown, volatility, sector tilt, and signals |
 | 🗞️ Open News | Grouped headlines for everything you hold or watch, plus optional Claude themes |
+| 📥 Import / export CSV | Move holdings in and out — a strict template locally, or let Claude map a messy brokerage export onto it |
 | 🔐 Paste a Claude key | The dashboard validates it, writes `.env`, and reconnects — no restart |
 
 > **Local Intelligence is not a downgraded mode.** It's the deterministic engine that runs the dashboard by default. Claude adds narration *on top* — it never gates the core experience, and everything it generates is cached in SQLite so refreshing doesn't mean paying again.
@@ -93,9 +94,8 @@ The app already earns its spot in your dock — but this is very much the openin
 
 | | On the radar | The gist | Status |
 | --- | --- | --- | --- |
-| 📥 | **Spreadsheet in, spreadsheet out** | Import and export your holdings as CSV — because retyping thirty tickers is nobody's idea of a fun evening. | Next up in the lab |
+| ⚖️ | **Target weights & drift** | Set the mix you're aiming for, then see at a glance how far today's prices have nudged you off plan. | Next up in the lab |
 | 🗂️ | **More than one portfolio** | Give your retirement account and your fun-money account their own separate scoreboards. | On the radar |
-| 📅 | **Earnings radar** | A gentle heads-up when a holding is about to face the earnings music. | Quietly brewing |
 | 🧾 | **A verdict report card** | The dashboard grading its own past Hold / Add / Trim calls — in public, no less. | On the radar |
 | 🧮 | **Year-end realized recap** | A tidy "what did I actually lock in this year?" summary for when tax season comes knocking. | Next up in the lab |
 | 💸 | **Income & dividends view** | See what your portfolio pays *you* back for the privilege of holding it. | Being explored |
