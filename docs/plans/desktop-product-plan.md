@@ -81,7 +81,7 @@ FolioOrb is **not Electron and not Tauri**. It is a **Python 3.11+ FastAPI + Uvi
 - Build on `windows-latest` (Server 2025). **Inno Setup is NOT preinstalled there** — install with `choco install innosetup -y` in the workflow (fast, cached by chocolatey CDN).
 - `packaging/windows/installer.iss`:
   - `PrivilegesRequired=lowest` → per-user install under `{localappdata}\Programs\FolioOrb` — no UAC prompt, cleaner SmartScreen story, clean uninstall.
-  - AppName, AppVersion (passed via `/DMyAppVersion=` from CI), publisher `Umang Dhawan / FolioOrb`, MIT license page, icon, Start-menu + optional desktop shortcut, uninstaller registered in Apps & Features.
+  - AppName, AppVersion (passed via `/DMyAppVersion=` from CI), publisher `Umang Dhawan / FolioOrb`, Apache 2.0 license page, icon, Start-menu + optional desktop shortcut, uninstaller registered in Apps & Features.
   - **WebView2 runtime check**: pywebview on Windows needs the WebView2 runtime (preinstalled on Win 11 and updated Win 10). Add the standard Inno snippet: detect via registry, download/run the Evergreen Bootstrapper (~2 MB, MS-hosted) only if missing.
 - Windows x64 only (matches every realistic user).
 
@@ -186,7 +186,7 @@ Single-column, generous whitespace, Apple-store clarity. Order:
 3. **Screenshot** — existing `docs/dashboard.png` in a simple frame.
 4. **Install accordions** (native `<details>`) — macOS (Apple Silicon), macOS (Intel — "not shipped yet, build from source"), Windows, Build from source, One-line script install (power users). Every command block has a copy button.
 5. **Troubleshooting** — Gatekeeper (Sequoia flow), SmartScreen ("More info → Run anyway"), checksum verification (`shasum -a 256 -c` / `Get-FileHash`), "why the warnings" honesty box.
-6. **Footer** — GitHub, docs, releases, MIT, "not financial advice" one-liner.
+6. **Footer** — GitHub, docs, releases, Apache 2.0, "not financial advice" one-liner.
 
 Strength: total download confidence. Weakness: reads like documentation, not a product launch.
 
@@ -216,7 +216,7 @@ Target: **~40% shorter**, scannable in 30 seconds, credible for all three audien
 **New structure:**
 
 1. Brand mark + tagline + one-line description (keep)
-2. **Badges (pruned to meaningful+live):** dynamic release badge (`img.shields.io/github/v/release/...`), CI status, downloads count (`img.shields.io/github/downloads/...`), Python 3.11+, MIT. **Drop**: static `release-v4.2`, FastAPI-version, SQLite, "Claude optional", "setup scripts" badges (stale or noise). Pylint/CodeQL move to a dev-section line.
+2. **Badges (pruned to meaningful+live):** dynamic release badge (`img.shields.io/github/v/release/...`), CI status, downloads count (`img.shields.io/github/downloads/...`), Python 3.11+, Apache 2.0. **Drop**: static `release-v4.2`, FastAPI-version, SQLite, "Claude optional", "setup scripts" badges (stale or noise). Pylint/CodeQL move to a dev-section line.
 3. **⬇️ Download** (new, near top): macOS DMG button-link, Windows EXE button-link (both to `releases/latest/download/...`-style or releases/latest), "all releases", website, docs. One honest sentence about unsigned-build warnings linking to the troubleshooting accordion.
 4. **What it does** — trimmed "line went up" intro (2 short paragraphs max) + the existing Do-this/Get-this table (kept, it's good).
 5. Screenshot (keep; re-shoot only if v4.3 visibly changes chrome).

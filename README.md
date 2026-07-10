@@ -36,7 +36,7 @@
   <a href="https://github.com/udhawan97/FolioOrb/releases"><img src="https://img.shields.io/github/downloads/udhawan97/FolioOrb/total?style=flat-square&color=blue" alt="Downloads"></a>
   <img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-555?style=flat-square" alt="macOS, Windows, Linux">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT License"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache_2.0-blue?style=flat-square" alt="Apache 2.0 License"></a>
 </p>
 
 <p align="center">
@@ -313,7 +313,7 @@ Issues and pull requests are welcome. For a feature, a short issue describing th
 
 ## License
 
-Released under the [MIT License](LICENSE). This project is for education, analysis, and portfolio exploration. It is **not financial advice**, does not place trades, and is not a substitute for professional judgment.
+Released under the [Apache License 2.0](LICENSE). This project is for education, analysis, and portfolio exploration. It is **not financial advice**, does not place trades, and is not a substitute for professional judgment.
 
 <p align="center">
   <sub>Built to make portfolio context easier to read, easier to question, and slightly less spreadsheet-haunted.<br>
