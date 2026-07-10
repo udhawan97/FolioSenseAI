@@ -1,9 +1,9 @@
-# FolioSenseAI — Desktop Product & Download Experience Plan
+# FolioOrb — Desktop Product & Download Experience Plan
 
 **Status:** Planning document. Nothing here is implemented yet.
 **Author:** Fable (planning pass), for Opus (execution pass).
 **Date:** 2026-07-07
-**Repo:** `udhawan97/FolioSenseAI` · current version `4.2.0` · latest tag `release-v4.2`
+**Repo:** `udhawan97/FolioOrb` · current version `4.2.0` · latest tag `release-v4.2`
 
 ---
 
@@ -11,7 +11,7 @@
 
 ### What the app actually is
 
-FolioSenseAI is **not Electron and not Tauri**. It is a **Python 3.11+ FastAPI + Uvicorn web app** that runs locally and opens the dashboard in the user's default browser at `http://localhost:8000`.
+FolioOrb is **not Electron and not Tauri**. It is a **Python 3.11+ FastAPI + Uvicorn web app** that runs locally and opens the dashboard in the user's default browser at `http://localhost:8000`.
 
 | Fact | Evidence |
 | --- | --- |
@@ -23,11 +23,11 @@ FolioSenseAI is **not Electron and not Tauri**. It is a **Python 3.11+ FastAPI +
 | Key deps | fastapi 0.138.2, uvicorn 0.48.0, SQLAlchemy 2.0.51, anthropic 0.105.2, **yfinance 1.5.1 + curl_cffi 0.15.0** (packaging-sensitive), `platformdirs` already pinned (4.10.0) |
 | Tests | ~363 test functions across 31 files, offline-focused, run in CI on Python 3.11 + 3.12 |
 | CI today | `ci.yml` (tests + pip-audit), `pylint.yml`, `codeql.yml`, `dependency-review.yml`, `security-hygiene.yml`, `docs.yml` |
-| GitHub Pages | **Already deployed via GitHub Actions** (`docs.yml` → `actions/deploy-pages@v4`). Astro 7 + Starlight 0.41 site in `docs-site/`, published at `https://udhawan97.github.io/FolioSenseAI/` |
+| GitHub Pages | **Already deployed via GitHub Actions** (`docs.yml` → `actions/deploy-pages@v4`). Astro 7 + Starlight 0.41 site in `docs-site/`, published at `https://udhawan97.github.io/FolioOrb/` |
 | Docs homepage | Starlight `template: splash` page at `docs-site/src/content/docs/index.mdx` — nice but doc-flavored, not a product landing page; no download CTAs |
-| Releases | One GitHub release: `FolioSenseAI v4.2` on tag `release-v4.2` — **source-only, no binary assets** |
+| Releases | One GitHub release: `FolioOrb v4.2` on tag `release-v4.2` — **source-only, no binary assets** |
 | Install scripts | `scripts/install-mac.sh`, `scripts/install-win.ps1` — curl/irm one-liners that download the source zip **hardcoded to tag `release-v4.2`**, create a venv, pip install, write a desktop shortcut. They require Python 3.11+ on the user's machine |
-| Launchers | `FolioSenseAI.command` (macOS), `FolioSenseAI.bat` (Windows) — double-click venv bootstrap + `python run.py` |
+| Launchers | `FolioOrb.command` (macOS), `FolioOrb.bat` (Windows) — double-click venv bootstrap + `python run.py` |
 | Brand assets | `static/img/brand/`: `folio-orbit-icon-1024.png` (icon source ✔), `folio-orbit-icon.svg`, animated + static light/dark wordmarks. Docs site reuses them |
 | Stale content found | README badge says FastAPI `0.136.3` (actual 0.138.2); arch table says SQLAlchemy `2.0.50` (actual 2.0.51) and yfinance `1.4.1` (actual 1.5.1); static `release-v4.2` badge; docs-site index claims "361 tests" (already drifted); install scripts pinned to `release-v4.2` forever |
 
@@ -58,7 +58,7 @@ FolioSenseAI is **not Electron and not Tauri**. It is a **Python 3.11+ FastAPI +
 1. **`app/version.py`** — single source of truth: `__version__ = "4.3.0"`. Consumed by `app/main.py`, the PyInstaller spec, the Inno script (via `/D` define), and CI.
 2. **`app/paths.py`** — two helpers:
    - `resource_dir()`: returns `sys._MEIPASS`-based path when `getattr(sys, "frozen", False)`, else the repo root. Used for `static/` and `templates/`.
-   - `data_dir()`: when frozen, `platformdirs.user_data_dir("FolioSenseAI", "FolioSenseAI")` (create on first run); else repo root. Holds `portfolio.db` and `.env`. **Installed apps must never write inside the install location** (`/Applications/...app` or `Program Files`).
+   - `data_dir()`: when frozen, `platformdirs.user_data_dir("FolioOrb", "FolioOrb")` (create on first run); else repo root. Holds `portfolio.db` and `.env`. **Installed apps must never write inside the install location** (`/Applications/...app` or `Program Files`).
 3. **`app/config.py`** — `load_dotenv(data_dir() / ".env")`; default `DATABASE_URL` points into `data_dir()/database/` when frozen; `DEBUG` defaults to `False` in frozen builds.
 4. **`app/main.py`** — replace the two cwd-relative paths (`:80`, `:82`) with `resource_dir()`-based absolute paths; import version from `app/version.py`.
 5. **`desktop/main.py`** — desktop entry point:
@@ -73,23 +73,23 @@ FolioSenseAI is **not Electron and not Tauri**. It is a **Python 3.11+ FastAPI +
 
 - **Apple Silicon first**: build on `macos-latest` (arm64). PyInstaller **ad-hoc signs by default**, which is mandatory for arm64 binaries to run at all.
 - **Intel**: GitHub's `macos-15-intel` label exists **until August 2027**. Ship arm64 in v1; add an Intel job later only if users ask (it's a copy-paste matrix entry). **Do not attempt universal2** — it requires universal wheels for every dep (curl_cffi won't cooperate) for marginal benefit.
-- **DMG**: `brew install create-dmg`, then `create-dmg` with app icon, volume name `FolioSenseAI`, drag-to-Applications layout, optional background PNG (brand-colored, subtle — reuse orbit mark).
-- **Icon**: generate `packaging/icons/FolioSenseAI.icns` from `static/img/brand/folio-orbit-icon-1024.png` (`sips` + `iconutil`). Commit the generated `.icns`/`.ico` so CI never needs cross-platform icon tooling; keep `scripts/make-icons.sh` in repo for regeneration.
+- **DMG**: `brew install create-dmg`, then `create-dmg` with app icon, volume name `FolioOrb`, drag-to-Applications layout, optional background PNG (brand-colored, subtle — reuse orbit mark).
+- **Icon**: generate `packaging/icons/FolioOrb.icns` from `static/img/brand/folio-orbit-icon-1024.png` (`sips` + `iconutil`). Commit the generated `.icns`/`.ico` so CI never needs cross-platform icon tooling; keep `scripts/make-icons.sh` in repo for regeneration.
 
 ### Windows packaging
 
 - Build on `windows-latest` (Server 2025). **Inno Setup is NOT preinstalled there** — install with `choco install innosetup -y` in the workflow (fast, cached by chocolatey CDN).
 - `packaging/windows/installer.iss`:
-  - `PrivilegesRequired=lowest` → per-user install under `{localappdata}\Programs\FolioSenseAI` — no UAC prompt, cleaner SmartScreen story, clean uninstall.
-  - AppName, AppVersion (passed via `/DMyAppVersion=` from CI), publisher `Umang Dhawan / FolioSenseAI`, MIT license page, icon, Start-menu + optional desktop shortcut, uninstaller registered in Apps & Features.
+  - `PrivilegesRequired=lowest` → per-user install under `{localappdata}\Programs\FolioOrb` — no UAC prompt, cleaner SmartScreen story, clean uninstall.
+  - AppName, AppVersion (passed via `/DMyAppVersion=` from CI), publisher `Umang Dhawan / FolioOrb`, MIT license page, icon, Start-menu + optional desktop shortcut, uninstaller registered in Apps & Features.
   - **WebView2 runtime check**: pywebview on Windows needs the WebView2 runtime (preinstalled on Win 11 and updated Win 10). Add the standard Inno snippet: detect via registry, download/run the Evergreen Bootstrapper (~2 MB, MS-hosted) only if missing.
 - Windows x64 only (matches every realistic user).
 
 ### Artifact naming (exact)
 
 ```
-FolioSenseAI-macOS-arm64-v4.3.0.dmg
-FolioSenseAI-Windows-x64-v4.3.0-Setup.exe
+FolioOrb-macOS-arm64-v4.3.0.dmg
+FolioOrb-Windows-x64-v4.3.0-Setup.exe
 SHA256SUMS.txt          # one file covering all assets, uploaded to the same release
 ```
 Latest-main prereleases use the same names with `v4.3.0` replaced by `main-<shortsha>`.
@@ -117,8 +117,8 @@ Jobs (DAG):
 - **`build-macos`** (`macos-latest`, needs: test)
   1. `actions/setup-python@v5` (3.12, `cache: pip`)
   2. `pip install -r requirements.txt -r requirements-desktop.txt`
-  3. `pyinstaller packaging/pyinstaller/FolioSenseAI.spec` — spec includes `--collect-all curl_cffi`, `--hidden-import _cffi_backend`, `collect_submodules("uvicorn")`, and datas for `static/`, `templates/`, `.env.example`
-  4. Smoke test: `dist/FolioSenseAI.app/Contents/MacOS/FolioSenseAI --smoke`
+  3. `pyinstaller packaging/pyinstaller/FolioOrb.spec` — spec includes `--collect-all curl_cffi`, `--hidden-import _cffi_backend`, `collect_submodules("uvicorn")`, and datas for `static/`, `templates/`, `.env.example`
+  4. Smoke test: `dist/FolioOrb.app/Contents/MacOS/FolioOrb --smoke`
   5. `brew install create-dmg` → build DMG
   6. `shasum -a 256` → sidecar `.sha256`; upload artifact
 - **`build-windows`** (`windows-latest`, needs: test) — same shape; `choco install innosetup -y`; smoke test the frozen exe; `iscc /DMyAppVersion=... installer.iss`; `Get-FileHash`.
@@ -137,10 +137,10 @@ Jobs (DAG):
 
 The landing page fetches release metadata **client-side at page load** from the public GitHub API (CORS-enabled, no auth):
 
-- `GET https://api.github.com/repos/udhawan97/FolioSenseAI/releases/latest` → stable version, date, assets, download URLs
+- `GET https://api.github.com/repos/udhawan97/FolioOrb/releases/latest` → stable version, date, assets, download URLs
 - `GET .../releases/tags/latest-main` → dev build info (behind a dropdown)
 
-Cache the response in `sessionStorage` (rate limit is 60/hr/IP — one fetch per session is nothing). **Graceful fallback**: if the fetch fails, buttons degrade to the static permalink `https://github.com/udhawan97/FolioSenseAI/releases/latest` — which always works.
+Cache the response in `sessionStorage` (rate limit is 60/hr/IP — one fetch per session is nothing). **Graceful fallback**: if the fetch fails, buttons degrade to the static permalink `https://github.com/udhawan97/FolioOrb/releases/latest` — which always works.
 
 Why this beats committing `latest.json`: zero bot commits, zero Pages rebuilds on release, buttons are *always* current, and the release pipeline and website deploy stay fully decoupled. (If an in-app auto-update check is ever wanted, a `latest.json` **release asset** can be added then — noted in Risks, not built now.)
 
@@ -154,7 +154,7 @@ Why this beats committing `latest.json`: zero bot commits, zero Pages rebuilds o
   - **Stable** — cut by pushing a tag. This is what the website, README, and docs point to by default.
   - **latest-main** — rolling prerelease auto-refreshed on every green main merge. Surfaced only behind a "Development builds" dropdown with an explicit stability warning. This satisfies "always downloadable from the latest main commit" without ever making an untested build the default.
 - **Release cadence/policy** (documented in docs §7): tags are cut manually when meaningful; `RELEASE_NOTES.md` remains the curated changelog; GitHub auto-notes supplement it.
-- **First shipped version: `v4.3.0`** — "FolioSenseAI goes desktop."
+- **First shipped version: `v4.3.0`** — "FolioOrb goes desktop."
 
 ### Code signing — honest staged plan
 
@@ -181,7 +181,7 @@ Phase 1 ships now. Phases 2–4 are documented as a roadmap section in the docs 
 
 Single-column, generous whitespace, Apple-store clarity. Order:
 
-1. **Hero** — animated orbit mark, "FolioSenseAI", tagline *"Your folio, finally making sense."*, one-sentence plain-English description, two equal buttons: **Download for macOS** / **Download for Windows**, quiet links: View Docs · GitHub · Release Notes.
+1. **Hero** — animated orbit mark, "FolioOrb", tagline *"Your folio, finally making sense."*, one-sentence plain-English description, two equal buttons: **Download for macOS** / **Download for Windows**, quiet links: View Docs · GitHub · Release Notes.
 2. **Release strip** — `v4.3.0 · Jul 7, 2026 · abc1234 · macOS arm64 / Windows x64`, populated from the API; SHA links to the commit.
 3. **Screenshot** — existing `docs/dashboard.png` in a simple frame.
 4. **Install accordions** (native `<details>`) — macOS (Apple Silicon), macOS (Intel — "not shipped yet, build from source"), Windows, Build from source, One-line script install (power users). Every command block has a copy button.
@@ -238,7 +238,7 @@ Target: **~40% shorter**, scannable in 30 seconds, credible for all three audien
 | Page | Content |
 | --- | --- |
 | `download.mdx` | The download story: stable vs latest-main channels, what each artifact is, checksums how-to, link matrix |
-| `install-macos.mdx` | DMG flow with Sequoia Gatekeeper walkthrough (screenshots of the actual dialogs), where data lives (`~/Library/Application Support/FolioSenseAI`), uninstall |
+| `install-macos.mdx` | DMG flow with Sequoia Gatekeeper walkthrough (screenshots of the actual dialogs), where data lives (`~/Library/Application Support/FolioOrb`), uninstall |
 | `install-windows.mdx` | Installer flow, SmartScreen walkthrough, WebView2 note, data location (`%APPDATA%`), uninstall via Apps & Features |
 | `updating.mdx` | Update by installing the new version over the old; data/DB preserved (lives in user-data dir); script/git update paths |
 | `build-from-source.mdx` | Dev run + `pyinstaller` build instructions per platform (absorbs/links existing installation.mdx content) |
@@ -254,7 +254,7 @@ Target: **~40% shorter**, scannable in 30 seconds, credible for all three audien
 
 Scripts stay as the **power-user secondary path** (they're genuinely good); DMG/EXE become primary everywhere.
 
-- **`scripts/install-mac.sh` / `install-win.ps1`**: replace the hardcoded `release-v4.2` URLs with latest-release resolution — query `https://api.github.com/repos/udhawan97/FolioSenseAI/releases/latest` for the tag, then download `.../archive/refs/tags/<tag>.zip`. Add `FOLIO_REF` env override (`FOLIO_REF=latest-main` or any tag) for channel choice. Keep every existing safety property: no sudo, `set -euo pipefail`, temp-dir + trap cleanup, `.env`/database preservation, transparent readable code with section comments.
+- **`scripts/install-mac.sh` / `install-win.ps1`**: replace the hardcoded `release-v4.2` URLs with latest-release resolution — query `https://api.github.com/repos/udhawan97/FolioOrb/releases/latest` for the tag, then download `.../archive/refs/tags/<tag>.zip`. Add `FOLIO_REF` env override (`FOLIO_REF=latest-main` or any tag) for channel choice. Keep every existing safety property: no sudo, `set -euo pipefail`, temp-dir + trap cleanup, `.env`/database preservation, transparent readable code with section comments.
 - Optional integrity step: after download, print the zip's SHA256 so users can eyeball it (source zips aren't in SHA256SUMS; the checksums file covers installers — say so honestly rather than fake-verifying).
 - Website/docs present scripts inside the "One-line install (advanced)" accordion with copy buttons and a "read the script first" link to the file on GitHub — never piped-to-shell as the headline flow.
 - Validation: run both scripts in CI-ish conditions (macOS runner bash, Windows runner PowerShell) as a manual pre-release check; full clean-machine validation is in §11.
@@ -274,11 +274,11 @@ Scripts stay as the **power-user secondary path** (they're genuinely good); DMG/
 
 **Phase B — Packaging assets**
 - [ ] `scripts/make-icons.sh` — new; 1024 PNG → `.icns` (sips/iconutil) + `.ico` (Pillow)
-- [ ] `packaging/icons/FolioSenseAI.icns`, `FolioSenseAI.ico` — generated, committed
-- [ ] `packaging/pyinstaller/FolioSenseAI.spec` — onedir; datas: `static/`, `templates/`; `collect_all("curl_cffi")`, `hiddenimports=["_cffi_backend"]`, `collect_submodules("uvicorn")`; windowed; icons; macOS bundle identifier `com.foliosenseai.app`, version from `app/version.py`
+- [ ] `packaging/icons/FolioOrb.icns`, `FolioOrb.ico` — generated, committed
+- [ ] `packaging/pyinstaller/FolioOrb.spec` — onedir; datas: `static/`, `templates/`; `collect_all("curl_cffi")`, `hiddenimports=["_cffi_backend"]`, `collect_submodules("uvicorn")`; windowed; icons; macOS bundle identifier `com.folioorb.app`, version from `app/version.py`
 - [ ] `packaging/windows/installer.iss` — per-user, metadata, license, shortcuts, uninstaller, WebView2 bootstrap check
 - [ ] (optional) `packaging/macos/dmg-background.png`
-- [ ] Local build verify on this Mac: `pyinstaller ... && ./dist/.../FolioSenseAI --smoke` before touching CI
+- [ ] Local build verify on this Mac: `pyinstaller ... && ./dist/.../FolioOrb --smoke` before touching CI
 
 **Phase C — Pipeline**
 - [ ] `.github/workflows/release.yml` — per §3 (triggers, 4 jobs, minimal perms, concurrency, smoke tests, SHA256SUMS, tag-vs-version guard, stable + latest-main publishing)
@@ -289,7 +289,7 @@ Scripts stay as the **power-user secondary path** (they're genuinely good); DMG/
 - [ ] `docs-site/src/pages/index.astro` + `src/components/landing/*` (Hero, PlatformCards, ReleaseStrip, InstallAccordion, TrustSection, FeatureGrid, Footer) + `src/styles/landing.css`
 - [ ] `src/scripts/releases.js` (API fetch + sessionStorage + fallback), `clipboard.js`
 - [ ] Delete `docs-site/src/content/docs/index.mdx` (content redistributed to landing + intro docs)
-- [ ] Verify Starlight nav still resolves; all internal links respect the `/FolioSenseAI` base path (this bit the repo before — commit `1c3b972`)
+- [ ] Verify Starlight nav still resolves; all internal links respect the `/FolioOrb` base path (this bit the repo before — commit `1c3b972`)
 
 **Phase E — Docs**
 - [ ] Six new/updated pages per §7 + sidebar config in `astro.config.mjs`
@@ -299,7 +299,7 @@ Scripts stay as the **power-user secondary path** (they're genuinely good); DMG/
 **Phase F — README & scripts**
 - [ ] `README.md` restructure per §6 (download section, pruned badges, `<details>` blocks, stale-fact fixes)
 - [ ] `scripts/install-mac.sh`, `scripts/install-win.ps1` — latest-release resolution + `FOLIO_REF`
-- [ ] `FolioSenseAI.command` / `.bat` — unchanged (still the from-source path); README repositions them
+- [ ] `FolioOrb.command` / `.bat` — unchanged (still the from-source path); README repositions them
 
 ---
 
@@ -308,7 +308,7 @@ Scripts stay as the **power-user secondary path** (they're genuinely good); DMG/
 ### Pass 1 — Build & packaging
 
 - [ ] `pytest` green locally and in CI after Phase A (no regressions from path changes)
-- [ ] Local macOS: PyInstaller build succeeds; `--smoke` passes; app launches; window shows dashboard; quotes load; DB + `.env` created under `~/Library/Application Support/FolioSenseAI`; **install dir stays pristine**; icon correct in Dock/Finder; version correct in About/health; quit actually kills the server (check with `lsof -i`)
+- [ ] Local macOS: PyInstaller build succeeds; `--smoke` passes; app launches; window shows dashboard; quotes load; DB + `.env` created under `~/Library/Application Support/FolioOrb`; **install dir stays pristine**; icon correct in Dock/Finder; version correct in About/health; quit actually kills the server (check with `lsof -i`)
 - [ ] DMG: mounts, drag-to-Applications works, app runs from `/Applications`, Gatekeeper flow matches what docs will say
 - [ ] CI Windows artifact on a real Windows machine/VM: installer runs without admin, shortcuts work, app launches (WebView2 path verified on a machine *without* the runtime if possible), data in `%APPDATA%`, uninstall removes program + shortcuts and leaves user data
 - [ ] Upgrade-in-place: install v-old → add a holding → install v-new → holding survives
@@ -349,7 +349,7 @@ Scripts stay as the **power-user secondary path** (they're genuinely good); DMG/
 
 ## 12. Copy-ready execution prompt for Opus
 
-> You are executing a pre-approved plan: **`docs/plans/desktop-product-plan.md`** in `udhawan97/FolioSenseAI`. Read the whole plan first; it contains the repo audit, all decisions, and exact file lists. Do not re-litigate stack choice (PyInstaller onedir + pywebview; create-dmg; Inno Setup; one new `release.yml`; landing page at `docs-site/src/pages/index.astro`).
+> You are executing a pre-approved plan: **`docs/plans/desktop-product-plan.md`** in `udhawan97/FolioOrb`. Read the whole plan first; it contains the repo audit, all decisions, and exact file lists. Do not re-litigate stack choice (PyInstaller onedir + pywebview; create-dmg; Inno Setup; one new `release.yml`; landing page at `docs-site/src/pages/index.astro`).
 >
 > Execute phases in order, committing per phase with clear messages, on a feature branch:
 > **A** app changes (`app/version.py`, `app/paths.py`, config/main path fixes, `desktop/main.py` with `--smoke`, `requirements-desktop.txt`) — full test suite must stay green.

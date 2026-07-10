@@ -1,6 +1,6 @@
 # Implementation Prompt — Portfolio News Zone ("The Wire")
 
-You are implementing a new **News** zone in FolioSenseAI, a Flask + vanilla-JS portfolio
+You are implementing a new **News** zone in FolioOrb, a Flask + vanilla-JS portfolio
 dashboard. Read this whole spec before writing code, then follow the existing house
 patterns exactly (cited by file:line below). Do not introduce new dependencies, new API
 keys, or a frontend framework.

@@ -52,9 +52,8 @@ for _ in $(seq 1 60); do /bin/kill -0 "$PID" 2>/dev/null || break; sleep 0.5; do
 MNT="$(/usr/bin/mktemp -d /tmp/folio-update.XXXXXX)"
 trap '/bin/rm -rf "$MNT"' EXIT
 /usr/bin/hdiutil attach "$DMG" -nobrowse -noverify -mountpoint "$MNT" -quiet || fail "mount"
-# Locate the .app inside the DMG by extension rather than a hardcoded name, so a
-# rebrand (FolioSenseAI.app -> FolioOrb.app) or any future rename can't break the
-# swap. Every FolioOrb DMG ships exactly one bundle, so take the first match.
+# Locate the .app inside the DMG by extension rather than a hardcoded name.
+# Every FolioOrb DMG ships exactly one bundle, so take the first match.
 NEWAPP="$(ls -d "$MNT"/*.app 2>/dev/null | head -1)"
 if [ -z "$NEWAPP" ] || [ ! -d "$NEWAPP" ]; then /usr/bin/hdiutil detach "$MNT" -quiet 2>/dev/null; fail "no-app-in-dmg"; fi
 NEW="${BUNDLE}.new-$$"; OLD="${BUNDLE}.old-$$"

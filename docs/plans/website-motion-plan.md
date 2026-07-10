@@ -1,4 +1,4 @@
-# FolioSenseAI — Website Motion & Demo Polish Plan
+# FolioOrb — Website Motion & Demo Polish Plan
 
 **Status:** Planning document. Nothing implemented yet.
 **Author:** Fable (planning pass). **Executor:** Opus (implementation pass).
@@ -122,7 +122,7 @@ Replace the `senpai-insight-demo.webp` still with a live assistant card: breathi
 ```html
 <video class="demo-loop" muted loop playsinline preload="none"
        width="1600" height="1000" poster={demo('news-poster.webp')}
-       aria-label="FolioSenseAI news view populating grouped headlines for the demo portfolio">
+       aria-label="FolioOrb news view populating grouped headlines for the demo portfolio">
   <source src={demo('news.webm')} type="video/webm" />
   <source src={demo('news.mp4')} type="video/mp4" />
 </video>
@@ -211,7 +211,7 @@ JS: the shared "active" IO calls `play()` on enter (catch + ignore autoplay reje
 
 ## 10. Copy-ready execution prompt for Opus
 
-> Execute **`docs/plans/website-motion-plan.md`** in `udhawan97/FolioSenseAI`, working on a feature branch off latest `main`. Read the whole plan first; decisions are settled — do not re-litigate (DOM choreography for hero/demo-panel/trust/Senpai; exactly two MP4/WebM video loops for news + verdicts with posters and `preload="none"`; no GIFs; no new runtime deps; no scroll-hijacking).
+> Execute **`docs/plans/website-motion-plan.md`** in `udhawan97/FolioOrb`, working on a feature branch off latest `main`. Read the whole plan first; decisions are settled — do not re-litigate (DOM choreography for hero/demo-panel/trust/Senpai; exactly two MP4/WebM video loops for news + verdicts with posters and `preload="none"`; no GIFs; no new runtime deps; no scroll-hijacking).
 > Order of work: (1) `brew install ffmpeg` if missing; pin playwright devDep; build the record/encode pipeline (§3) and produce the two loops + posters from the seeded demo app — verify every frame is demo-data-only; (2) implement §5's index.astro changes — motion tokens, stagger groups, region-morphing hero tour with active-IO/hover-pause/aria-live, demo-panel choreography, video embeds, risk-crop fix, trust vignette, Senpai typewriter, parallax clamp, og fallback; (3) run the §7 QA loop twice, tuning timing between passes; (4) PR with Lighthouse before/after and an asset-size table, merge on green, verify the deployed page.
 > Hard constraints: every loop pauses off-screen; reduced-motion shows posters + parked tour + instant text; JS-off degrades to today's static page; per-video ≤1.5 MB; above-fold added bytes ≤10 KB; CLS 0; Lighthouse ≥95 desktop; all existing links and release-metadata behavior preserved.
 

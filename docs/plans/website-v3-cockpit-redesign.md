@@ -1,9 +1,9 @@
-# FolioSenseAI Website v3 — "Private Cockpit" Full Redesign Plan
+# FolioOrb Website v3 — "Private Cockpit" Full Redesign Plan
 
 **Status:** Planning document. No implementation yet.
 **Author:** Fable (design/creative direction pass), for Opus (execution pass).
 **Date:** 2026-07-08
-**Live site:** https://udhawan97.github.io/FolioSenseAI/ · Source: `docs-site/src/pages/index.astro` (~1,000-line monolith after the v2 motion pass)
+**Live site:** https://udhawan97.github.io/FolioOrb/ · Source: `docs-site/src/pages/index.astro` (~1,000-line monolith after the v2 motion pass)
 **Creative direction:** *Futuristic private portfolio cockpit meets Apple product launch page.*
 
 ---
@@ -77,7 +77,7 @@ The page becomes one continuous narrative with a persistent guide. Acts 1+2 fuse
 **Copy.**
 - Kicker: `LOCAL-FIRST PORTFOLIO INTELLIGENCE`
 - H1 (Display): **"Your portfolio, finally speaks back."**
-- Sub: "FolioSenseAI turns holdings, risk, news, and market context into plain-English portfolio reads — local-first, Claude-optional, built for trust."
+- Sub: "FolioOrb turns holdings, risk, news, and market context into plain-English portfolio reads — local-first, Claude-optional, built for trust."
 - CTAs: primary **Download for macOS** (OS-aware promotion, live `v4.3.0 · 41 MB` metadata — keep v2 wiring verbatim), secondary **Download for Windows**, tertiary row Docs · GitHub · Release Notes · Development builds ▾. Release-strip chips (version/date/SHA) stay.
 - Trust strip: Local-first · Claude optional · Open source · SHA256 verifiable.
 
@@ -172,7 +172,7 @@ Kill the Lego. One premium container: `max-width: 1040px`, radius 24px, glass fi
 **Desktop two-column (5/7):**
 - **Left — the pitch.** Kicker `OPEN SOURCE`; title "Build it yourself."; one line: "A compact FastAPI + SQLite app with no frontend build step. Clone it, run it, pull it apart." Then **link pills** (2×2 grid): Build from source · Release & versioning · Latest-main build · GitHub repo — each a bordered pill with a 16px icon, hover: border-accent + translateY(−1px), 150ms. Below: **verification mini-card** — `shasum -a 256 -c SHA256SUMS.txt` one-liner (`white-space: nowrap; overflow-x: auto` — fixes the mid-token wrap from D5) + the hash→check animated icon + "Every release ships checksums."
 - **Right — the terminal.** A real terminal card: traffic-light bar + 3 **tabs** (`Clone` / `macOS · Linux` / `Windows`), tab switch swaps the command set (no layout shift — fixed min-height). Content lines **type in on first reveal** (IO-triggered, `steps()` caret, ~18ms/char, staggered per line; reduced-motion or JS-off → fully rendered static). Prompt glyph `❯` in accent, output lines dimmed, one `# comment` line max per tab. Copy button per tab (reuse v2 copy pattern). Tab content:
-  - Clone: `git clone https://github.com/udhawan97/FolioSenseAI.git` / `cd FolioSenseAI` / `./scripts/setup.sh`
+  - Clone: `git clone https://github.com/udhawan97/FolioOrb.git` / `cd FolioOrb` / `./scripts/setup.sh`
   - macOS·Linux: the `install-mac.sh` one-liner + `FOLIO_REF=latest-main` variant as comment
   - Windows: the `irm … | iex` one-liner
 - The old standalone "One-line install (advanced)" accordion **is deleted** (absorbed into tabs).
@@ -226,7 +226,7 @@ Tone: professional, minimal, futuristic, slightly witty, finance-aware. Rules: H
 
 Locked copy (from brief + v2 keepers):
 - Hero H1: **"Your portfolio, finally speaks back."** (alt if it reads awkward in situ: "Portfolio intelligence that runs on your machine.")
-- Hero sub: "FolioSenseAI turns holdings, risk, news, and market context into plain-English portfolio reads — local-first, Claude-optional, built for trust."
+- Hero sub: "FolioOrb turns holdings, risk, news, and market context into plain-English portfolio reads — local-first, Claude-optional, built for trust."
 - Workflow act title: "Know what changed. Understand why. Decide what to do next."
 - Demo badge: **"Demo data. Real workflow."**
 - Trust act title: "Open source. Traceable builds. Your data stays on your machine."

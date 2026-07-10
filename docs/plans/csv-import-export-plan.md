@@ -7,7 +7,7 @@ concept is the column remapper, and it's a copy of the established `ai_service` 
 
 ## Goal
 
-Move holdings in and out of FolioSenseAI as CSV — the roadmap's "Spreadsheet in,
+Move holdings in and out of FolioOrb as CSV — the roadmap's "Spreadsheet in,
 spreadsheet out" card (README.md:96, docs-site roadmap.mdx:17).
 
 Three user-visible pieces:
@@ -236,7 +236,7 @@ reaches the DB unvalidated.
 
 After the report is built and `mode == "claude"`, one more tiny call: same shape,
 `max_tokens=120`, default temperature (it's voice, not data), plain text out (no JSON).
-System prompt: *"You are Senpai, FolioSenseAI's dry-witted portfolio companion. In 1–2
+System prompt: *"You are Senpai, FolioOrb's dry-witted portfolio companion. In 1–2
 sentences, recap this CSV import for the user. Use only the supplied counts and
 reasons. Precise, warm, lightly amused; no financial advice; no markdown; no invented
 numbers."* User content: compact JSON `{added, skipped, errors, top_reasons[≤3],
@@ -251,7 +251,7 @@ In `app/routers/portfolio.py`, **defined above** the `/holdings/{holding_id}` ro
 with
 
 ```
-Content-Disposition: attachment; filename="foliosense-holdings-p{portfolio_id}-{YYYY-MM-DD}.csv"
+Content-Disposition: attachment; filename="folioorb-holdings-p{portfolio_id}-{YYYY-MM-DD}.csv"
 ```
 
 Every cell goes through `escape_csv_cell` (see Security). Empty portfolio ⇒ header-only
@@ -363,7 +363,7 @@ different feature (explicit non-goal).
 - **Packaging:** `python-multipart` is pure Python; starlette imports it via a guarded
   top-level import that PyInstaller normally picks up. Verify the frozen smoke boot;
   if the import route 500s in a frozen build, add it to `hiddenimports` in
-  `packaging/pyinstaller/FolioSenseAI.spec:31`.
+  `packaging/pyinstaller/FolioOrb.spec:31`.
 
 ## Frontend
 
@@ -397,7 +397,7 @@ zero new mode state. Backend truth is `settings.ANTHROPIC_API_KEY.strip()`
 `tip-variant="local"` styling):
 
 > **Import holdings — template mode.**
-> Uses the exact FolioSense format — the same columns Export CSV gives you:
+> Uses the exact FolioOrb format — the same columns Export CSV gives you:
 > `ticker, shares, avg_cost, is_watchlist, hold_class, notes`. Plain numbers, no
 > currency symbols, up to 200 rows.
 > *Have a raw brokerage export instead? Connect Claude in Settings and I'll map the
@@ -407,7 +407,7 @@ zero new mode state. Backend truth is `settings.ANTHROPIC_API_KEY.strip()`
 
 > **Import holdings — Claude assist.**
 > Drop in almost any brokerage CSV — I'll map `Symbol`/`Qty`/`Cost`-style columns onto
-> the FolioSense format. Every row still passes the same strict checks before it
+> the FolioOrb format. Every row still passes the same strict checks before it
 > touches your book. Clean template files skip Claude entirely — zero tokens.
 
 Honest and witty, no overpromising: "almost any", and the strict-checks sentence keeps

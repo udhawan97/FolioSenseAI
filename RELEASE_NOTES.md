@@ -1,81 +1,32 @@
-# FolioOrb v5.0.1 Release Notes
-
-**Release date:** July 9, 2026
-
-## Headline
-
-v5.0.1 makes the FolioOrb rebrand **auto-update cleanly from the old
-FolioSenseAI app**. If you were on FolioSenseAI 4.x on macOS, the v5.0.0 in-app
-update failed with *"The update couldn't be installed"* — that was expected: the
-app bundle was renamed (`FolioSenseAI.app` → `FolioOrb.app`), and the old app's
-built-in updater looked for a bundle that no longer existed inside the download.
-No data was ever at risk.
-
-## Fix
-
-- **Pre-rename macOS installs can now update in place.** The macOS DMG now ships
-  a tiny hidden `FolioSenseAI.app` → `FolioOrb.app` compatibility symlink, so the
-  updater baked into FolioSenseAI 4.x finds what it expects and installs FolioOrb
-  automatically. On your next check (**Settings → Software Update**, or the app
-  menu), the update should now complete on its own — your portfolio and settings
-  are migrated as usual.
-- New downloads are unchanged: the DMG still presents a single **FolioOrb** app,
-  and updates from v5.0.0 onward continue to install seamlessly.
-
-## Note on the app name after auto-updating
-
-An auto-updated Mac runs FolioOrb 5.0.1 — new name in the window, migrated data,
-seamless future updates — but because the old updater installs *in place*, the
-application's icon in Finder/the Dock may still read **FolioSenseAI** until you
-download FolioOrb once from the [releases page](https://github.com/udhawan97/FolioOrb/releases/latest).
-Everything except that icon label is already FolioOrb. Windows installs are
-unaffected — they upgrade in place normally.
-
----
-
 # FolioOrb v5.0.0 Release Notes
 
 **Release date:** July 9, 2026
 
-## ✦ FolioSenseAI is now FolioOrb
+## ✦ FolioOrb
 
-> *Same app, same local-first portfolio intelligence — new name, new home. The
-> name "FolioSense" was already taken, so we've rebranded to **FolioOrb**. This
-> is a rename, not a rewrite: nothing about how the app works, what it stores, or
-> what leaves your machine has changed.*
+> *Local-first portfolio intelligence in a native desktop app, with calmer
+> updates, clearer docs, and a cleaner home for the project.*
 
-**What changed:** the product, the app window, the installers, the docs, and the
-repository are now **FolioOrb**. The project lives at
+The product, the app window, the installers, the docs, and the repository are
+now **FolioOrb**. The project lives at
 [github.com/udhawan97/FolioOrb](https://github.com/udhawan97/FolioOrb) and the
 website at [udhawan97.github.io/FolioOrb](https://udhawan97.github.io/FolioOrb/).
-The in-app engine voice ("FolioSense Intelligence") is now "FolioOrb
+The in-app engine voice ("FolioOrb Intelligence") is now "FolioOrb
 Intelligence".
 
-**Your data comes with you — automatically.** On first launch, a frozen FolioOrb
-build looks for an existing FolioSenseAI data directory and migrates your
-portfolio database, `.env`, update history, and logs into the new FolioOrb data
-directory — leaving the originals untouched as a fallback. Your saved dashboard
-preferences (theme, text size, layout, Senpai settings) carry over too: they're
-copied from the old `foliosense-*` browser-storage keys to the new `folioorb-*`
-keys the first time you open the rebranded dashboard. There is nothing to export,
-re-import, or set up again.
-
-| Old location (FolioSenseAI) | New location (FolioOrb) |
-| --- | --- |
-| `~/Library/Application Support/FolioSenseAI` (macOS) | `~/Library/Application Support/FolioOrb` |
-| `%APPDATA%\FolioSenseAI` (Windows) | `%APPDATA%\FolioOrb` |
+**Data stays local.** FolioOrb stores its database, settings, update history,
+and logs in the normal per-user data directory for your platform.
 
 **Download assets and docs now use the FolioOrb name** —
 `FolioOrb-macOS-arm64-v5.0.0.dmg` and `FolioOrb-Windows-x64-v5.0.0-Setup.exe`.
 
-**No trading behavior, data model, or privacy posture changed** because of the
-rename. FolioOrb is still local-first, still Claude-optional, still places no
-trades, and still reports to nobody.
+FolioOrb remains local-first, Claude-optional, never places trades, and reports
+to nobody.
 
 ## Upgrade Notes
 
 - **In-app update (macOS):** because the macOS app bundle is renamed
-  (`FolioSenseAI.app` → `FolioOrb.app`), an existing install may report the
+  (`FolioOrb.app` → `FolioOrb.app`), an existing install may report the
   in-app swap as "couldn't install" for this one release and leave your old app
   in place — your data is never at risk. If that happens, download
   `FolioOrb-macOS-arm64-v5.0.0.dmg` once from the releases page; your portfolio
@@ -87,7 +38,7 @@ trades, and still reports to nobody.
 
 ---
 
-# FolioSenseAI v4.5.2 Release Notes
+# FolioOrb v4.5.2 Release Notes
 
 **Release date:** July 9, 2026
 
@@ -148,7 +99,7 @@ Software Update**, or download the installer from the releases page.
 
 ---
 
-# FolioSenseAI v4.5.1 Release Notes
+# FolioOrb v4.5.1 Release Notes
 
 **Release date:** July 9, 2026
 
@@ -180,14 +131,14 @@ Installing over v4.5.0 or earlier keeps everything in place.
 
 ---
 
-# FolioSenseAI v4.5.0 Release Notes
+# FolioOrb v4.5.0 Release Notes
 
 **Release date:** July 9, 2026
 
 ## Headline
 
 v4.5.0 is the **spreadsheet release**: your holdings move in and out as CSV, so
-setting up FolioSenseAI no longer means retyping thirty tickers by hand — and
+setting up FolioOrb no longer means retyping thirty tickers by hand — and
 neither does backing them up.
 
 ## What's New
@@ -206,7 +157,7 @@ file you get *is* the import template, so it round-trips straight back in.
   gated.
 - **Claude assist (when a key is configured):** drop in almost any brokerage
   export — `Symbol`/`Qty`/`Cost`-style columns and currency symbols and all —
-  and Claude maps the columns onto the FolioSense format for you. Every mapped
+  and Claude maps the columns onto the FolioOrb format for you. Every mapped
   row still passes the *same* strict validation before it touches your book, and
   clean template files skip Claude entirely (zero tokens). If Claude is slow or
   unavailable, the import quietly falls back to the strict local parse and tells
@@ -232,7 +183,7 @@ importing a file you exported earlier is a safe no-op (every row dup-skips).
 
 ---
 
-# FolioSenseAI v4.4.1 Release Notes
+# FolioOrb v4.4.1 Release Notes
 
 **Release date:** July 9, 2026
 
@@ -273,11 +224,11 @@ today, grab it again from the same link, the version number is unchanged):
 
 ## ✦ Software Update, done right
 
-> *v4.4.1 adds a professional, consent-first update system. FolioSenseAI can now tell you when a new version is out, download and install it with your permission, and — most importantly — protect your holdings across every update, with a real way back if anything goes wrong.*
+> *v4.4.1 adds a professional, consent-first update system. FolioOrb can now tell you when a new version is out, download and install it with your permission, and — most importantly — protect your holdings across every update, with a real way back if anything goes wrong.*
 
 **Nothing updates without your say-so.** The app checks quietly for new versions (about 30 seconds after launch, then daily — you can turn this off) and, when one is available, shows a single calm indicator. Opening it reveals a Software Update sheet modelled on the macOS one: what's new, the download size, whether a relaunch is needed, and clear **Update Now / Later** actions. You can also check any time from the **Check for Updates…** menu item or **Settings → Software Update**.
 
-**Your holdings are protected at every step.** Before an update installs, FolioSenseAI takes a verified backup of your portfolio database and your settings — and if that backup can't be made, the update is paused rather than risking your data. Backup verification checks the database's actual holdings count, not just that a file exists, so a backup that silently lost data is caught before it's ever trusted. Database migrations get the same protection: a version bump backs up first and, if a migration ever failed, automatically restores the last good state. After updating, a quiet confirmation notes that your holdings came through intact.
+**Your holdings are protected at every step.** Before an update installs, FolioOrb takes a verified backup of your portfolio database and your settings — and if that backup can't be made, the update is paused rather than risking your data. Backup verification checks the database's actual holdings count, not just that a file exists, so a backup that silently lost data is caught before it's ever trusted. Database migrations get the same protection: a version bump backs up first and, if a migration ever failed, automatically restores the last good state. After updating, a quiet confirmation notes that your holdings came through intact.
 
 **A real way back.** If an update misbehaves, **Restore previous version…** (in Settings, and offered automatically after repeated failed launches) rolls back to the prior version. It always snapshots your current data first, so nothing is lost either way; you choose whether to also restore the pre-update data. Rolling back refuses to run while another update is already in progress, so the two can't collide.
 
@@ -304,7 +255,7 @@ The v4.3.1–v4.3.3 releases went after scrolling and range-switching. This one 
 **Also fixed two rough edges found during release verification:**
 
 - **Misleading "AI failed" warnings when no Claude API key is configured.** Running key-free (the default "Local Intelligence" mode) made the Anthropic SDK raise a client-side `TypeError` on every portfolio briefing, analytics insight, and action plan request — an expected, harmless condition, but it was logged as `AI briefing failed`, `AI analytics insights failed`, etc. at warning level on every dashboard load, indistinguishable from a real failure. These three call sites now log at debug with an accurate "no Claude API key configured" message when no key is set, and still warn normally on a genuine failure with a key present. No change to what's returned to the dashboard — the deterministic local fallback was already correct.
-- **The greyed-out "Local Intel" engine toggle opened the wrong panel.** With no API key configured, the Engine toggle in the menu correctly shows as disabled (dimmed, "not-allowed" cursor, a tooltip explaining why) — but tapping it opened the passive "Meet FolioSenseAI" intro card, which only tells you to hand-edit `.env` and restart the server. It now opens the actual **Connect Claude AI** panel directly — paste a key and hit **Save & Connect**, no restart needed — and closes the menu first so the panel isn't covered by it. Once a key is saved, the same control becomes a live toggle between Local and Claude AI, exactly as before.
+- **The greyed-out "Local Intel" engine toggle opened the wrong panel.** With no API key configured, the Engine toggle in the menu correctly shows as disabled (dimmed, "not-allowed" cursor, a tooltip explaining why) — but tapping it opened the passive "Meet FolioOrb" intro card, which only tells you to hand-edit `.env` and restart the server. It now opens the actual **Connect Claude AI** panel directly — paste a key and hit **Save & Connect**, no restart needed — and closes the menu first so the panel isn't covered by it. Once a key is saved, the same control becomes a live toggle between Local and Claude AI, exactly as before.
 
 **Verification:** the full 381-test suite passes, `pylint` holds at 10.00/10, the app boots and renders cleanly, and the currency/market formatters were confirmed to produce identical output after the change. The engine-toggle fix was verified end-to-end in a running build (disabled state → tap → key panel opens, unobstructed). The theme, spacing, typography, and animations are untouched — these changes are internal to how existing work is scheduled and routed, not what is drawn.
 
@@ -312,7 +263,7 @@ No holdings, settings, or `.env` changes are required — installing v4.3.4 over
 
 ---
 
-# FolioSenseAI v4.3.3 Release Notes
+# FolioOrb v4.3.3 Release Notes
 
 **Release date:** July 8, 2026
 
@@ -336,7 +287,7 @@ No holdings, settings, or `.env` changes are required — installing v4.3.3 over
 
 ---
 
-# FolioSenseAI v4.3.2 Release Notes
+# FolioOrb v4.3.2 Release Notes
 
 **Release date:** July 8, 2026
 
@@ -358,7 +309,7 @@ No holdings, settings, or `.env` changes are required — installing v4.3.2 over
 
 ---
 
-# FolioSenseAI v4.3.1 Release Notes
+# FolioOrb v4.3.1 Release Notes
 
 **Release date:** July 8, 2026
 
@@ -378,23 +329,23 @@ The native app (macOS DMG / Windows EXE) renders inside a system WebView — WKW
 
 ---
 
-# FolioSenseAI v4.3 Release Notes
+# FolioOrb v4.3 Release Notes
 
 **Release date:** July 7, 2026
 
 ---
 
-## ✦ FolioSenseAI Goes Desktop
+## ✦ FolioOrb Goes Desktop
 
-> *v4.3 is the release where FolioSenseAI stops being a thing you set up and starts being a thing you download. No Python, no terminal, no `pip install` — just a native app.*
+> *v4.3 is the release where FolioOrb stops being a thing you set up and starts being a thing you download. No Python, no terminal, no `pip install` — just a native app.*
 
-Until now, running FolioSenseAI meant having Python on your machine and a comfortable relationship with a terminal. v4.3 removes that entirely. There are now real installers — a **`.dmg`** for macOS (Apple Silicon) and a clean per-user **`.exe`** for Windows — that drop a native app on your machine and open the dashboard in its own window. The FastAPI server still runs locally; it just runs *inside* the app now instead of a terminal tab you have to keep alive.
+Until now, running FolioOrb meant having Python on your machine and a comfortable relationship with a terminal. v4.3 removes that entirely. There are now real installers — a **`.dmg`** for macOS (Apple Silicon) and a clean per-user **`.exe`** for Windows — that drop a native app on your machine and open the dashboard in its own window. The FastAPI server still runs locally; it just runs *inside* the app now instead of a terminal tab you have to keep alive.
 
-**One-click installers.** Download the [macOS DMG](https://github.com/udhawan97/FolioSenseAI/releases/latest) or [Windows installer](https://github.com/udhawan97/FolioSenseAI/releases/latest), launch it, and you're in. Your database and `.env` live in the per-user data directory (`~/Library/Application Support/FolioSenseAI` on macOS, `%APPDATA%\FolioSenseAI` on Windows) — never inside the app bundle — so updates and uninstalls leave your portfolio untouched.
+**One-click installers.** Download the [macOS DMG](https://github.com/udhawan97/FolioOrb/releases/latest) or [Windows installer](https://github.com/udhawan97/FolioOrb/releases/latest), launch it, and you're in. Your database and `.env` live in the per-user data directory (`~/Library/Application Support/FolioOrb` on macOS, `%APPDATA%\FolioOrb` on Windows) — never inside the app bundle — so updates and uninstalls leave your portfolio untouched.
 
 **An automated, honest release pipeline.** Every version tag builds both platforms in GitHub Actions, smoke-tests that the frozen app actually boots, and only *then* publishes the installers plus a `SHA256SUMS.txt` to GitHub Releases. A broken build can never replace a good download. Every merge to `main` also refreshes a rolling `latest-main` prerelease for early testers, kept clearly separate from stable.
 
-**A download-first website.** The [landing page](https://udhawan97.github.io/FolioSenseAI/) was rebuilt around real, retina screenshots of the actual dashboard — it detects your OS, links straight to the current installer, and shows the live release version, date, and commit. The docs gained a full Download & Install section with macOS Gatekeeper and Windows SmartScreen walkthroughs.
+**A download-first website.** The [landing page](https://udhawan97.github.io/FolioOrb/) was rebuilt around real, retina screenshots of the actual dashboard — it detects your OS, links straight to the current installer, and shows the live release version, date, and commit. The docs gained a full Download & Install section with macOS Gatekeeper and Windows SmartScreen walkthroughs.
 
 **Signing, honestly.** These early builds are not yet code-signed, so macOS and Windows will show a first-launch warning. That's expected for an open-source app without a paid certificate, and the install guides show exactly what you'll see and how to verify your download against the published checksums. Code signing and notarization are the planned next step.
 
@@ -402,7 +353,7 @@ v4.3 is the release that turns a project you clone into a product you install.
 
 ---
 
-# FolioSenseAI v4.2 Release Notes
+# FolioOrb v4.2 Release Notes
 
 **Release date:** July 7, 2026
 
@@ -428,7 +379,7 @@ v4.2 is a naming exercise and a first-impression fix, wrapped around one bug nob
 
 ### Senpai (formerly "dashboard pet")
 
-- Full rename across `templates/index.html`, `static/js/dashboard.js`, and `static/css/style.css` — every id, class, JS variable/function, CSS keyframe, and the `localStorage` key (now `foliosense-dashboard-senpai-visible`) says `senpai`, not `pet`.
+- Full rename across `templates/index.html`, `static/js/dashboard.js`, and `static/css/style.css` — every id, class, JS variable/function, CSS keyframe, and the `localStorage` key (now `folioorb-dashboard-senpai-visible`) says `senpai`, not `pet`.
 - The one visible label, "Portfolio Butler," is now "Senpai."
 - Pure naming pass — no behavior changed; `_HOLD_MODE_META` and every other tooltip are untouched.
 
@@ -440,7 +391,7 @@ v4.2 is a naming exercise and a first-impression fix, wrapped around one bug nob
 ### First-Run Welcome Guide
 
 - New modal (`#senpai-welcome-guide`), shown once when a fresh install has zero holdings, covering: adding a holding, what Research mode does, and the four hold-type icons — the hold-type list renders directly from `_HOLD_MODE_META` so it can never drift from the tooltips shown elsewhere in the app.
-- Dismissal (close button or backdrop click) persists via `foliosense-senpai-welcome-seen` in `localStorage`; "Add your first holding" closes the guide and opens the portfolio manager directly.
+- Dismissal (close button or backdrop click) persists via `folioorb-senpai-welcome-seen` in `localStorage`; "Add your first holding" closes the guide and opens the portfolio manager directly.
 
 ### Documentation
 
@@ -468,20 +419,20 @@ v4.2 is a naming exercise and a first-impression fix, wrapped around one bug nob
 Open Terminal (⌘ Space → "Terminal"), paste, and press Enter:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/udhawan97/FolioSenseAI/release-v4.2/scripts/install-mac.sh | bash
+curl -fsSL https://raw.githubusercontent.com/udhawan97/FolioOrb/release-v4.2/scripts/install-mac.sh | bash
 ```
 
-Downloads, installs, and places a **FolioSenseAI** shortcut on your Desktop. Browser opens automatically. Next time: double-click the Desktop shortcut.
+Downloads, installs, and places a **FolioOrb** shortcut on your Desktop. Browser opens automatically. Next time: double-click the Desktop shortcut.
 
 ### Windows — one command
 
 Open PowerShell (Win+R → "powershell"), paste, and press Enter:
 
 ```powershell
-irm https://raw.githubusercontent.com/udhawan97/FolioSenseAI/release-v4.2/scripts/install-win.ps1 | iex
+irm https://raw.githubusercontent.com/udhawan97/FolioOrb/release-v4.2/scripts/install-win.ps1 | iex
 ```
 
-Downloads, installs, and places a **FolioSenseAI** shortcut on your Desktop. Browser opens automatically. Next time: double-click the Desktop shortcut.
+Downloads, installs, and places a **FolioOrb** shortcut on your Desktop. Browser opens automatically. Next time: double-click the Desktop shortcut.
 
 ### Upgrading from v4.1
 
@@ -497,7 +448,7 @@ v4.2 is still not financial advice. It's just the release where the orb got a na
 
 ---
 
-# FolioSenseAI v4.1 Release Notes
+# FolioOrb v4.1 Release Notes
 
 **Release date:** June 28, 2026
 
@@ -507,7 +458,7 @@ v4.2 is still not financial advice. It's just the release where the orb got a na
 
 > *v4.1 is the release where setup stopped requiring a text editor. You can now hand Claude your API key from the dashboard itself — and watch it spend every token in real time.*
 
-FolioSenseAI now has an **in-dashboard API key panel**. Click the brand mark, paste your `sk-ant-*` key, and the dashboard validates it, writes it to `.env`, and reconnects Claude without a restart. No terminal. No `.env` file hunting. Input is validated client-side and server-side against the canonical Anthropic key format before a single character touches disk.
+FolioOrb now has an **in-dashboard API key panel**. Click the brand mark, paste your `sk-ant-*` key, and the dashboard validates it, writes it to `.env`, and reconnects Claude without a restart. No terminal. No `.env` file hunting. Input is validated client-side and server-side against the canonical Anthropic key format before a single character touches disk.
 
 The cost HUD in the nav got honest. Instead of estimating from cache occupancy, the dashboard now tracks **real token counts** across every Claude call made in the session. The nav breakdown shows actual input and output tokens, a live cost figure, and a predicted per-run annotation derived from backend constants — so you always know what a full scan costs before you click refresh again.
 
@@ -578,20 +529,20 @@ v4.1 is a tightening: the same cockpit, now easier to configure and harder to mi
 Open Terminal (⌘ Space → "Terminal"), paste, and press Enter:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/udhawan97/FolioSenseAI/release-v4.1/scripts/install-mac.sh | bash
+curl -fsSL https://raw.githubusercontent.com/udhawan97/FolioOrb/release-v4.1/scripts/install-mac.sh | bash
 ```
 
-Downloads, installs, and places a **FolioSenseAI** shortcut on your Desktop. Browser opens automatically. Next time: double-click the Desktop shortcut.
+Downloads, installs, and places a **FolioOrb** shortcut on your Desktop. Browser opens automatically. Next time: double-click the Desktop shortcut.
 
 ### Windows — one command
 
 Open PowerShell (Win+R → "powershell"), paste, and press Enter:
 
 ```powershell
-irm https://raw.githubusercontent.com/udhawan97/FolioSenseAI/release-v4.1/scripts/install-win.ps1 | iex
+irm https://raw.githubusercontent.com/udhawan97/FolioOrb/release-v4.1/scripts/install-win.ps1 | iex
 ```
 
-Downloads, installs, and places a **FolioSenseAI** shortcut on your Desktop. Browser opens automatically. Next time: double-click the Desktop shortcut.
+Downloads, installs, and places a **FolioOrb** shortcut on your Desktop. Browser opens automatically. Next time: double-click the Desktop shortcut.
 
 ### Upgrading from v4.0
 
@@ -607,7 +558,7 @@ v4.1 is still not financial advice. It is just the first version that will let y
 
 ---
 
-# FolioSenseAI v4.0 Release Notes
+# FolioOrb v4.0 Release Notes
 
 **Release date:** June 27, 2026
 
@@ -681,18 +632,18 @@ v4.0 is the release where "what does this mean?" gets a partner: "what should I 
 **Mac / Linux**
 
 ```bash
-curl -L -o FolioSenseAI-v4.0.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v4.0.zip
-unzip FolioSenseAI-v4.0.zip
-cd FolioSenseAI-release-v4.0
+curl -L -o FolioOrb-v4.0.zip https://github.com/udhawan97/FolioOrb/archive/refs/tags/release-v4.0.zip
+unzip FolioOrb-v4.0.zip
+cd FolioOrb-release-v4.0
 ./scripts/setup.sh
 ```
 
 **Windows PowerShell**
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v4.0.zip" -OutFile "FolioSenseAI-v4.0.zip"
-Expand-Archive -Path "FolioSenseAI-v4.0.zip" -DestinationPath .
-cd FolioSenseAI-release-v4.0
+Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioOrb/archive/refs/tags/release-v4.0.zip" -OutFile "FolioOrb-v4.0.zip"
+Expand-Archive -Path "FolioOrb-v4.0.zip" -DestinationPath .
+cd FolioOrb-release-v4.0
 .\scripts\setup.ps1
 ```
 
@@ -714,7 +665,7 @@ v4.0 is still not financial advice. It is just the first version that will tell 
 
 ---
 
-# FolioSenseAI v3.1 Release Notes
+# FolioOrb v3.1 Release Notes
 
 **Release date:** June 27, 2026
 
@@ -773,18 +724,18 @@ v3.1 is a tightening, not a reinvention. The same cockpit, now ready before you 
 **Mac / Linux**
 
 ```bash
-curl -L -o FolioSenseAI-v3.1.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v3.1.zip
-unzip FolioSenseAI-v3.1.zip
-cd FolioSenseAI-release-v3.1
+curl -L -o FolioOrb-v3.1.zip https://github.com/udhawan97/FolioOrb/archive/refs/tags/release-v3.1.zip
+unzip FolioOrb-v3.1.zip
+cd FolioOrb-release-v3.1
 ./scripts/setup.sh
 ```
 
 **Windows PowerShell**
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v3.1.zip" -OutFile "FolioSenseAI-v3.1.zip"
-Expand-Archive -Path "FolioSenseAI-v3.1.zip" -DestinationPath .
-cd FolioSenseAI-release-v3.1
+Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioOrb/archive/refs/tags/release-v3.1.zip" -OutFile "FolioOrb-v3.1.zip"
+Expand-Archive -Path "FolioOrb-v3.1.zip" -DestinationPath .
+cd FolioOrb-release-v3.1
 .\scripts\setup.ps1
 ```
 
@@ -806,7 +757,7 @@ v3.1 is still not financial advice. It is just ready before you finish opening t
 
 ---
 
-# FolioSenseAI v3.0 Release Notes
+# FolioOrb v3.0 Release Notes
 
 **Release date:** June 27, 2026
 
@@ -814,7 +765,7 @@ v3.1 is still not financial advice. It is just ready before you finish opening t
 
 ## ✦ The Portfolio Stopped Pretending It Was Diversified
 
-> *FolioSenseAI v3.0 is the release where your book gets treated like a system — overlap, mood, timelines, and three futures with probability bars — instead of a decorative pile of tickers wearing a diversification costume.*
+> *FolioOrb v3.0 is the release where your book gets treated like a system — overlap, mood, timelines, and three futures with probability bars — instead of a decorative pile of tickers wearing a diversification costume.*
 
 Your portfolio finally has **look-through exposure**, a **market-regime chip**, **peer context**, **earnings risk flags**, **Base/Bull/Bear scenarios**, and an entire **Analytics** tab with five sub-zones and per-chart insight lines. Claude and Local Intelligence now share one engine across briefing, analytics, and verdicts. The navbar got an overflow menu. The pet only wiggles on hover. Very composed. Still judging you.
 
@@ -874,18 +825,18 @@ Your portfolio finally has **look-through exposure**, a **market-regime chip**, 
 **Mac / Linux**
 
 ```bash
-curl -L -o FolioSenseAI-v3.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v3.zip
-unzip FolioSenseAI-v3.zip
-cd FolioSenseAI-release-v3
+curl -L -o FolioOrb-v3.zip https://github.com/udhawan97/FolioOrb/archive/refs/tags/release-v3.zip
+unzip FolioOrb-v3.zip
+cd FolioOrb-release-v3
 ./scripts/setup.sh
 ```
 
 **Windows PowerShell**
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v3.zip" -OutFile "FolioSenseAI-v3.zip"
-Expand-Archive -Path "FolioSenseAI-v3.zip" -DestinationPath .
-cd FolioSenseAI-release-v3
+Invoke-WebRequest -Uri "https://github.com/udhawan97/FolioOrb/archive/refs/tags/release-v3.zip" -OutFile "FolioOrb-v3.zip"
+Expand-Archive -Path "FolioOrb-v3.zip" -DestinationPath .
+cd FolioOrb-release-v3
 .\scripts\setup.ps1
 ```
 
@@ -909,13 +860,13 @@ v3.0 still is not financial advice. It is a more honest briefing layer — overl
 
 ---
 
-# FolioSenseAI v2.4 Release Notes
+# FolioOrb v2.4 Release Notes
 
 **Release date:** June 25, 2026
 
 ## Headline
 
-FolioSenseAI v2.4 is the mode-control release: Claude when you want the charm, Local Intelligence when you want deterministic quiet, and fresher-feeling market data without extra drama.
+FolioOrb v2.4 is the mode-control release: Claude when you want the charm, Local Intelligence when you want deterministic quiet, and fresher-feeling market data without extra drama.
 
 ## What's New
 
@@ -932,21 +883,21 @@ FolioSenseAI v2.4 is the mode-control release: Claude when you want the charm, L
 No database migration or `.env` change required.
 
 ```bash
-curl -L -o FolioSenseAI-v2.4.zip https://github.com/udhawan97/FolioSenseAI/archive/refs/tags/release-v2.4.zip
-unzip FolioSenseAI-v2.4.zip
-cd FolioSenseAI-release-v2.4
+curl -L -o FolioOrb-v2.4.zip https://github.com/udhawan97/FolioOrb/archive/refs/tags/release-v2.4.zip
+unzip FolioOrb-v2.4.zip
+cd FolioOrb-release-v2.4
 ./scripts/setup.sh
 ```
 
 ---
 
-# FolioSenseAI v2.3 Release Notes
+# FolioOrb v2.3 Release Notes
 
 **Release date:** June 2026
 
 ## Headline
 
-FolioSenseAI v2.3 is the graceful-offline release: clearer no-key behavior, sharper local labels, and one less thing for CodeQL to side-eye.
+FolioOrb v2.3 is the graceful-offline release: clearer no-key behavior, sharper local labels, and one less thing for CodeQL to side-eye.
 
 ## What's New
 
