@@ -16,13 +16,18 @@
 </p>
 
 <p align="center">
+  <strong>Runs entirely on your machine</strong> — use it in your browser as a local web app, or install it as a
+  <br>desktop app on macOS or Windows. No account, no cloud, nothing phones home.
+</p>
+
+<p align="center">
   <a href="https://udhawan97.github.io/FolioOrb/">
     <img src="static/img/brand/visit-website.svg" alt="Explore the live website — real product demos, downloads, and docs" width="440">
   </a>
 </p>
 
 <p align="center">
-  <sub><a href="https://udhawan97.github.io/FolioOrb/"><strong>udhawan97.github.io/FolioOrb</strong></a> — watch the dashboard work, then download it.</sub>
+  <sub><a href="https://udhawan97.github.io/FolioOrb/"><strong>udhawan97.github.io/FolioOrb</strong></a> — watch the dashboard work, then run it yourself.</sub>
 </p>
 
 <p align="center">
@@ -30,37 +35,44 @@
   <a href="https://github.com/udhawan97/FolioOrb/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/udhawan97/FolioOrb/ci.yml?branch=main&style=flat-square&label=CI" alt="CI"></a>
   <a href="https://github.com/udhawan97/FolioOrb/releases"><img src="https://img.shields.io/github/downloads/udhawan97/FolioOrb/total?style=flat-square&color=blue" alt="Downloads"></a>
   <img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.11+">
+  <img src="https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-555?style=flat-square" alt="macOS, Windows, Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT License"></a>
 </p>
 
 <p align="center">
-  <a href="https://udhawan97.github.io/FolioOrb/">🌐 Website</a> ·
-  <a href="https://udhawan97.github.io/FolioOrb/">📖 Docs</a> ·
-  <a href="https://github.com/udhawan97/FolioOrb/releases/latest">⬇️ Download</a> ·
+  <a href="#run-it-your-way">🚀 Run it</a> ·
   <a href="#what-it-does">🧠 Features</a> ·
+  <a href="https://udhawan97.github.io/FolioOrb/">🌐 Website &amp; Docs</a> ·
   <a href="#for-developers">🛠️ Developers</a>
 </p>
 
 ---
 
-## ⬇️ Download
+## Run It Your Way
 
-Native desktop app — no Python, no terminal required.
+FolioOrb is the same dashboard whichever way you launch it — a local server that renders in a browser view. Pick what fits you:
 
-| Platform | Download | Guide |
+| | 🌐 Web app | 🖥️ Desktop app |
+| --- | --- | --- |
+| **What you get** | Run it from source; use it in your browser at `localhost:8000` | A ready-to-run installer that opens the dashboard in its own window |
+| **You need** | Python 3.11+ | Nothing — it's fully self-contained |
+| **Platforms** | macOS · Windows · Linux | macOS (Apple Silicon) · Windows (x64) |
+| **Get started** | [Setup ↓](#setup) | Download below |
+
+**Desktop downloads** — no Python, no terminal:
+
+| Platform | Download | Install guide |
 | --- | --- | --- |
 | **macOS** (Apple Silicon) | [**Download .dmg**](https://github.com/udhawan97/FolioOrb/releases/latest) | [Install on macOS](https://udhawan97.github.io/FolioOrb/install-macos/) |
 | **Windows** (x64) | [**Download .exe**](https://github.com/udhawan97/FolioOrb/releases/latest) | [Install on Windows](https://udhawan97.github.io/FolioOrb/install-windows/) |
 
-All builds live on [GitHub Releases](https://github.com/udhawan97/FolioOrb/releases). Prefer to run from source? See [For developers](#for-developers).
-
-> **Heads up:** early builds aren't code-signed yet, so macOS and Windows show a first-launch warning. That's expected for an open-source app — the [install guides](https://udhawan97.github.io/FolioOrb/download/) show exactly what you'll see, and every release ships a `SHA256SUMS.txt` so you can [verify your download](https://udhawan97.github.io/FolioOrb/download/#verify-your-download).
+> **Heads up:** early builds aren't code-signed yet, so the first launch shows a warning on both macOS and Windows — expected for an open-source app. The [install guides](https://udhawan97.github.io/FolioOrb/download/) show exactly what you'll see, and every release ships a `SHA256SUMS.txt` so you can [verify your download](https://udhawan97.github.io/FolioOrb/download/#verify-your-download).
 
 ## What It Does
 
 Most portfolio trackers stop at the number. Green means good, red means bad — and if you want to know *why*, that's a separate tab, a separate app, or a group chat with someone who read the news this morning and you didn't.
 
-FolioOrb closes that gap: holdings, live prices, risk math, market regime, news, and optional Claude-written narration, all in one place that runs on your laptop and reports to nobody. It doesn't connect to a brokerage and it doesn't place trades — but it will tell you, with a straight face, whether your "diversified" portfolio is actually just four tech stocks in a trench coat.
+FolioOrb closes that gap: holdings, live prices, risk math, market regime, news, and optional Claude-written narration, all in one place that runs on your own machine and reports to nobody. It doesn't connect to a brokerage and it doesn't place trades — but it will tell you, with a straight face, whether your "diversified" portfolio is actually just four tech stocks in a trench coat.
 
 | Do this | Get this |
 | --- | --- |
@@ -88,9 +100,72 @@ FolioOrb closes that gap: holdings, live prices, risk math, market regime, news,
 
 <br clear="left">
 
+## Setup
+
+Two ways to run FolioOrb — the same app either way. Your holdings and `.env` are always kept out of the app itself, so updates and reinstalls never touch your data.
+
+<details open>
+<summary><strong>🌐 Run as a web app — from source (macOS · Windows · Linux)</strong></summary>
+
+<br>
+
+Needs **Python 3.11+**. Clone, run the setup script once, and the dashboard opens in your browser:
+
+```bash
+git clone https://github.com/udhawan97/FolioOrb.git
+cd FolioOrb
+./scripts/setup.sh          # Windows (PowerShell): .\scripts\setup.ps1
+```
+
+The setup script creates a virtual environment, installs dependencies, writes a local `.env`, prepares `database/`, and starts the app at <http://localhost:8000>. After the first run, start it any time with `./scripts/start.sh` (or `.\scripts\start.ps1`) and open that URL in any browser.
+
+</details>
+
+<details>
+<summary><strong>🖥️ Install the desktop app (macOS · Windows)</strong></summary>
+
+<br>
+
+No Python required — the installer bundles everything and runs the same dashboard in its own window:
+
+- **macOS (Apple Silicon):** download the [`.dmg`](https://github.com/udhawan97/FolioOrb/releases/latest), open it, and drag **FolioOrb** to Applications. [Full guide](https://udhawan97.github.io/FolioOrb/install-macos/)
+- **Windows (x64):** download the [`.exe`](https://github.com/udhawan97/FolioOrb/releases/latest) and run the installer. [Full guide](https://udhawan97.github.io/FolioOrb/install-windows/)
+
+The app checks for updates in the background and installs them only with your go-ahead. Your database and `.env` live in your per-user data directory, never inside the app.
+
+</details>
+
+<details>
+<summary><strong>⚡ One-line install (web app, from source)</strong></summary>
+
+<br>
+
+Downloads the latest release and sets up a local Python environment for you. Read the scripts first — they're short: [mac](scripts/install-mac.sh) · [win](scripts/install-win.ps1).
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/udhawan97/FolioOrb/main/scripts/install-mac.sh | bash
+```
+
+```powershell
+irm https://raw.githubusercontent.com/udhawan97/FolioOrb/main/scripts/install-win.ps1 | iex
+```
+
+Set `FOLIO_REF` (e.g. `latest-main`) to install a specific tag or the dev channel.
+
+</details>
+
+<details>
+<summary><strong>🔐 Optional: connect Claude</strong></summary>
+
+<br>
+
+FolioOrb works fully without Claude — Local Intelligence handles verdicts, analytics, and summaries on its own. To add Claude-powered briefings and action plans, provide an Anthropic key either in the dashboard (click the brand mark, paste an `sk-ant-*` key) or in `.env` (`ANTHROPIC_API_KEY=...`, then restart). The key format is validated before it's saved.
+
+</details>
+
 ## 🔭 What's Brewing
 
-The app already earns its spot in your dock — but this is very much the opening chapter, and the lab is open. Here's what's *on the radar* for future releases. Think of it as a sneak peek through the workshop window, not a pinky promise carved in stone.
+FolioOrb already earns a place on your machine — but this is very much the opening chapter, and the lab is open. Here's what's *on the radar* for future releases. Think of it as a sneak peek through the workshop window, not a pinky promise carved in stone.
 
 | | On the radar | The gist | Status |
 | --- | --- | --- | --- |
@@ -105,50 +180,14 @@ The app already earns its spot in your dock — but this is very much the openin
 
 Got a feature you'd fight for? [Open an issue](https://github.com/udhawan97/FolioOrb/issues/new) — Senpai reads every one and has opinions about most.
 
-## Install
-
-The [desktop downloads](#️-download) are the easy path. If you'd rather run from source:
-
-<details>
-<summary><strong>Run from source (any platform, Python 3.11+)</strong></summary>
-
-```bash
-git clone https://github.com/udhawan97/FolioOrb.git
-cd FolioOrb
-./scripts/setup.sh          # Windows: .\scripts\setup.ps1
-```
-
-The setup script creates a virtual environment, installs dependencies, writes a local `.env`, prepares `database/`, and starts the app at <http://localhost:8000>. Day-to-day: `./scripts/start.sh` (or `.\scripts\start.ps1`).
-</details>
-
-<details>
-<summary><strong>One-line install script</strong></summary>
-
-Downloads the latest release and sets up a local Python environment. Read them first — they're short: [mac](scripts/install-mac.sh) · [win](scripts/install-win.ps1).
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/udhawan97/FolioOrb/main/scripts/install-mac.sh | bash
-```
-
-```powershell
-irm https://raw.githubusercontent.com/udhawan97/FolioOrb/main/scripts/install-win.ps1 | iex
-```
-
-Set `FOLIO_REF` (e.g. `latest-main`) to install a specific tag or the dev channel.
-</details>
-
-<details>
-<summary><strong>Optional Claude setup</strong></summary>
-
-FolioOrb works without Claude. To enable Claude-powered briefings and action plans, add an Anthropic key either in the dashboard (click the brand mark, paste an `sk-ant-*` key) or in `.env` (`ANTHROPIC_API_KEY=...`, then restart). The key format is validated before saving.
-</details>
-
 ## For Developers
 
-A compact FastAPI + SQLite + vanilla-JS app with no frontend build step — easy to run and pull apart one service at a time.
+A compact FastAPI + SQLite + vanilla-JS app with no frontend build step — easy to run and pull apart one service at a time. It's a plain web app at heart; the desktop builds just wrap that same app in a native window.
 
 <details>
 <summary><strong>Setup, run, and quality checks</strong></summary>
+
+<br>
 
 ```bash
 python3 -m venv venv && source venv/bin/activate
@@ -168,10 +207,13 @@ python -m pylint $(git ls-files '*.py')
 | `http://localhost:8000` | Dashboard |
 | `http://localhost:8000/docs` | Interactive Swagger API docs |
 | `http://localhost:8000/health` | Health check |
+
 </details>
 
 <details>
 <summary><strong>Architecture &amp; project layout</strong></summary>
+
+<br>
 
 ```mermaid
 flowchart LR
@@ -188,6 +230,8 @@ flowchart LR
     services <--> yahoo
     services -. optional .-> claude
 ```
+
+The browser view is identical whether you open `localhost:8000` yourself or launch the desktop app — the desktop build (PyInstaller + pywebview) runs the same FastAPI server in-process behind a native window.
 
 | Layer | Stack |
 | --- | --- |
@@ -209,10 +253,13 @@ scripts/        Setup, start, install, and icon-generation scripts
 tests/          Offline-focused pytest suite with mocked external services
 docs-site/      Astro + Starlight docs + landing page
 ```
+
 </details>
 
 <details>
 <summary><strong>Build the desktop installers</strong></summary>
+
+<br>
 
 ```bash
 python -m pip install -r requirements.txt -r requirements-desktop.txt
@@ -224,11 +271,12 @@ python packaging/pyinstaller/fix_macos_bundle_symlinks.py dist   # macOS only
 ```
 
 Then `create-dmg` (macOS) or `iscc` (Windows) wrap it into an installer. Full commands: [Build from source](https://udhawan97.github.io/FolioOrb/build-from-source/#build-the-desktop-installers).
+
 </details>
 
 ## Release Workflow
 
-Version lives in one place — `app/version.py`. Pushing a `v*` tag builds both installers on native GitHub runners, smoke-tests each frozen bundle, and only then publishes the DMG, EXE, and `SHA256SUMS.txt` to a GitHub Release. A red build never replaces a good release. Every merge to `main` also refreshes a rolling `latest-main` prerelease for testing.
+Version lives in one place — `app/version.py`. Pushing a `v*` tag builds both desktop installers on native GitHub runners, smoke-tests each frozen bundle, and only then publishes the DMG, EXE, and `SHA256SUMS.txt` to a GitHub Release. A red build never replaces a good release. Every merge to `main` also refreshes a rolling `latest-main` prerelease for testing.
 
 ```
 main merge / v* tag → tests → build macOS + Windows → smoke test → GitHub Release → website buttons
@@ -236,10 +284,12 @@ main merge / v* tag → tests → build macOS + Windows → smoke test → GitHu
 
 Details and the code-signing roadmap: [Releases &amp; versioning](https://udhawan97.github.io/FolioOrb/releases-and-versioning/).
 
-## Troubleshooting Install
+## Troubleshooting
 
 <details>
-<summary><strong>Common first-launch issues</strong></summary>
+<summary><strong>Common first-launch issues (desktop app)</strong></summary>
+
+<br>
 
 | Symptom | Fix |
 | --- | --- |
@@ -250,6 +300,7 @@ Details and the code-signing roadmap: [Releases &amp; versioning](https://udhawa
 | Data missing after update | It isn't — data lives outside the app, in your user data directory |
 
 More setup and runtime help: [Troubleshooting &amp; FAQ](https://udhawan97.github.io/FolioOrb/troubleshooting/).
+
 </details>
 
 ## Privacy

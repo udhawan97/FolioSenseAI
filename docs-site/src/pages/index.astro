@@ -122,10 +122,10 @@ const roadmap = [
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<title>FolioOrb — Your portfolio, finally speaks back.</title>
-		<meta name="description" content="Local-first portfolio intelligence for macOS and Windows. FolioOrb turns holdings, risk, news, and market context into plain-English portfolio reads — on your machine, Claude-optional, built for trust." />
+		<meta name="description" content="Local-first portfolio intelligence you run yourself — in your browser as a web app, or as a desktop app for macOS and Windows. FolioOrb turns holdings, risk, news, and market context into plain-English portfolio reads — on your machine, Claude-optional, built for trust." />
 		<link rel="icon" type="image/svg+xml" href={asset('folio-orbit-icon.svg')} />
 		<meta property="og:title" content="FolioOrb — Your portfolio, finally speaks back." />
-		<meta property="og:description" content="Local-first portfolio intelligence for macOS and Windows. Plain-English reads on holdings, risk, news, and market context." />
+		<meta property="og:description" content="Local-first portfolio intelligence you run yourself — in your browser or as a desktop app for macOS and Windows. Plain-English reads on holdings, risk, news, and market context." />
 		<meta property="og:type" content="website" />
 		<meta property="og:image" content={asset('og-hero.jpg')} />
 		<meta name="twitter:card" content="summary_large_image" />
@@ -184,7 +184,8 @@ const roadmap = [
 						<h1 class="display reveal">Your portfolio, finally speaks&nbsp;back.</h1>
 						<p class="lede reveal">
 							FolioOrb turns holdings, risk, news, and market context into plain-English
-							portfolio reads — running on your machine, Claude-optional, built for trust.
+							portfolio reads — running entirely on your machine, in your browser or as a
+							desktop app. Claude-optional, built for trust.
 						</p>
 
 						<div class="cta-row reveal">
@@ -480,7 +481,7 @@ const roadmap = [
 			<!-- ═══ ACT 8a · DOWNLOAD ════════════════════════════════════════ -->
 			<section class="act download" id="act-download" data-hue="cyan">
 				<div class="act-head reveal">
-					<span class="kicker">Download</span>
+					<span class="kicker">Desktop app</span>
 					<h2 class="section-title">Runs on your machine. No Python, no account.</h2>
 				</div>
 				<div class="dl-grid">
@@ -499,7 +500,7 @@ const roadmap = [
 						<a class="dl-more" href={doc('install-windows')}>Install guide →</a>
 					</article>
 				</div>
-				<p class="dl-note reveal">Early builds aren’t code-signed yet, so macOS and Windows show a first-launch warning — expected for an open-source app. The <a href={doc('download')}>install guides</a> show exactly what you’ll see.</p>
+				<p class="dl-note reveal">Prefer not to install? You can also <a href={doc('build-from-source')}>run FolioOrb as a local web app from source</a> — on macOS, Windows, or Linux. On the desktop app, early builds aren’t code-signed yet, so macOS and Windows show a first-launch warning — expected for an open-source app. The <a href={doc('download')}>install guides</a> show exactly what you’ll see.</p>
 			</section>
 
 			<!-- ═══ ACT 8¼ · HOW UPDATES WORK ════════════════════════════════ -->
@@ -590,9 +591,9 @@ const roadmap = [
 			<section class="act dev" id="act-dev" data-hue="peri">
 				<div class="dev-console grad-border reveal">
 					<div class="dev-pitch">
-						<span class="kicker">Open source</span>
-						<h2>Build it yourself.</h2>
-						<p>A compact FastAPI + SQLite app with no frontend build step. Clone it, run it, pull it apart one service at a time.</p>
+						<span class="kicker">Web app · from source</span>
+						<h2>Or run it in your browser.</h2>
+						<p>FolioOrb is a compact FastAPI + SQLite web app with no frontend build step. Clone it, run one script, and it opens in your browser at localhost:8000 — on macOS, Windows, or Linux. No installer required, and you can pull it apart one service at a time.</p>
 						<div class="dev-pills">
 							<a class="pill" href={doc('build-from-source')}>Build from source →</a>
 							<a class="pill" href={doc('releases-and-versioning')}>Release &amp; versioning →</a>
