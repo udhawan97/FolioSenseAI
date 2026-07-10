@@ -7,6 +7,8 @@ writing ./database and ./.env exactly as before packaging was added.
 
 from pathlib import Path
 
+import platformdirs
+
 from app import paths
 
 
@@ -33,7 +35,8 @@ def test_bundled_resources_resolve_from_resource_dir():
 # --------------------------------------------------------------------------- #
 # FolioSenseAI -> FolioOrb data migration (frozen-only path)
 # --------------------------------------------------------------------------- #
-import platformdirs  # noqa: E402
+# These tests exercise app.paths' private migration helpers directly.
+# pylint: disable=protected-access
 
 
 def _seed_legacy_dir(legacy: Path) -> None:
@@ -51,7 +54,7 @@ def _point_legacy_at(monkeypatch, legacy: Path, new: Path) -> None:
     ``_migrate_legacy_data`` does ``from platformdirs import user_data_dir`` at
     call time, so patching the attribute on the module is what it picks up.
     """
-    def fake_user_data_dir(appname, appauthor):  # noqa: ARG001
+    def fake_user_data_dir(appname, _appauthor):
         return str(legacy) if appname == paths.LEGACY_APP_NAME else str(new)
 
     monkeypatch.setattr(platformdirs, "user_data_dir", fake_user_data_dir)
