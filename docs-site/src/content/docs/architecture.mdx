@@ -15,8 +15,9 @@ import architecture from '../../assets/architecture.svg';
 | Backend | Python 3.11+, FastAPI 0.138.2, Uvicorn 0.48.0 |
 | Data | SQLite, SQLAlchemy 2.0.51, Pydantic 2.13.4 |
 | Market data | `yfinance` 1.5.1 and Yahoo Finance |
-| AI | Anthropic SDK 0.105.2, optional Claude calls, local deterministic fallback |
+| AI | Anthropic SDK 0.105.2, optional Claude calls (Haiku 4.5 + Sonnet 4.5), local deterministic fallback |
 | Frontend | Single HTML shell, Bootstrap 5.3.2, Bootstrap Icons, Chart.js 4.4.0, vanilla JavaScript |
+| Desktop | PyInstaller + pywebview native window, in-app auto-update |
 | Quality | pytest, Pylint, `compileall`, pip-audit, Dependency Review, CodeQL |
 
 ## Request flow
@@ -36,7 +37,12 @@ The service layer's core is a modular Intelligence Engine split into two halves:
   scenarios, regime classification, exposure breakdowns, peer comparisons, and
   calibration data.
 - **Claude AI** — optional. Lives in `ai_service.py`, exposing `generate_action_plan()` and
-  `generate_news_themes()`, backed by a 24-hour SQLite cache and live token cost tracking.
+  `generate_news_themes()`, backed by a 24-hour SQLite cache and live token cost tracking. It
+  uses Claude Haiku 4.5 for fast narration and Claude Sonnet 4.5 for action plans.
+
+The browser view is identical whether you open `localhost:8000` yourself or launch the desktop
+app — the desktop build (PyInstaller + pywebview) runs the same FastAPI server in-process behind
+a native window, and can update itself in place.
 
 ## Repository layout
 
@@ -47,8 +53,11 @@ app/
 ├── database.py             SQLite engine/session and startup migrations
 ├── models.py               SQLAlchemy ORM models
 ├── schemas.py              Pydantic request/response contracts
-├── routers/                API route groups: stocks, portfolio, ai, news
-└── services/               Market data, analytics, signals, AI, news, exposure, regimes
+├── routers/                API route groups: stocks, portfolio, ai, news, system
+└── services/               Market data, analytics, signals, AI, news, exposure, regimes, updates
+
+desktop/                    Desktop entry point (uvicorn + native window)
+packaging/                  PyInstaller spec, Inno Setup script, app icons
 
 templates/
 └── index.html              Dashboard shell
