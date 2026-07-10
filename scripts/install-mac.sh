@@ -120,6 +120,7 @@ fi
 # ── Desktop shortcut ─────────────────────────────────────────────────────────
 # Write a launcher that knows the absolute install path, so double-clicking
 # from the Desktop doesn't cd to ~/Desktop and lose the scripts/ directory.
+mkdir -p "$(dirname "$SHORTCUT")"   # ~/Desktop is universal on macOS, but never assume
 cat > "$SHORTCUT" <<LAUNCHER
 #!/usr/bin/env bash
 cd "$INSTALL_DIR"

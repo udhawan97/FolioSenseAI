@@ -140,6 +140,7 @@ DEFAULT_HOLDINGS=
 }
 
 # ── Desktop shortcut ─────────────────────────────────────────────────────────
+New-Item -ItemType Directory -Force -Path (Split-Path $shortcut) | Out-Null  # never assume ~\Desktop exists
 $wsh = New-Object -ComObject WScript.Shell
 $sc  = $wsh.CreateShortcut($shortcut)
 $sc.TargetPath       = "$installDir\FolioOrb.bat"
