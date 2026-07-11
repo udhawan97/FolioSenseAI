@@ -111,10 +111,16 @@ def _run_plan_catchup_status(
         .filter(DcaContribution.plan_id == plan.id)
         .all()
     }
+    # Never book a buy dated before the catch-up floor. The floor is advanced to
+    # the resume date when a paused plan resumes, so a paused stretch is not
+    # retroactively bought; a null floor means "from the start date" (full backfill).
+    floor = date.fromisoformat(plan.catchup_floor) if plan.catchup_floor else start
     added = 0
     for c in computed:
         sched = c["scheduled_date"].isoformat()
         if sched in existing:
+            continue
+        if c["scheduled_date"] < floor:
             continue
         db.add(
             DcaContribution(
@@ -221,6 +227,10 @@ async def update_plan(
     if data.amount is not None:
         plan.amount = data.amount
     if data.is_active is not None:
+        # Resuming (paused → active): advance the catch-up floor to today so the
+        # paused stretch is not retroactively booked on the next catch-up.
+        if data.is_active and not plan.is_active:
+            plan.catchup_floor = date.today().isoformat()
         plan.is_active = data.is_active
     db.commit()
     db.refresh(plan)

@@ -30,7 +30,9 @@ logger = logging.getLogger(__name__)
 # verdict_snapshots, the performance indexes, and the snapshot uniqueness index).
 # v2 adds the DCA tables (dca_plans, dca_contributions) — additive-only, created
 # by create_all, so MIN_COMPATIBLE_APP_VERSION is unchanged.
-SCHEMA_VERSION = 2
+# v3 adds the additive dca_plans.catchup_floor column (ALTER in
+# ensure_startup_migrations) — still additive, MIN_COMPATIBLE unchanged.
+SCHEMA_VERSION = 3
 
 # Oldest app version whose ORM models can still read this schema. Additive-only
 # migrations (new tables/columns/indexes) keep this unchanged, so a normal

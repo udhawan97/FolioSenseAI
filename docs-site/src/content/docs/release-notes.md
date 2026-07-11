@@ -7,6 +7,17 @@ The full changelog lives in
 [`RELEASE_NOTES.md`](https://github.com/udhawan97/FolioOrb/blob/main/RELEASE_NOTES.md)
 in the repository. Highlights of the current release below.
 
+## v5.2.1 — DCA, Polished
+
+- **Bulk actions ask first.** "Apply all" and "Skip all" now confirm with the count and dollar
+  total, and each plan gets an **Undo applied** action that reverses a whole backfill in one move.
+- **Pause means pause.** Resuming a paused plan no longer retroactively books the buys skipped
+  while it was paused — it picks up from the resume date.
+- **Sharper edges filed down.** Undoing a buy that empties a holding now retires that holding
+  (no $0 leftover); an exact-duplicate plan is blocked; same-ticker plans are told apart in the
+  bucket; large backfills render lightly; and double-taps can't fire a duplicate action.
+- Installing over any 5.2.0 keeps all plans, holdings, and settings (additive schema v3).
+
 ## v5.2.0 — Auto-Invest, On Your Terms
 
 - **DCA auto-invest plans, simulated locally.** The most-asked question — "can it sync my

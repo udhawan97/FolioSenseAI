@@ -104,6 +104,16 @@ def ensure_startup_migrations(target_engine=None):
                 text("SELECT name FROM sqlite_master WHERE type='table'")
             ).fetchall()
         }
+        # v3: additive column on dca_plans (the table itself is created by
+        # create_all; PRAGMA returns no rows when the table doesn't exist yet).
+        dca_plan_cols = {
+            row[1]
+            for row in conn.execute(text("PRAGMA table_info(dca_plans)")).fetchall()
+        }
+        if dca_plan_cols and "catchup_floor" not in dca_plan_cols:
+            conn.execute(
+                text("ALTER TABLE dca_plans ADD COLUMN catchup_floor VARCHAR(10)")
+            )
         if "verdict_snapshots" not in tables:
             conn.execute(
                 text(

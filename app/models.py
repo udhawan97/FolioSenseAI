@@ -180,6 +180,10 @@ class DcaPlan(Base):
     frequency = Column(String(10), nullable=False)       # daily | weekly | monthly
     start_date = Column(String(10), nullable=False)      # "YYYY-MM-DD"
     is_active = Column(Boolean, default=True, server_default="1")  # False = paused
+    # Earliest date catch-up may book from ("YYYY-MM-DD"); null means the start
+    # date (full backfill). Advanced to the resume date when a paused plan is
+    # resumed, so the paused stretch is not retroactively bought.
+    catchup_floor = Column(String(10), nullable=True)
     created_at = Column(DateTime, default=func.now())
 
     contributions = relationship(

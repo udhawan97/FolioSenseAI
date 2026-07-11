@@ -310,6 +310,30 @@ def test_undo_all_keeps_holding_with_manual_shares(client, db):
     assert holding.is_active is True
 
 
+# ── Pause / resume catch-up floor ────────────────────────────────────────────
+
+def test_catchup_respects_floor(client, db):
+    # A plan whose floor sits after its start must only book from the floor
+    # onward — the pre-floor (paused) intervals are never retroactively bought.
+    db.add(DcaPlan(portfolio_id=1, ticker="VOO", amount=50.0, frequency="weekly",
+                   start_date="2026-05-13", catchup_floor="2026-06-05", is_active=True))
+    db.commit()
+    assert client.post("/api/dca/run").status_code == 200
+    rows = client.get("/api/dca/contributions?status=pending").json()["contributions"]
+    # Weekly from 05-13 → 05-13, 05-20, 05-27, 06-03, 06-10; only 06-10 ≥ floor.
+    assert [r["scheduled_date"] for r in rows] == ["2026-06-10"]
+
+
+def test_resume_advances_floor_and_skips_paused_period(client, db):
+    plan_id = _create_weekly_plan(client, days_back=21).json()["plan"]["id"]
+    client.patch(f"/api/dca/plans/{plan_id}", json={"is_active": False})   # pause
+    client.patch(f"/api/dca/plans/{plan_id}", json={"is_active": True})    # resume
+    plan = db.query(DcaPlan).filter(DcaPlan.id == plan_id).one()
+    assert plan.catchup_floor == FIXED_TODAY.isoformat()
+    # Resuming does not retroactively book anything (floor is today).
+    assert client.post("/api/dca/run").json()["buys_added"] == 0
+
+
 # ── Plan update / delete ─────────────────────────────────────────────────────
 
 def test_update_plan_amount_and_pause(client):

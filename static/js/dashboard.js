@@ -11570,10 +11570,15 @@ function renderDcaPending(pending, plans) {
         const ticker = plan?.ticker || buys[0].ticker || "?";
         const terms = plan ? `${formatCurrency(plan.amount)} ${escapeHtml(plan.frequency)}` : "";
         const total = buys.reduce((sum, c) => sum + c.amount, 0);
-        const rows = buys.map(c => dcaBuyRow(c, `
+        // Keep the DOM light for a big backfill: show the most recent slice and
+        // nudge the rest toward the bulk actions in the group header.
+        const CAP = 15;
+        const rows = buys.slice(0, CAP).map(c => dcaBuyRow(c, `
             <button type="button" class="btn btn-sm btn-success dca-act-btn" onclick="dcaApply(${c.id})">Apply</button>
             <button type="button" class="btn btn-sm dca-chip-btn" onclick="dcaSkip(${c.id})">Skip</button>
-        `)).join("");
+        `)).join("") + (buys.length > CAP
+            ? `<div class="dca-more-note">…and ${buys.length - CAP} more — use “Apply all ${buys.length}” or “Skip all” above.</div>`
+            : "");
         const bulk = buys.length > 1 ? `
             <span class="dca-bulk-actions">
                 <button type="button" class="btn btn-sm btn-link dca-bulk-link" onclick="dcaApplyAll(${planId}, ${buys.length}, ${total}, '${escapeHtml(ticker)}')">Apply all ${buys.length}</button>
@@ -11614,7 +11619,13 @@ async function loadDcaHistory() {
             listEl.innerHTML = `<div class="dca-history-empty">No applied or skipped buys yet.</div>`;
             return;
         }
-        listEl.innerHTML = rows.map(c => {
+        // Rows arrive newest-first; cap the render so a long history stays snappy.
+        const CAP = 80;
+        const shown = rows.slice(0, CAP);
+        const moreNote = rows.length > CAP
+            ? `<div class="dca-history-empty">Showing the latest ${CAP} of ${rows.length}.</div>`
+            : "";
+        listEl.innerHTML = shown.map(c => {
             const action = c.status === "applied"
                 ? `<button type="button" class="btn btn-sm dca-chip-btn" onclick="dcaUndo(${c.id})">Undo</button>`
                 : `<button type="button" class="btn btn-sm dca-chip-btn" onclick="dcaRestore(${c.id})">Restore</button>`;
@@ -11631,7 +11642,7 @@ async function loadDcaHistory() {
                 </span>
                 <span class="dca-buy-end">${end}</span>
             </div>`;
-        }).join("");
+        }).join("") + moreNote;
     } catch (err) {
         console.warn("DCA history load failed:", err);
     }

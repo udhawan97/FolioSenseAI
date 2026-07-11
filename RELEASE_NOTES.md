@@ -1,3 +1,49 @@
+# FolioOrb v5.2.1 Release Notes
+
+**Release date:** July 11, 2026
+
+## Headline
+
+A same-day polish pass on the new DCA plans: the bulk actions are now safe by
+default, "undo" cleans up after itself, and pausing a plan finally does exactly
+what it says.
+
+## What's New
+
+### 🛡️ Bulk actions that ask first — and undo in bulk
+
+"Apply all" and "Skip all" now confirm before they touch anything, showing the
+count and dollar total ("Apply all 12 VOO buys — $600 into your holding?"). And
+applying a whole backfill is now reversible in one move: each plan gets an
+**Undo applied** action that rolls every applied buy back at once.
+
+### ⏸️ Pause means pause
+
+Pausing a plan and resuming it later no longer retroactively books the buys you
+skipped while it was paused. Resuming picks up from the day you resume — the
+paused stretch stays skipped, as you'd expect.
+
+### ✨ Smaller sharp edges, filed down
+
+- Undoing a buy that empties a holding now retires that holding instead of
+  leaving a $0 placeholder behind.
+- Creating an exact-duplicate plan (same ticker, cadence, and amount) is blocked
+  with a clear message, so you can't accidentally double-book — different amounts
+  or cadences are still fine.
+- Two plans on the same ticker are now told apart in the review bucket
+  ("VOO · $50 weekly").
+- A large backfill renders lightly (with a "…and N more — use Apply all" note),
+  and a double-tap can no longer fire a duplicate action.
+
+## Under the hood
+
+Adds the additive `dca_plans.catchup_floor` column (schema v3, backup-first
+migration) plus a bulk-undo endpoint. Installing over any 5.2.0 keeps every
+plan, holding, and setting in place. Seven new tests; still no brokerage
+connection and still not financial advice.
+
+---
+
 # FolioOrb v5.2.0 Release Notes
 
 **Release date:** July 11, 2026
