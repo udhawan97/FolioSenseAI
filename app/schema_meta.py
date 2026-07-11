@@ -28,7 +28,9 @@ logger = logging.getLogger(__name__)
 # triggers the backup-first path on existing databases. SCHEMA_VERSION = 1 is the
 # baseline: the schema shipped through v4.3.x (hold_class, is_watchlist,
 # verdict_snapshots, the performance indexes, and the snapshot uniqueness index).
-SCHEMA_VERSION = 1
+# v2 adds the DCA tables (dca_plans, dca_contributions) — additive-only, created
+# by create_all, so MIN_COMPATIBLE_APP_VERSION is unchanged.
+SCHEMA_VERSION = 2
 
 # Oldest app version whose ORM models can still read this schema. Additive-only
 # migrations (new tables/columns/indexes) keep this unchanged, so a normal

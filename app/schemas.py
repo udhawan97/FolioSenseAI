@@ -1,6 +1,6 @@
 import re
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, date
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
@@ -114,3 +114,53 @@ class PortfolioResponse(BaseModel):
     description: Optional[str]
     created_at: datetime
     holdings: list[HoldingResponse] = []
+
+
+# ── DCA (dollar-cost-averaging) Schemas ─────────────────────────────────
+
+_DCA_FREQUENCIES = {"daily", "weekly", "monthly"}
+
+
+class DcaPlanCreate(BaseModel):
+    """Data required to create a recurring DCA plan."""
+    ticker: str = Field(..., min_length=1, max_length=10)
+    amount: float = Field(
+        ..., gt=0, allow_inf_nan=False, description="Dollars invested per interval"
+    )
+    frequency: str = Field(..., description="daily, weekly, or monthly")
+    start_date: str = Field(..., description="First buy date, ISO 'YYYY-MM-DD'")
+
+    @field_validator("ticker")
+    @classmethod
+    def uppercase_ticker(cls, v):
+        ticker = v.upper().strip()
+        if not _TICKER_PATTERN.fullmatch(ticker):
+            raise ValueError(
+                "Ticker may contain only letters, numbers, '.', '-', or '^'"
+            )
+        return ticker
+
+    @field_validator("frequency")
+    @classmethod
+    def valid_frequency(cls, v):
+        freq = str(v).strip().lower()
+        if freq not in _DCA_FREQUENCIES:
+            raise ValueError("frequency must be one of: daily, weekly, monthly")
+        return freq
+
+    @field_validator("start_date")
+    @classmethod
+    def valid_start_date(cls, v):
+        try:
+            parsed = date.fromisoformat(str(v).strip())
+        except (TypeError, ValueError) as exc:
+            raise ValueError("start_date must be an ISO date, e.g. 2026-01-15") from exc
+        if parsed > date.today():
+            raise ValueError("start_date cannot be in the future")
+        return parsed.isoformat()
+
+
+class DcaPlanUpdate(BaseModel):
+    """Fields that can be changed on an existing DCA plan."""
+    amount: Optional[float] = Field(None, gt=0, allow_inf_nan=False)
+    is_active: Optional[bool] = None  # False = pause the plan

@@ -17,7 +17,7 @@ import math
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 import pytz
@@ -517,3 +517,29 @@ def get_historical_prices(ticker: str, period: str = "1mo") -> list[dict]:
     except Exception as exc:
         logger.error("Error fetching historical data; exception_type=%s", type(exc).__name__)
         return []
+
+
+def get_daily_closes(ticker: str, start: str, end: str) -> dict[str, float]:
+    """
+    Return ``{"YYYY-MM-DD": close}`` for trading days in ``[start, end]``
+    (both inclusive). ``start``/``end`` are ISO date strings.
+
+    Used by the DCA engine to price historical buys on the exact days they would
+    have executed. Non-finite or non-positive closes are dropped; returns ``{}``
+    on any fetch failure so callers can degrade gracefully.
+    """
+    try:
+        # yfinance treats ``end`` as exclusive, so push it out a day to include it.
+        end_excl = (
+            datetime.strptime(end, "%Y-%m-%d") + timedelta(days=1)
+        ).strftime("%Y-%m-%d")
+        hist = yf.Ticker(ticker).history(start=start, end=end_excl)
+        out: dict[str, float] = {}
+        for dt, row in hist.iterrows():
+            close = float(row["Close"])
+            if math.isfinite(close) and close > 0:
+                out[dt.strftime("%Y-%m-%d")] = round(close, 2)
+        return out
+    except Exception as exc:
+        logger.error("Error fetching daily closes; exception_type=%s", type(exc).__name__)
+        return {}

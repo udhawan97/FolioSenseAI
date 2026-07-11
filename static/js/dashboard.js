@@ -10127,6 +10127,7 @@ async function initDashboard() {
         loadActionPlan();
         startClaudeHeartbeat();
         ensureAiCostStatsLoaded();
+        runDcaCatchup();  // book any DCA buys missed while the app was closed
         if (isLocalIntelligenceMode()) loadHoldingIntelligence();
     });
 }
@@ -10578,6 +10579,7 @@ function initPortfolioManager() {
     });
     initManageHoldingsSearch();
     initCsvImport();
+    initDca();
 }
 
 function initManageHoldingsSearch() {
@@ -11411,6 +11413,405 @@ function initCsvImport() {
         if (file) handleImportFile(file);
         input.value = "";  // allow re-selecting the same file
     });
+}
+
+
+// ── DCA auto-invest (simulated locally) ──────────────────────────────────────
+// Plans mirror a brokerage auto-invest: each interval books a buy at that day's
+// real close into a "pending" bucket the user reviews. Nothing touches holdings
+// until a buy is applied, and every apply is undoable. See app/routers/dca.py.
+
+function toggleDcaPanel() {
+    const panel = document.getElementById("dca-panel");
+    const btn = document.getElementById("dca-btn");
+    if (!panel) return;
+    const open = panel.hidden;
+    panel.hidden = !open;
+    btn?.setAttribute("aria-expanded", String(open));
+    if (open) loadDcaPanel();
+}
+
+function initDca() {
+    const form = document.getElementById("dca-create-form");
+    if (!form || form.dataset.bound) return;
+    form.dataset.bound = "true";
+    const startInput = document.getElementById("dca-start-date");
+    const today = new Date().toISOString().slice(0, 10);
+    startInput.max = today;         // backend rejects future starts too
+    startInput.value = today;
+    form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        handleDcaCreate();
+    });
+    document.getElementById("dca-confirm-cancel")
+        ?.addEventListener("click", () => hideDcaBackfillConfirm());
+}
+
+// On app open: book any missed buys, then badge the DCA button. A toast points
+// the user at the review bucket only when NEW buys just landed (no nagging).
+async function runDcaCatchup() {
+    try {
+        const res = await fetch("/api/dca/run?portfolio_id=1", { method: "POST" });
+        if (!res.ok) return;
+        const data = await res.json();
+        const unpriced = (data.plans || []).filter(p => !p.price_data);
+        if (unpriced.length) {
+            showToast(`Couldn't fetch prices for ${unpriced.map(p => p.ticker).join(", ")} — DCA buys not booked yet`, "warning");
+        }
+        if (data.buys_added > 0) {
+            showToast(`${data.buys_added} DCA buy${data.buys_added === 1 ? "" : "s"} ready to review in Manage → DCA`, "info");
+        }
+        updateDcaBadge();
+    } catch (err) {
+        console.warn("DCA catch-up failed:", err);
+    }
+}
+
+async function updateDcaBadge() {
+    const badge = document.getElementById("dca-badge");
+    if (!badge) return;
+    try {
+        const res = await fetch("/api/dca/contributions?portfolio_id=1&status=pending");
+        if (!res.ok) return;
+        const count = (await res.json()).contributions.length;
+        badge.textContent = count > 99 ? "99+" : String(count);
+        badge.hidden = count === 0;
+    } catch { /* badge is cosmetic — stay quiet offline */ }
+}
+
+async function loadDcaPanel() {
+    try {
+        const [plansRes, pendingRes] = await Promise.all([
+            fetch("/api/dca/plans?portfolio_id=1"),
+            fetch("/api/dca/contributions?portfolio_id=1&status=pending"),
+        ]);
+        const plans = plansRes.ok ? (await plansRes.json()).plans : [];
+        const pending = pendingRes.ok ? (await pendingRes.json()).contributions : [];
+        renderDcaPlans(plans);
+        renderDcaPending(pending, plans);
+        updateDcaBadge();
+        const historyList = document.getElementById("dca-history-list");
+        if (historyList && !historyList.hidden) loadDcaHistory();
+    } catch (err) {
+        console.warn("DCA panel load failed:", err);
+    }
+}
+
+function renderDcaPlans(plans) {
+    const section = document.getElementById("dca-plans-section");
+    const list = document.getElementById("dca-plans-list");
+    if (!section || !list) return;
+    section.hidden = plans.length === 0;
+    list.innerHTML = plans.map(p => {
+        const applied = p.applied_count
+            ? `${formatCurrency(p.applied_amount)} → ${p.applied_shares.toFixed(4)} sh @ ${formatCurrency(p.applied_avg_cost)}`
+            : "nothing applied yet";
+        const nextBit = p.is_active
+            ? (p.next_date ? `next buy ${escapeHtml(p.next_date)}` : "")
+            : "paused";
+        return `
+        <div class="dca-plan-card${p.is_active ? "" : " dca-plan-card--paused"}" data-plan-id="${p.id}">
+            <div class="dca-plan-main">
+                <span class="dca-plan-ticker">${escapeHtml(p.ticker)}</span>
+                <span class="dca-plan-terms">${formatCurrency(p.amount)} ${escapeHtml(p.frequency)}</span>
+                <span class="dca-plan-next">${nextBit}</span>
+            </div>
+            <div class="dca-plan-sub">Applied so far: ${applied}</div>
+            <div class="dca-plan-actions">
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="dcaTogglePause(${p.id}, ${p.is_active})">
+                    ${p.is_active ? "Pause" : "Resume"}
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="dcaEditAmount(${p.id}, ${p.amount})">
+                    Edit $
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="dcaDeletePlan(${p.id}, '${escapeHtml(p.ticker)}')">
+                    Delete
+                </button>
+            </div>
+        </div>`;
+    }).join("");
+}
+
+function renderDcaPending(pending, plans) {
+    const section = document.getElementById("dca-pending-section");
+    const list = document.getElementById("dca-pending-list");
+    if (!section || !list) return;
+    section.hidden = pending.length === 0;
+    if (!pending.length) { list.innerHTML = ""; return; }
+
+    const planById = Object.fromEntries((plans || []).map(p => [p.id, p]));
+    const byPlan = new Map();
+    pending.forEach(c => {
+        if (!byPlan.has(c.plan_id)) byPlan.set(c.plan_id, []);
+        byPlan.get(c.plan_id).push(c);
+    });
+
+    list.innerHTML = [...byPlan.entries()].map(([planId, buys]) => {
+        const ticker = planById[planId]?.ticker || "?";
+        const rows = buys.map(c => `
+            <div class="dca-buy-row" data-cid="${c.id}">
+                <span class="dca-buy-date">${escapeHtml(c.exec_date)}</span>
+                <span class="dca-buy-detail">${c.shares.toFixed(4)} sh @ ${formatCurrency(c.price)} · ${formatCurrency(c.amount)}</span>
+                <span class="dca-buy-actions">
+                    <button type="button" class="btn btn-sm btn-success" onclick="dcaApply(${c.id})">Apply</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="dcaSkip(${c.id})">Skip</button>
+                </span>
+            </div>`).join("");
+        const bulk = buys.length > 1 ? `
+            <span class="dca-bulk-actions">
+                <button type="button" class="btn btn-sm btn-link" onclick="dcaApplyAll(${planId})">Apply all ${buys.length}</button>
+                <button type="button" class="btn btn-sm btn-link dca-bulk-skip" onclick="dcaSkipAll(${planId})">Skip all</button>
+            </span>` : "";
+        return `
+        <div class="dca-pending-group">
+            <div class="dca-pending-group-head">
+                <span class="dca-plan-ticker">${escapeHtml(ticker)}</span>${bulk}
+            </div>
+            ${rows}
+        </div>`;
+    }).join("");
+}
+
+async function toggleDcaHistory() {
+    const listEl = document.getElementById("dca-history-list");
+    const btn = document.getElementById("dca-history-toggle");
+    if (!listEl || !btn) return;
+    const show = listEl.hidden;
+    listEl.hidden = !show;
+    btn.textContent = show ? "Hide history" : "Show history";
+    btn.setAttribute("aria-expanded", String(show));
+    if (show) loadDcaHistory();
+}
+
+async function loadDcaHistory() {
+    const listEl = document.getElementById("dca-history-list");
+    if (!listEl) return;
+    try {
+        const res = await fetch("/api/dca/contributions?portfolio_id=1&status=all");
+        if (!res.ok) return;
+        const rows = (await res.json()).contributions.filter(c => c.status !== "pending");
+        if (!rows.length) {
+            listEl.innerHTML = `<div class="dca-history-empty">No applied or skipped buys yet.</div>`;
+            return;
+        }
+        listEl.innerHTML = rows.map(c => {
+            const action = c.status === "applied"
+                ? `<button type="button" class="btn btn-sm btn-outline-secondary" onclick="dcaUndo(${c.id})">Undo</button>`
+                : `<button type="button" class="btn btn-sm btn-outline-secondary" onclick="dcaRestore(${c.id})">Restore</button>`;
+            return `
+            <div class="dca-buy-row dca-buy-row--${c.status}">
+                <span class="dca-buy-date">${escapeHtml(c.exec_date)}</span>
+                <span class="dca-buy-detail">${c.shares.toFixed(4)} sh @ ${formatCurrency(c.price)} · ${formatCurrency(c.amount)}</span>
+                <span class="dca-buy-status">${escapeHtml(c.status)}</span>
+                <span class="dca-buy-actions">${action}</span>
+            </div>`;
+        }).join("");
+    } catch (err) {
+        console.warn("DCA history load failed:", err);
+    }
+}
+
+// ── DCA actions ──────────────────────────────────────────────────────────────
+
+async function _dcaPost(path, okMessage) {
+    try {
+        const res = await fetch(path, { method: "POST" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            showToast(typeof data.detail === "string" ? data.detail : "DCA action failed", "danger");
+            return null;
+        }
+        if (okMessage) showToast(okMessage, "success");
+        return data;
+    } catch {
+        showToast("DCA action failed — is the app online?", "danger");
+        return null;
+    }
+}
+
+async function _dcaAfterHoldingsChange() {
+    await loadDcaPanel();
+    loadManageHoldings({ preserveExisting: true });
+    refreshDashboardData({ includeManageHoldings: false });
+}
+
+async function dcaApply(cid) {
+    const data = await _dcaPost(`/api/dca/contributions/${cid}/apply`);
+    if (data) {
+        showToast(data.message || "Buy applied", "success");
+        _dcaAfterHoldingsChange();
+    }
+}
+
+async function dcaApplyAll(planId) {
+    const data = await _dcaPost(`/api/dca/plans/${planId}/apply-pending`);
+    if (data) {
+        showToast(`Applied ${data.applied} buys to ${data.ticker}`, "success");
+        _dcaAfterHoldingsChange();
+    }
+}
+
+async function dcaSkip(cid) {
+    const data = await _dcaPost(`/api/dca/contributions/${cid}/skip`,
+        "Buy skipped — plan still active (pause it in Plans if needed)");
+    if (data) loadDcaPanel();
+}
+
+async function dcaSkipAll(planId) {
+    const data = await _dcaPost(`/api/dca/plans/${planId}/skip-pending`);
+    if (data) {
+        showToast(`Skipped ${data.skipped} buys for ${data.ticker}`, "success");
+        loadDcaPanel();
+    }
+}
+
+async function dcaUndo(cid) {
+    const data = await _dcaPost(`/api/dca/contributions/${cid}/undo`);
+    if (data) {
+        showToast(data.message || "Buy undone", "success");
+        _dcaAfterHoldingsChange();
+        loadDcaHistory();
+    }
+}
+
+async function dcaRestore(cid) {
+    const data = await _dcaPost(`/api/dca/contributions/${cid}/restore`, "Buy restored to pending");
+    if (data) { loadDcaPanel(); loadDcaHistory(); }
+}
+
+async function dcaTogglePause(planId, isActive) {
+    try {
+        const res = await fetch(`/api/dca/plans/${planId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ is_active: !isActive }),
+        });
+        if (res.ok) {
+            showToast(isActive ? "Plan paused — no new buys will book" : "Plan resumed", "success");
+            loadDcaPanel();
+        }
+    } catch { showToast("Could not update plan", "danger"); }
+}
+
+async function dcaEditAmount(planId, current) {
+    const raw = window.prompt("New dollar amount per interval:", String(current));
+    if (raw === null) return;
+    const amount = parseFloat(raw);
+    if (!Number.isFinite(amount) || amount <= 0) {
+        showToast("Enter a positive dollar amount", "warning");
+        return;
+    }
+    try {
+        const res = await fetch(`/api/dca/plans/${planId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ amount }),
+        });
+        if (res.ok) { showToast("Plan amount updated", "success"); loadDcaPanel(); }
+    } catch { showToast("Could not update plan", "danger"); }
+}
+
+async function dcaDeletePlan(planId, ticker) {
+    if (!window.confirm(`Delete the ${ticker} DCA plan? Applied buys stay in your holdings; pending and skipped buys are removed.`)) return;
+    try {
+        const res = await fetch(`/api/dca/plans/${planId}`, { method: "DELETE" });
+        if (res.ok) { showToast(`${ticker} plan deleted`, "success"); loadDcaPanel(); }
+    } catch { showToast("Could not delete plan", "danger"); }
+}
+
+// ── DCA plan creation (with double-count guard) ──────────────────────────────
+
+function hideDcaBackfillConfirm() {
+    const confirmBox = document.getElementById("dca-backfill-confirm");
+    if (confirmBox) confirmBox.hidden = true;
+}
+
+// If the ticker is already held AND the start date is in the past, the user's
+// existing share count may already include those buys (e.g. they mirrored a
+// real auto-invest). Applying a backfill on top would double-count — so ask.
+async function handleDcaCreate() {
+    const ticker = document.getElementById("dca-ticker").value.trim().toUpperCase();
+    const amount = parseFloat(document.getElementById("dca-amount").value);
+    const frequency = document.getElementById("dca-frequency").value;
+    const startDate = document.getElementById("dca-start-date").value;
+    if (!ticker || !Number.isFinite(amount) || amount <= 0 || !startDate) {
+        showToast("Fill in ticker, amount, and start date", "warning");
+        return;
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    if (startDate < today) {
+        let held = null;
+        try {
+            const res = await fetch("/api/portfolio/holdings?portfolio_id=1");
+            if (res.ok) {
+                held = ((await res.json()).holdings || [])
+                    .find(h => h.ticker === ticker && h.shares > 0);
+            }
+        } catch { /* offline — fall through and just create */ }
+        if (held) {
+            const confirmBox = document.getElementById("dca-backfill-confirm");
+            const text = document.getElementById("dca-confirm-text");
+            const heldShares = Number(held.shares.toFixed(4));
+            text.textContent =
+                `You already hold ${heldShares} ${ticker}. If that count already includes your past `
+                + `auto-invest buys, applying a backfill would double-count them. Track from today, `
+                + `or backfill anyway and review each buy before applying.`;
+            confirmBox.hidden = false;
+            document.getElementById("dca-confirm-today").onclick = () => {
+                hideDcaBackfillConfirm();
+                submitDcaPlan({ ticker, amount, frequency, start_date: today });
+            };
+            document.getElementById("dca-confirm-backfill").onclick = () => {
+                hideDcaBackfillConfirm();
+                submitDcaPlan({ ticker, amount, frequency, start_date: startDate });
+            };
+            return;
+        }
+    }
+    submitDcaPlan({ ticker, amount, frequency, start_date: startDate });
+}
+
+async function submitDcaPlan(payload) {
+    const btn = document.getElementById("dca-create-btn");
+    btn.disabled = true;
+    try {
+        const res = await fetch("/api/dca/plans?portfolio_id=1", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            const detail = data.detail;
+            const msg = typeof detail === "string" ? detail
+                : detail?.message || detail?.[0]?.msg || "Could not create plan";
+            showToast(msg, "danger");
+            return;
+        }
+        document.getElementById("dca-create-form").reset();
+        initDcaFormDefaults();
+        const n = data.buys_added;
+        showToast(n > 0
+            ? `${payload.ticker} plan created — ${n} buy${n === 1 ? "" : "s"} ready to review`
+            : `${payload.ticker} plan created — first buy books on the next interval`,
+            "success");
+        loadDcaPanel();
+    } catch {
+        showToast("Could not create plan — is the app online?", "danger");
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function initDcaFormDefaults() {
+    const startInput = document.getElementById("dca-start-date");
+    if (!startInput) return;
+    const today = new Date().toISOString().slice(0, 10);
+    startInput.max = today;
+    startInput.value = today;
+    const freq = document.getElementById("dca-frequency");
+    if (freq) freq.value = "weekly";
 }
 
 

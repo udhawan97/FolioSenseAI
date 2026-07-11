@@ -157,3 +157,66 @@ class PortfolioSnapshot(Base):
     realized_gain = Column(Float, nullable=False)   # Cumulative realized as of this snapshot
     total_return = Column(Float, nullable=False)     # unrealized + cumulative realized
     created_at = Column(DateTime, default=func.now())
+
+
+class DcaPlan(Base):
+    """
+    A recurring dollar-cost-averaging plan that mirrors a brokerage auto-invest
+    locally: invest a fixed dollar ``amount`` in ``ticker`` every interval.
+
+    The plan itself never mutates a holding. It only generates DcaContribution
+    rows (a "simulated bucket") that the user reviews and chooses to apply, so a
+    manually-maintained portfolio stays clean until the user confirms each buy.
+    """
+    __tablename__ = "dca_plans"
+    __table_args__ = (
+        Index("ix_dca_plans_portfolio_active", "portfolio_id", "is_active"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    portfolio_id = Column(Integer, ForeignKey("portfolios.id"), nullable=False)
+    ticker = Column(String(10), nullable=False)
+    amount = Column(Float, nullable=False)               # dollars invested per interval
+    frequency = Column(String(10), nullable=False)       # daily | weekly | monthly
+    start_date = Column(String(10), nullable=False)      # "YYYY-MM-DD"
+    is_active = Column(Boolean, default=True, server_default="1")  # False = paused
+    created_at = Column(DateTime, default=func.now())
+
+    contributions = relationship(
+        "DcaContribution", back_populates="plan", cascade="all, delete-orphan"
+    )
+
+
+class DcaContribution(Base):
+    """
+    One computed buy in a DCA plan's simulated bucket.
+
+    ``status`` is one of:
+      * ``pending``   — computed, awaiting the user's review.
+      * ``applied``   — added to the real holding (reversible via undo).
+      * ``dismissed`` — skipped; never counted.
+
+    The unique (plan_id, scheduled_date) pair makes catch-up idempotent: rerunning
+    it after the app was closed never double-books the same interval.
+    """
+    __tablename__ = "dca_contributions"
+    __table_args__ = (
+        Index("ux_dca_contrib_plan_sched", "plan_id", "scheduled_date", unique=True),
+        Index("ix_dca_contrib_plan_status", "plan_id", "status"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    plan_id = Column(Integer, ForeignKey("dca_plans.id"), nullable=False)
+    scheduled_date = Column(String(10), nullable=False)   # cadence's intended buy date
+    exec_date = Column(String(10), nullable=False)        # trading day actually priced
+    price = Column(Float, nullable=False)                 # close used for the buy
+    shares = Column(Float, nullable=False)                # amount / price (fractional)
+    amount = Column(Float, nullable=False)                # dollars invested
+    status = Column(
+        String(10), nullable=False, default="pending", server_default="pending"
+    )
+    # Holding updated when this buy was applied, so undo can reverse the exact row.
+    applied_holding_id = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+
+    plan = relationship("DcaPlan", back_populates="contributions")

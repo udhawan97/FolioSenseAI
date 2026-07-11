@@ -2410,6 +2410,14 @@
                         <svg class="manage-lucide manage-lucide--btn" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
                         Import CSV
                     </button>
+                    <button type="button" class="btn btn-sm manage-io-btn" id="dca-btn"
+                            aria-expanded="false" aria-controls="dca-panel"
+                            onclick="toggleDcaPanel()"
+                            title="Mirror your brokerage auto-invest: recurring buys you review and apply">
+                        <svg class="manage-lucide manage-lucide--btn" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v6h-6"/><path d="M12 7v5l3 3"/></svg>
+                        DCA
+                        <span class="dca-badge" id="dca-badge" hidden aria-label="Pending DCA buys"></span>
+                    </button>
                 </div>
 
                 <div class="manage-import-card" id="import-csv-panel" hidden>
@@ -2457,6 +2465,80 @@
                         </button>
                     </div>
                     <div class="import-result" id="import-result" aria-live="polite"></div>
+                </div>
+
+                <div class="manage-import-card" id="dca-panel" hidden>
+                    <div class="import-mode-head">
+                        <span class="import-mode-pill import-mode-pill--local">
+                            <svg class="manage-lucide manage-lucide--inline" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v6h-6"/><path d="M12 7v5l3 3"/></svg>
+                            Local Intelligence
+                        </span>
+                        <span class="import-mode-title">DCA auto-invest — simulated locally</span>
+                    </div>
+                    <p class="import-mode-body">
+                        Mirror your brokerage auto-invest without connecting an account: pick a ticker,
+                        a dollar amount, and a cadence. Each interval books a buy at that day's real
+                        close into a review bucket — <strong>nothing touches your holdings until you
+                        apply it</strong>, and every apply can be undone.
+                    </p>
+
+                    <form class="dca-create-form" id="dca-create-form" autocomplete="off">
+                        <input type="text" class="form-control form-control-sm dca-input dca-input--ticker"
+                               id="dca-ticker" placeholder="Ticker" maxlength="10" required
+                               aria-label="Ticker symbol" spellcheck="false">
+                        <div class="dca-amount-wrap">
+                            <span class="dca-amount-prefix" aria-hidden="true">$</span>
+                            <input type="number" class="form-control form-control-sm dca-input dca-input--amount"
+                                   id="dca-amount" placeholder="Amount" min="0.01" step="0.01" required
+                                   aria-label="Dollar amount per interval">
+                        </div>
+                        <select class="form-select form-select-sm dca-input dca-input--freq" id="dca-frequency"
+                                aria-label="Frequency">
+                            <option value="daily">Daily</option>
+                            <option value="weekly" selected>Weekly</option>
+                            <option value="monthly">Monthly</option>
+                        </select>
+                        <input type="date" class="form-control form-control-sm dca-input dca-input--date"
+                               id="dca-start-date" required aria-label="Start date">
+                        <button type="submit" class="btn btn-success btn-sm dca-create-btn" id="dca-create-btn">
+                            Create plan
+                        </button>
+                    </form>
+
+                    <div class="dca-backfill-confirm" id="dca-backfill-confirm" hidden>
+                        <p class="dca-confirm-text" id="dca-confirm-text"></p>
+                        <div class="dca-confirm-actions">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="dca-confirm-today">
+                                Track from today
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-warning" id="dca-confirm-backfill">
+                                Backfill anyway — I'll review
+                            </button>
+                            <button type="button" class="btn btn-sm btn-link dca-confirm-cancel" id="dca-confirm-cancel">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="dca-section" id="dca-plans-section" hidden>
+                        <div class="dca-section-label">Plans</div>
+                        <div class="dca-plans-list" id="dca-plans-list"></div>
+                    </div>
+
+                    <div class="dca-section" id="dca-pending-section" hidden>
+                        <div class="dca-section-label">Pending review</div>
+                        <div class="dca-pending-list" id="dca-pending-list"></div>
+                    </div>
+
+                    <div class="dca-section dca-history-toggle-wrap">
+                        <button type="button" class="btn btn-sm btn-link dca-history-toggle" id="dca-history-toggle"
+                                aria-expanded="false" onclick="toggleDcaHistory()">
+                            Show history
+                        </button>
+                        <div class="dca-history-list" id="dca-history-list" hidden></div>
+                    </div>
+
+                    <div class="import-result" id="dca-result" aria-live="polite"></div>
                 </div>
 
                 <div class="manage-list-section">
