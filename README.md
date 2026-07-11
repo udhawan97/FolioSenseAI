@@ -77,6 +77,7 @@ FolioOrb closes that gap: holdings, live prices, risk math, market regime, news,
 | Do this | Get this |
 | --- | --- |
 | 📊 Add holdings and watchlist tickers | Live value, cost basis, daily change, unrealized gain, and allocation |
+| ✂️ Record a sale | Reduce a holding and it logs the realized gain/loss — at the *actual* sale price and date you choose, not just today's |
 | 🧭 Open a ticker | A Hold / Add / Trim / Exit verdict with confidence, horizon, and scenario context |
 | ✅ Check the action plan | Bucketed portfolio moves with thesis text, priorities, and regime context |
 | 📈 Open Analytics | Performance, risk, exposure, beta, drawdown, volatility, sector tilt, and signals |

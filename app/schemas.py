@@ -75,11 +75,29 @@ class HoldingUpdate(BaseModel):
     is_active: Optional[bool] = None
     is_watchlist: Optional[bool] = None  # Toggle research mode without affecting P&L
     hold_class: Optional[str] = None
+    # When a share reduction records a realized sale, the client may supply the
+    # actual sale price and date (e.g. a sale made last month). Both optional;
+    # absent → live price and today's date, preserving the old behavior.
+    sale_price: Optional[float] = Field(None, gt=0, allow_inf_nan=False)
+    sale_date: Optional[str] = None
 
     @field_validator("hold_class")
     @classmethod
     def valid_hold_class(cls, v):
         return _normalize_hold_class(v)
+
+    @field_validator("sale_date")
+    @classmethod
+    def valid_sale_date(cls, v):
+        if v is None:
+            return None
+        try:
+            parsed = date.fromisoformat(str(v).strip())
+        except (TypeError, ValueError) as exc:
+            raise ValueError("sale_date must be an ISO date, e.g. 2026-01-15") from exc
+        if parsed > date.today():
+            raise ValueError("sale_date cannot be in the future")
+        return parsed.isoformat()
 
 
 class HoldingResponse(BaseModel):

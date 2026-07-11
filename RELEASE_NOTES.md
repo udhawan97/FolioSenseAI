@@ -1,3 +1,39 @@
+# FolioOrb v5.3.1 Release Notes
+
+**Release date:** July 11, 2026
+
+## Headline
+
+Two of the gaps flagged in v5.3.0, closed: realized sales can now record the
+*actual* price and date you sold at, and external links finally work in the
+desktop app.
+
+## What's New
+
+### 💵 Record a sale at the real price and date
+
+When you reduce a holding, the "record a sale" step now lets you enter the
+**actual sale price** and **sale date** — pre-filled with today's market price
+and today's date, but yours to change. Sold NVDA last month at $120? Enter it,
+and the realized P&L and the year-end recap book it correctly, in the right tax
+year — instead of always assuming today's price and today's date. Leave the
+price blank to use the live market price, exactly as before.
+
+### 🖥️ External links work in the desktop app
+
+In the desktop window, links like **console.anthropic.com** (to grab a Claude
+key) or the docs used to open a dead, chrome-less frame — or nothing. They now
+open in your real browser. (In the web app they always worked; unchanged there.)
+
+## Under the hood
+
+`_record_reduction` takes an optional sale price/date; a new native `open_url`
+bridge routes external links to the system browser. Static-asset cache-busters
+were bumped so the fixes actually reach you on update. New tests for the sale
+price/date path. Installing over any 5.3.0 keeps everything in place.
+
+---
+
 # FolioOrb v5.3.0 Release Notes
 
 **Release date:** July 11, 2026

@@ -183,6 +183,26 @@ class _NativeBridge:  # pylint: disable=too-few-public-methods
         except Exception as exc:  # pylint: disable=broad-except
             return {"saved": False, "path": None, "error": type(exc).__name__}
 
+    def open_url(self, url: str) -> dict:
+        """Open an external http(s) link in the user's real browser.
+
+        The WebView has no browser chrome, so a ``target="_blank"`` link strands
+        the user in a frameless window (or does nothing). The page routes such
+        links here so they open in the default system browser instead. Only
+        http/https is allowed — never ``file:``, ``javascript:``, etc.
+        """
+        try:
+            import webbrowser
+            from urllib.parse import urlparse
+
+            parsed = urlparse((url or "").strip())
+            if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                return {"opened": False, "error": "unsupported_scheme"}
+            webbrowser.open(url)
+            return {"opened": True}
+        except Exception as exc:  # pylint: disable=broad-except
+            return {"opened": False, "error": type(exc).__name__}
+
 
 def _launch_window(base_url: str) -> int:
     """Create the native window (with menu + exit hook) and run the UI loop."""

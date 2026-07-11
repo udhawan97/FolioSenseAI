@@ -4128,6 +4128,83 @@ body > .portfolio-manager-popover.is-visible .portfolio-manager-panel {
     padding: 0.3rem 0.2rem 0.1rem;
 }
 
+/* ── Record-a-sale dialog (share reduction) ──────────────────────────── */
+/* `body >` needed to out-specify `body > *:not(.bg-orb)`, which otherwise pins
+   every direct body child to position:relative / z-index:1 (would trap this
+   overlay behind the z-index:12000 portfolio modal). */
+body > .sale-dialog-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 13000;  /* above the portfolio manager modal (z-index 12000) */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: color-mix(in srgb, #000 55%, transparent);
+    backdrop-filter: blur(2px);
+}
+
+.sale-dialog {
+    width: min(30rem, 100%);
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 16px;
+    padding: 1.25rem 1.35rem;
+    box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.5);
+}
+
+.sale-dialog-title { font-size: 1rem; font-weight: 700; color: var(--text-primary); }
+
+.sale-dialog-sub {
+    margin: 0.5rem 0 0.9rem;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.sale-dialog-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.7rem;
+    margin-bottom: 1.1rem;
+}
+
+.sale-dialog-field { display: flex; flex-direction: column; gap: 0.3rem; }
+.sale-dialog-field span {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-tertiary);
+}
+.sale-dialog-field input {
+    padding: 0.4rem 0.55rem;
+    border-radius: 9px;
+    border: 1px solid var(--hairline);
+    background: var(--surface);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+}
+.sale-dialog-field input.is-invalid { border-color: var(--accent-red); }
+
+.sale-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.sale-dialog-cancel {
+    border: 1px solid var(--hairline);
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: 980px;
+    font-weight: 600;
+}
+.sale-dialog-confirm { border-radius: 980px; font-weight: 600; }
+
+@media (max-width: 480px) {
+    .sale-dialog-fields { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 640px) {
     .dca-field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .dca-buy-row { grid-template-columns: auto 1fr; }

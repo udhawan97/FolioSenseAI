@@ -7,6 +7,16 @@ The full changelog lives in
 [`RELEASE_NOTES.md`](https://github.com/udhawan97/FolioOrb/blob/main/RELEASE_NOTES.md)
 in the repository. Highlights of the current release below.
 
+## v5.3.1 — Accurate Sales, Working Links
+
+- **Record a sale at the real price and date.** Reducing a holding now lets you enter the actual
+  sale price and date (pre-filled with today's, but editable) — so a sale you made last month
+  books into your realized P&L and year-end recap correctly, in the right tax year. Leave the
+  price blank to use the live market price.
+- **External links work in the desktop app.** Links like console.anthropic.com (to get a Claude
+  key) and the docs now open in your real browser instead of a dead in-app frame.
+- Installing over any 5.3.0 keeps everything in place.
+
 ## v5.3.0 — Honest When Things Go Wrong
 
 - **Never a scary $0.** If market data can't be reached, the dashboard keeps your last-known

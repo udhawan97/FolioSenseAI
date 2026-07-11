@@ -475,3 +475,49 @@ def test_value_endpoint_writes_snapshot_when_priced(monkeypatch):
     resp = portfolio_router.get_portfolio_value(portfolio_id=1, db=db)
     assert resp["degraded"] is False
     assert db.query(PortfolioSnapshot).count() == 1
+
+
+# ── Realized sale with explicit price/date ───────────────────────────────────
+
+def test_reduction_uses_explicit_sale_price(monkeypatch):
+    db = make_db()
+    add_holding(db, "NVDA", shares=10, avg_cost=100)
+    holding = db.query(Holding).filter(Holding.ticker == "NVDA").first()
+    # Live price would be 200; the user says they actually sold at 120.
+    monkeypatch.setattr(portfolio_router, "get_stock_data", lambda _t: quote("NVDA", 200))
+    asyncio.run(portfolio_router.update_holding(
+        holding.id, HoldingUpdate(shares=6, sale_price=120), db))
+    trade = db.query(RealizedTrade).filter(RealizedTrade.ticker == "NVDA").first()
+    assert trade.sale_price == 120.0            # explicit price wins over live
+    assert trade.realized_gain == (120 - 100) * 4
+
+
+def test_reduction_falls_back_to_live_price_without_sale_price(monkeypatch):
+    db = make_db()
+    add_holding(db, "NVDA", shares=10, avg_cost=100)
+    holding = db.query(Holding).filter(Holding.ticker == "NVDA").first()
+    monkeypatch.setattr(portfolio_router, "get_stock_data", lambda _t: quote("NVDA", 200))
+    asyncio.run(portfolio_router.update_holding(holding.id, HoldingUpdate(shares=6), db))
+    trade = db.query(RealizedTrade).filter(RealizedTrade.ticker == "NVDA").first()
+    assert trade.sale_price == 200.0            # unchanged legacy behavior
+
+
+def test_reduction_stamps_explicit_sale_date(monkeypatch):
+    db = make_db()
+    add_holding(db, "NVDA", shares=10, avg_cost=100)
+    holding = db.query(Holding).filter(Holding.ticker == "NVDA").first()
+    monkeypatch.setattr(portfolio_router, "get_stock_data", lambda _t: quote("NVDA", 200))
+    asyncio.run(portfolio_router.update_holding(
+        holding.id, HoldingUpdate(shares=6, sale_price=120, sale_date="2025-12-15"), db))
+    trade = db.query(RealizedTrade).filter(RealizedTrade.ticker == "NVDA").first()
+    assert trade.created_at.year == 2025 and trade.created_at.month == 12
+    assert trade.created_at.day == 15
+
+
+def test_update_rejects_future_sale_date():
+    from datetime import date as _date, timedelta as _td
+    from pydantic import ValidationError
+    import pytest as _pytest
+    future = (_date.today() + _td(days=3)).isoformat()
+    with _pytest.raises(ValidationError):
+        HoldingUpdate(shares=6, sale_date=future)

@@ -10213,6 +10213,7 @@ async function initDashboard() {
     initProjectionControls();
     initPortfolioManager();
     initPortfolioBriefing();
+    initDesktopLinkHandler();
     requestAnimationFrame(syncHvtIndicator);
     window.addEventListener("resize", rafThrottle(syncHvtIndicator), { passive: true });
 
@@ -10896,6 +10897,66 @@ async function loadManageHoldings({ preserveExisting = false } = {}) {
 }
 
 
+// Collect the actual price and date for a realized sale (a share reduction).
+// Resolves to { sale_price, sale_date } — sale_price null means "use today's
+// market price" — or null if the user cancels (keep the holding unchanged).
+function promptSaleDetails({ ticker, soldQty, fromShares, toShares, defaultPrice }) {
+    return new Promise((resolve) => {
+        const today = new Date().toISOString().slice(0, 10);
+        const overlay = document.createElement("div");
+        overlay.className = "sale-dialog-overlay";
+        overlay.innerHTML = `
+            <div class="sale-dialog" role="dialog" aria-modal="true" aria-label="Record a sale">
+                <div class="sale-dialog-title">Record a sale of ${escapeHtml(String(soldQty))} ${escapeHtml(ticker)}</div>
+                <p class="sale-dialog-sub">Reducing ${escapeHtml(ticker)} from ${escapeHtml(String(fromShares))} to ${escapeHtml(String(toShares))} shares books a realized sale. Enter the real details, or leave the price blank to use today's market price. Correcting a typo? Cancel.</p>
+                <div class="sale-dialog-fields">
+                    <label class="sale-dialog-field">
+                        <span>Sale price (per share)</span>
+                        <input type="number" id="sale-price-input" min="0.01" step="0.01" placeholder="Today's market price"${Number.isFinite(defaultPrice) ? ` value="${defaultPrice}"` : ""}>
+                    </label>
+                    <label class="sale-dialog-field">
+                        <span>Sale date</span>
+                        <input type="date" id="sale-date-input" max="${today}" value="${today}">
+                    </label>
+                </div>
+                <div class="sale-dialog-actions">
+                    <button type="button" class="btn btn-sm sale-dialog-cancel">Cancel — keep unchanged</button>
+                    <button type="button" class="btn btn-sm btn-warning sale-dialog-confirm">Record sale</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        const priceInput = overlay.querySelector("#sale-price-input");
+        const dateInput = overlay.querySelector("#sale-date-input");
+        const prevFocus = document.activeElement;
+
+        function cleanup(result) {
+            overlay.remove();
+            document.removeEventListener("keydown", onKey, true);
+            if (prevFocus && prevFocus.focus) { try { prevFocus.focus(); } catch (_) { /* ignore */ } }
+            resolve(result);
+        }
+        function onKey(e) {
+            if (e.key === "Escape") { e.stopPropagation(); cleanup(null); }
+        }
+        function onConfirm() {
+            const rawPrice = priceInput.value.trim();
+            const price = rawPrice ? Number(rawPrice) : null;
+            if (rawPrice && (!Number.isFinite(price) || price <= 0)) {
+                priceInput.classList.add("is-invalid");
+                priceInput.focus();
+                return;
+            }
+            cleanup({ sale_price: price, sale_date: dateInput.value || today });
+        }
+        overlay.querySelector(".sale-dialog-confirm").addEventListener("click", onConfirm);
+        overlay.querySelector(".sale-dialog-cancel").addEventListener("click", () => cleanup(null));
+        overlay.addEventListener("mousedown", (e) => { if (e.target === overlay) cleanup(null); });
+        document.addEventListener("keydown", onKey, true);
+        setTimeout(() => priceInput.focus(), 30);
+    });
+}
+
+
 async function updateHolding(holdingId, options = {}) {
     const silent = options.silent === true;
     const card = document.getElementById(`manage-row-${holdingId}`);
@@ -10929,16 +10990,16 @@ async function updateHolding(holdingId, options = {}) {
         return;
     }
 
+    let saleDetails = null;
     if (isReduction) {
         const soldQty = Number((originalShares - shares).toFixed(4));
         const ticker = card?.dataset.ticker || "this holding";
-        const ok = window.confirm(
-            `Reduce ${ticker} from ${originalShares} to ${shares} shares?\n\n`
-            + `This records a sale of ${soldQty} share(s) at today's price in your `
-            + `realized P&L. Correcting a typo? Cancel and it stays unchanged.`
-        );
-        if (!ok) {
-            if (sharesInput) sharesInput.value = sharesInput.defaultValue;  // revert
+        const marketPrice = (latestHoldings.find(h => h.ticker === ticker) || {}).current_price;
+        saleDetails = await promptSaleDetails({
+            ticker, soldQty, fromShares: originalShares, toShares: shares, defaultPrice: marketPrice,
+        });
+        if (!saleDetails) {  // cancelled → revert, book nothing
+            if (sharesInput) sharesInput.value = sharesInput.defaultValue;
             setManageSaveStatus(holdingId, "saved");
             card?.classList.remove("is-saving");
             return;
@@ -10962,6 +11023,10 @@ async function updateHolding(holdingId, options = {}) {
 
     const payload = { avg_cost: avgCost, hold_class: holdClass };
     if (!isWatchlist || (Number.isFinite(shares) && shares > 0)) payload.shares = shares;
+    if (saleDetails) {
+        if (saleDetails.sale_price) payload.sale_price = saleDetails.sale_price;
+        if (saleDetails.sale_date) payload.sale_date = saleDetails.sale_date;
+    }
 
     const res = await fetch(`/api/portfolio/holdings/${holdingId}`, {
         method: "PUT",
@@ -10978,7 +11043,8 @@ async function updateHolding(holdingId, options = {}) {
         else showToast("Holding updated!", "success");
         if (isReduction) {
             const soldQty = Number((originalShares - shares).toFixed(4));
-            showToast(`Recorded a sale of ${soldQty} ${card?.dataset.ticker || ""} — adjust it in the P&L tab`, "warning");
+            const at = saleDetails?.sale_price ? ` @ ${formatCurrency(saleDetails.sale_price)}` : "";
+            showToast(`Recorded a sale of ${soldQty} ${card?.dataset.ticker || ""}${at} — adjust it in the P&L tab`, "warning");
         }
         refreshPortfolioMutationInBackground();
         refreshAiVerdicts();
@@ -11392,6 +11458,25 @@ function toggleCsvImportPanel() {
 function desktopSaveBridge() {
     const api = window.pywebview && window.pywebview.api;
     return api && typeof api.save_file === "function" ? api : null;
+}
+
+// In the desktop WebView, target="_blank" links open a chrome-less frame (or
+// nothing) instead of the system browser — stranding the user (e.g. can't reach
+// console.anthropic.com to get a Claude key). Route external links through the
+// native bridge when it's present; in a real browser the bridge is absent and
+// links keep their normal new-tab behavior. The bridge is injected async, so the
+// check runs at click time, not init time.
+function initDesktopLinkHandler() {
+    document.addEventListener("click", (e) => {
+        const api = window.pywebview && window.pywebview.api;
+        if (!api || typeof api.open_url !== "function") return;
+        const anchor = e.target.closest && e.target.closest('a[target="_blank"]');
+        if (!anchor) return;
+        const href = anchor.getAttribute("href") || "";
+        if (!/^https?:\/\//i.test(href)) return;  // only real external links
+        e.preventDefault();
+        api.open_url(href);
+    });
 }
 
 function browserDownloadCsv(filename, csv) {

@@ -1,5 +1,5 @@
 # pylint: disable=too-many-lines
-from datetime import date
+from datetime import date, datetime
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func
@@ -252,28 +252,41 @@ def _realized_stats_by_ticker(portfolio_id, db):
     return stats
 
 
-def _record_reduction(holding, old_shares, new_shares, db):
+def _record_reduction(holding, old_shares, new_shares, db, sale_price=None, sale_date=None):
     """
-    If a holding's share count dropped, log the realized gain/loss for the
-    sold shares using the live market price as the sale price.
+    If a holding's share count dropped, log the realized gain/loss for the sold
+    shares.
+
+    ``sale_price`` / ``sale_date`` let the caller record the *actual* sale (e.g.
+    a sale made last month at a different price). When omitted, the live market
+    price and today's date are used, preserving the original behavior.
     """
     sold = round(old_shares - new_shares, 6)
     if sold <= 0:
         return
 
-    quote = get_stock_data(holding.ticker)
-    price = quote.get("current_price") or 0.0
     basis = holding.avg_cost or 0.0
-    sale_price = price if price > 0 else basis  # fall back to basis (gain 0) if no quote
+    if sale_price and sale_price > 0:
+        price = sale_price
+    else:
+        quote = get_stock_data(holding.ticker)
+        live = quote.get("current_price") or 0.0
+        price = live if live > 0 else basis  # fall back to basis (gain 0) if no quote
 
-    db.add(RealizedTrade(
+    trade = RealizedTrade(
         portfolio_id=holding.portfolio_id,
         ticker=holding.ticker,
         shares_sold=sold,
-        sale_price=round(sale_price, 2),
+        sale_price=round(price, 2),
         avg_cost=round(basis, 2),
-        realized_gain=round((sale_price - basis) * sold, 2),
-    ))
+        realized_gain=round((price - basis) * sold, 2),
+    )
+    if sale_date:
+        # Stamp the trade on the real sale date (noon, to survive any tz shift in
+        # display) so the year-end recap buckets it into the correct tax year.
+        parsed = date.fromisoformat(sale_date)
+        trade.created_at = datetime(parsed.year, parsed.month, parsed.day, 12, 0)
+    db.add(trade)
 
 
 def _upsert_daily_snapshot(portfolio_id, totals, db):
@@ -676,7 +689,10 @@ async def update_holding(
     # mode) holdings can hold nonzero shares too, but they're promised to never
     # touch P&L — skip recording for them, matching remove_holding's guard below.
     if data.shares is not None and data.shares < holding.shares and not holding.is_watchlist:
-        _record_reduction(holding, holding.shares, data.shares, db)
+        _record_reduction(
+            holding, holding.shares, data.shares, db,
+            sale_price=data.sale_price, sale_date=data.sale_date,
+        )
 
     # Only update fields that were actually provided (not None)
     if data.shares is not None:
