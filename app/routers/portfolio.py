@@ -403,7 +403,9 @@ async def delete_portfolio(portfolio_id: int, db: Session = Depends(get_db)):
             DcaContribution.plan_id.in_(plan_ids)
         ).delete(synchronize_session=False)
     db.query(DcaPlan).filter(DcaPlan.portfolio_id == _pid).delete(synchronize_session=False)
-    db.query(RealizedTrade).filter(RealizedTrade.portfolio_id == _pid).delete(synchronize_session=False)
+    db.query(RealizedTrade).filter(
+        RealizedTrade.portfolio_id == _pid
+    ).delete(synchronize_session=False)
     db.query(PortfolioSnapshot).filter(
         PortfolioSnapshot.portfolio_id == _pid
     ).delete(synchronize_session=False)
