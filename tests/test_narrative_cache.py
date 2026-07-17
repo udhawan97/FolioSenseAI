@@ -39,3 +39,37 @@ def test_portfolio_json_cache_is_isolated_validated_and_corruption_safe():
     row.generated_at = datetime.now().replace(microsecond=0) - timedelta(hours=25)
     db.commit()
     assert cache.get_json(portfolio_scope(1), "briefing") is None
+
+
+def test_verdict_serialization_provenance_and_portfolio_cleanup_stay_inside_cache():
+    db = make_db()
+    cache = NarrativeCache(db)
+    assert cache.store_verdict(
+        portfolio_scope(7),
+        "verdict:hold",
+        "Stay patient.",
+        None,
+        "fallback",
+    )
+
+    cached = cache.get_verdict(portfolio_scope(7), "verdict:hold")
+    assert cached == {"quip": "Stay patient.", "ai": None, "model_used": "fallback"}
+
+    assert cache.delete_portfolio(7) == 1
+    assert cache.get_verdict(portfolio_scope(7), "verdict:hold") is None
+
+
+def test_fresh_many_batches_ticker_narratives_and_applies_price_drift():
+    db = make_db()
+    cache = NarrativeCache(db)
+    cache.store_text("AAPL", "stock", "Apple", "test", price_when_generated=100)
+    cache.store_text("MSFT", "stock", "Microsoft", "test", price_when_generated=100)
+
+    fresh = cache.fresh_many(
+        ["AAPL", "MSFT"],
+        "stock",
+        current_prices={"AAPL": 101, "MSFT": 120},
+    )
+
+    assert list(fresh) == ["AAPL"]
+    assert fresh["AAPL"].summary_text == "Apple"

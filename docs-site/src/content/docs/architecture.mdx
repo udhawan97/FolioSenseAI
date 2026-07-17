@@ -35,9 +35,9 @@ different rules for the same Portfolio:
 | Module | Owns | Important invariant |
 | --- | --- | --- |
 | `portfolio_lifecycle.py` | Default creation, list/create/rename/delete, owned-record cleanup | Deleting a Portfolio removes its holdings, trades, snapshots, verdict history, DCA ledger, and `BOOK:<id>` narratives together. |
-| `portfolio_valuation.py` | Live valuation, cost basis, realized + unrealized return, quote quality, daily history | Watchlist rows never enter totals; incomplete quotes are explicit; only complete valuations may update daily snapshots. |
-| `dca_ledger.py` | Plan persistence, catch-up, pending/applied/dismissed transitions, exact apply/undo | Catch-up is idempotent and no simulated buy mutates a holding until the user applies it. |
-| `narrative_cache.py` | Portfolio cache scopes, TTL/price freshness, JSON validation, writes | Every Portfolio narrative is isolated under `BOOK:<portfolio_id>`; stale or corrupt cache rows regenerate safely. |
+| `portfolio_valuation.py` | Live valuation, cost basis, realized + unrealized return, quote quality, daily history | Watchlist rows never enter totals; zero, non-finite, and missing quotes make quality explicit; total-return percentage uses open plus sold cost basis; only complete valuations may update daily snapshots. |
+| `dca_ledger.py` | Plan persistence, catch-up, pending/applied/dismissed transitions, exact apply/undo | Catch-up is idempotent; no simulated buy mutates a holding until the user applies it; a plan with applied buys cannot be deleted until those buys are undone. |
+| `narrative_cache.py` | Portfolio and ticker cache reads/writes, TTL/price freshness, verdict encoding, JSON validation | Portfolio narratives are isolated under `BOOK:<portfolio_id>`; stale or corrupt rows regenerate safely; incomplete valuations never produce confident Portfolio-level Claude narration. |
 
 Pure DCA scheduling and cost math remains in `dca_service.py`, while routers and AI/analytics
 call these interfaces instead of reaching into each other's private helpers.

@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import (
-    AISummary,
     DcaContribution,
     DcaPlan,
     Holding,
@@ -20,7 +19,7 @@ from app.models import (
     RealizedTrade,
     VerdictSnapshot,
 )
-from app.services.narrative_cache import portfolio_scope
+from app.services.narrative_cache import NarrativeCache
 
 
 class PortfolioLifecycleError(Exception):
@@ -121,9 +120,7 @@ def delete_portfolio(db: Session, portfolio_id: int) -> str:
     db.query(VerdictSnapshot).filter(
         VerdictSnapshot.portfolio_id == portfolio_id
     ).delete(synchronize_session=False)
-    db.query(AISummary).filter(AISummary.ticker == portfolio_scope(portfolio_id)).delete(
-        synchronize_session=False
-    )
+    NarrativeCache(db).delete_portfolio(portfolio_id, commit=False)
 
     name = str(portfolio.name)
     db.delete(portfolio)

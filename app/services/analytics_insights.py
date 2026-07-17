@@ -85,6 +85,27 @@ def _concentration_word(hhi: float) -> str:
     return "very concentrated"
 
 
+def _performance_insight(perf: dict, valuation: dict) -> str:
+    """Describe returns without presenting an incomplete valuation as whole."""
+    if valuation.get("data_quality") not in (None, "complete"):
+        missing = ", ".join(valuation.get("missing_tickers") or []) or "current positions"
+        return (
+            f"Live valuation is {valuation.get('data_quality')}; "
+            f"return figures omit {missing}."
+        )
+    if perf.get("has_holdings"):
+        hist_note = (
+            f" with {perf.get('history_days', 0)} days of history tracked"
+            if perf.get("history_days")
+            else ""
+        )
+        return (
+            f"You're {perf.get('total_return_pct', 0):+.1f}% all-in"
+            f"{hist_note}; today is {perf.get('today_pnl_pct', 0):+.1f}%."
+        )
+    return "Set share counts to start tracking total return and building your performance chart."
+
+
 def build_local_analytics_insights(snapshot: dict[str, Any]) -> dict[str, Any]:
     """Deterministic one-liner per analytics sub-tab + static digests."""
     perf = snapshot.get("performance") or {}
@@ -92,23 +113,11 @@ def build_local_analytics_insights(snapshot: dict[str, Any]) -> dict[str, Any]:
     exposure = snapshot.get("exposure") or {}
     signals = snapshot.get("signals") or {}
     markets = snapshot.get("markets") or {}
+    valuation = snapshot.get("valuation") or {}
 
-    insights: dict[str, str] = {}
-
-    if perf.get("has_holdings"):
-        hist_note = (
-            f" with {perf.get('history_days', 0)} days of history tracked"
-            if perf.get("history_days")
-            else ""
-        )
-        insights["performance"] = (
-            f"You're {perf.get('total_return_pct', 0):+.1f}% all-in"
-            f"{hist_note}; today is {perf.get('today_pnl_pct', 0):+.1f}%."
-        )
-    else:
-        insights["performance"] = (
-            "Set share counts to start tracking total return and building your performance chart."
-        )
+    insights: dict[str, str] = {
+        "performance": _performance_insight(perf, valuation),
+    }
 
     if risk.get("has_data"):
         top = risk.get("top_sector")
@@ -166,6 +175,8 @@ def build_local_analytics_insights(snapshot: dict[str, Any]) -> dict[str, Any]:
     return {
         "mode": "local",
         "source": "local",
+        "data_quality": valuation.get("data_quality", "complete"),
+        "missing_tickers": list(valuation.get("missing_tickers") or []),
         "insights": insights,
         "digest": dict(MODULE_DIGEST),
         "widget_insights": build_local_widget_insights(snapshot),
@@ -541,6 +552,7 @@ def build_ai_analytics_prompt_snapshot(snapshot: dict[str, Any]) -> dict[str, An
     markets = snapshot.get("markets") or {}
     return {
         "as_of": snapshot.get("as_of"),
+        "valuation": snapshot.get("valuation"),
         "performance": snapshot.get("performance"),
         "risk": snapshot.get("risk"),
         "exposure": snapshot.get("exposure"),
@@ -595,27 +607,20 @@ def _cached_verdict_signals(db, non_watchlist: list[dict]) -> dict[str, dict | N
     decodable cached verdict, or ticker -> None for tickers with no cache
     (or an undecodable one). Callers apply their own default for the None case.
     """
-    from app.models import AISummary
-    from app.services.verdict_ai_enhancement import decode_verdict_cache
+    from app.services.narrative_cache import NarrativeCache
 
     raw: dict[str, dict | None] = {}
+    cache = NarrativeCache(db)
+    action_by_code = {"a": "add", "h": "hold", "t": "trim", "n": "needs-data"}
     for h in non_watchlist:
         ticker = h["ticker"]
-        cached = (
-            db.query(AISummary)
-            .filter(
-                AISummary.ticker == ticker,
-                AISummary.summary_type.like("verdict%"),
-            )
-            .order_by(AISummary.generated_at.desc())
-            .first()
-        )
+        cached = cache.latest_verdict(ticker)
         if cached:
             try:
-                v = decode_verdict_cache(getattr(cached, "summary_text", ""))
+                parts = str(cached.get("narrative_type") or "").split(":")
                 raw[ticker] = {
-                    "action": v.get("action", "hold"),
-                    "confidence": v.get("confidence", 50),
+                    "action": action_by_code.get(parts[1] if len(parts) > 1 else "", "hold"),
+                    "confidence": 50,
                 }
             except Exception:
                 raw[ticker] = {"action": "hold", "confidence": 50}
@@ -742,6 +747,12 @@ def build_analytics_snapshot(db, portfolio_id: int = 1) -> dict[str, Any]:
 
     return {
         "as_of": today,
+        "valuation": {
+            "data_quality": valuation.data_quality,
+            "missing_tickers": list(valuation.missing_tickers),
+            "priced_position_count": valuation.priced_position_count,
+            "expected_position_count": valuation.expected_position_count,
+        },
         "performance": {
             "has_holdings": bool(non_watchlist) and total_value > 0,
             "total_return_pct": total_return_pct,

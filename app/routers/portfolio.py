@@ -130,7 +130,7 @@ async def delete_portfolio(portfolio_id: int, db: Session = Depends(get_db)):
 
     Guards: the default portfolio (id 1, auto-recreated) and the last remaining
     portfolio can't be deleted. The models use plain foreign keys with no
-    ``ON DELETE CASCADE``, so every child table is cleared explicitly here.
+    ``ON DELETE CASCADE``, so the lifecycle module clears every owned table.
     """
     try:
         name = portfolio_lifecycle.delete_portfolio(db, portfolio_id)
@@ -591,6 +591,7 @@ def get_portfolio_value(portfolio_id: int = 1, db: Session = Depends(get_db)):
             2,
         ),
         "total_cost_basis": valuation.total_cost_basis,
+        "total_return_cost_basis": valuation.total_return_cost_basis,
         "total_unrealized_gain": valuation.total_unrealized_gain,
         "realized_gain": valuation.realized_gain,
         "total_return": valuation.total_return,

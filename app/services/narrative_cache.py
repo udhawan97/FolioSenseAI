@@ -14,6 +14,10 @@ from typing import Callable
 from sqlalchemy.orm import Session
 
 from app.models import AISummary
+from app.services.verdict_ai_enhancement import (
+    decode_verdict_cache,
+    encode_verdict_cache,
+)
 
 DEFAULT_TTL = timedelta(hours=24)
 DEFAULT_PRICE_DRIFT_THRESHOLD = 0.08
@@ -75,14 +79,14 @@ class NarrativeCache:
             .first()
         )
 
-    def get_text(
+    def fresh(
         self,
         scope: str,
         narrative_type: str,
         *,
         current_price: float | None = None,
-    ) -> str | None:
-        """Return a fresh narrative string, or ``None`` when absent/stale."""
+    ) -> AISummary | None:
+        """Return the latest fresh row for callers that need cache metadata."""
         cached = self.latest(scope, narrative_type)
         if cached is None or not is_fresh(
             cached,
@@ -91,7 +95,102 @@ class NarrativeCache:
             price_drift_threshold=self.price_drift_threshold,
         ):
             return None
+        return cached
+
+    def fresh_many(
+        self,
+        scopes: list[str],
+        narrative_type: str,
+        *,
+        current_prices: dict[str, float | None] | None = None,
+    ) -> dict[str, AISummary]:
+        """Batch-load the latest fresh narrative for each requested scope."""
+        if not scopes:
+            return {}
+        latest_by_scope: dict[str, AISummary] = {}
+        for row in (
+            self.db.query(AISummary)
+            .filter(
+                AISummary.ticker.in_(scopes),
+                AISummary.summary_type == narrative_type,
+            )
+            .order_by(AISummary.generated_at.desc())
+            .all()
+        ):
+            latest_by_scope.setdefault(str(row.ticker), row)
+
+        prices = current_prices or {}
+        return {
+            scope: row
+            for scope in scopes
+            if (row := latest_by_scope.get(scope)) is not None
+            and is_fresh(
+                row,
+                ttl=self.ttl,
+                current_price=prices.get(scope),
+                price_drift_threshold=self.price_drift_threshold,
+            )
+        }
+
+    def get_text(
+        self,
+        scope: str,
+        narrative_type: str,
+        *,
+        current_price: float | None = None,
+    ) -> str | None:
+        """Return a fresh narrative string, or ``None`` when absent/stale."""
+        cached = self.fresh(
+            scope,
+            narrative_type,
+            current_price=current_price,
+        )
+        if cached is None:
+            return None
         return str(getattr(cached, "summary_text", ""))
+
+    def get_verdict(
+        self,
+        scope: str,
+        narrative_type: str,
+        *,
+        current_price: float | None = None,
+    ) -> dict | None:
+        """Return a fresh decoded verdict bundle with its model provenance."""
+        cached = self.fresh(
+            scope,
+            narrative_type,
+            current_price=current_price,
+        )
+        if cached is None:
+            return None
+        decoded = decode_verdict_cache(getattr(cached, "summary_text", ""))
+        return {
+            "quip": decoded.get("quip") or "",
+            "ai": decoded.get("ai"),
+            "model_used": str(getattr(cached, "model_used", "") or ""),
+        }
+
+    def latest_verdict(self, scope: str) -> dict | None:
+        """Return the latest fresh verdict variant for analytics readers."""
+        cached = (
+            self.db.query(AISummary)
+            .filter(
+                AISummary.ticker == scope,
+                AISummary.summary_type.like("v:%"),
+            )
+            .order_by(AISummary.generated_at.desc())
+            .first()
+        )
+        if cached is None or not is_fresh(cached, ttl=self.ttl):
+            return None
+        decoded = decode_verdict_cache(getattr(cached, "summary_text", ""))
+        return {
+            "quip": decoded.get("quip") or "",
+            "ai": decoded.get("ai"),
+            "model_used": str(getattr(cached, "model_used", "") or ""),
+            "narrative_type": str(getattr(cached, "summary_type", "") or ""),
+        }
 
     def get_json(
         self,
@@ -164,3 +263,35 @@ class NarrativeCache:
             model_used,
             commit=commit,
         )
+
+    def store_verdict(
+        self,
+        scope: str,
+        narrative_type: str,
+        quip: str,
+        ai: dict | None,
+        model_used: str,
+        *,
+        price_when_generated: float | None = None,
+        commit: bool = True,
+    ) -> bool:
+        """Encode and store one ticker or Portfolio verdict narrative."""
+        return self.store_text(
+            scope,
+            narrative_type,
+            encode_verdict_cache(quip, ai),
+            model_used,
+            price_when_generated=price_when_generated,
+            commit=commit,
+        )
+
+    def delete_portfolio(self, portfolio_id: int, *, commit: bool = True) -> int:
+        """Remove every narrative owned by one Portfolio scope."""
+        removed = (
+            self.db.query(AISummary)
+            .filter(AISummary.ticker == portfolio_scope(portfolio_id))
+            .delete(synchronize_session=False)
+        )
+        if commit:
+            self.db.commit()
+        return int(removed)

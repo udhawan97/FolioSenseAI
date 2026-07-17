@@ -1,5 +1,6 @@
 """Behavior tests for the Portfolio valuation module interface."""
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -68,6 +69,53 @@ def test_complete_valuation_records_exact_financial_snapshot():
     assert valuation.total_return_pct == 15.0
     assert valuation.snapshot_recorded is True
     assert db.query(PortfolioSnapshot).one().total_return == 150.0
+
+
+@pytest.mark.parametrize("invalid_price", [0, float("nan"), float("inf"), "bad-price"])
+def test_invalid_price_is_unavailable_and_never_records_a_snapshot(invalid_price):
+    db = _db()
+    db.add(Holding(portfolio_id=1, ticker="ZERO", shares=10, avg_cost=100))
+    db.commit()
+
+    valuation = portfolio_valuation.evaluate(
+        db,
+        1,
+        quote_loader=lambda _tickers: [_quote("ZERO", invalid_price)],
+        record_snapshot=True,
+    )
+
+    assert valuation.data_quality == "unavailable"
+    assert valuation.missing_tickers == ("ZERO",)
+    assert valuation.total_value == 0
+    assert valuation.snapshot_recorded is False
+    assert db.query(PortfolioSnapshot).count() == 0
+
+
+def test_total_return_pct_includes_open_and_realized_cost_basis():
+    db = _db()
+    db.add(Holding(portfolio_id=1, ticker="MIX", shares=5, avg_cost=100))
+    db.add(
+        RealizedTrade(
+            portfolio_id=1,
+            ticker="MIX",
+            shares_sold=5,
+            sale_price=120,
+            avg_cost=100,
+            realized_gain=100,
+        )
+    )
+    db.commit()
+
+    valuation = portfolio_valuation.evaluate(
+        db,
+        1,
+        quote_loader=lambda _tickers: [_quote("MIX", 120)],
+    )
+
+    assert valuation.total_unrealized_gain == 100
+    assert valuation.realized_gain == 100
+    assert valuation.total_return_cost_basis == 1000
+    assert valuation.total_return_pct == 20
 
 
 def test_performance_history_reports_realized_ledger_and_daily_snapshots():

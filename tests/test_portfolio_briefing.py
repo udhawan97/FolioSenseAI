@@ -95,6 +95,31 @@ def _patch_portfolio_compute(monkeypatch):
             realized_gain=200.0,
             total_return=1000.0,
             total_return_pct=50.0,
+            data_quality="complete",
+            missing_tickers=(),
+            priced_position_count=2,
+            expected_position_count=2,
+        ),
+    )
+
+
+def _patch_partial_portfolio_compute(monkeypatch):
+    """Return a valuation that is honest about one unpriced position."""
+    monkeypatch.setattr(
+        "app.services.portfolio_valuation.evaluate",
+        lambda _db, _portfolio_id: SimpleNamespace(
+            holdings=_FAKE_HOLDINGS[:1],
+            total_value=1800.0,
+            total_daily_change=36.0,
+            total_cost_basis=1000.0,
+            total_unrealized_gain=800.0,
+            realized_gain=0.0,
+            total_return=800.0,
+            total_return_pct=80.0,
+            data_quality="partial",
+            missing_tickers=("MSFT",),
+            priced_position_count=1,
+            expected_position_count=2,
         ),
     )
 
@@ -300,6 +325,26 @@ class TestAiBriefing:
         result = asyncio.run(ai_router.get_portfolio_summary(mode="ai", db=db))
         assert isinstance(result["health"], str) and len(result["health"]) > 0
         assert isinstance(result["quote"], str) and len(result["quote"]) > 0
+
+    def test_partial_valuation_skips_claude_and_surfaces_missing_tickers(self, monkeypatch):
+        db = _make_db()
+        _patch_partial_portfolio_compute(monkeypatch)
+        _patch_market_regime(monkeypatch)
+        claude_calls = []
+        monkeypatch.setattr(
+            ai_router,
+            "generate_portfolio_briefing",
+            lambda snapshot: claude_calls.append(snapshot) or _BRIEFING_AI_RESPONSE.copy(),
+        )
+
+        result = asyncio.run(
+            ai_router.get_portfolio_summary(mode="ai", force_refresh=True, db=db)
+        )
+
+        assert not claude_calls
+        assert result["source"] == "partial-data"
+        assert result["data_quality"] == "partial"
+        assert result["missing_tickers"] == ["MSFT"]
 
 
 # ── Tests — unknown mode normalises to ai ─────────────────────────────────────

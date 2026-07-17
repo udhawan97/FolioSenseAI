@@ -67,8 +67,6 @@ from app.services.verdict_scan_cache import attach_since_last_scan
 from app.services.verdict_ai_enhancement import (
     apply_ai_enhancement,
     compact_signal_mix,
-    decode_verdict_cache,
-    encode_verdict_cache,
 )
 from app.services.portfolio_exposure import (
     build_portfolio_exposure,
@@ -338,15 +336,6 @@ def _active_portfolio_tickers(db: Session, portfolio_id: int = 1) -> list[str]:
     return [str(t).upper() for t in tickers] or DEFAULT_HOLDINGS
 
 
-def _cache_is_fresh(cached: AISummary, current_price: float | None = None) -> bool:
-    return narrative_cache.is_fresh(
-        cached,
-        ttl=CACHE_TTL,
-        current_price=current_price,
-        price_drift_threshold=PRICE_DRIFT_THRESHOLD,
-    )
-
-
 @router.get("/cache/stats")
 async def get_ai_cache_stats(db: Session = Depends(get_db)):
     """
@@ -547,16 +536,18 @@ async def get_stock_summary(
     """
     ticker = ticker.upper()
     stock_data = get_stock_data(ticker)
+    cache = narrative_cache.NarrativeCache(
+        db,
+        ttl=CACHE_TTL,
+        price_drift_threshold=PRICE_DRIFT_THRESHOLD,
+    )
 
     if not force_refresh:
-        cached = (
-            db.query(AISummary)
-            .filter(AISummary.ticker == ticker, AISummary.summary_type == "stock")
-            .order_by(AISummary.generated_at.desc())
-            .first()
+        current_price = (
+            stock_data.get("current_price") if not stock_data.get("error") else None
         )
-        current_price = stock_data.get("current_price") if not stock_data.get("error") else None
-        if cached and _cache_is_fresh(cached, current_price=current_price):
+        cached = cache.fresh(ticker, "stock", current_price=current_price)
+        if cached is not None:
             return {
                 "ticker": ticker,
                 "summary": cached.summary_text,
@@ -570,15 +561,13 @@ async def get_stock_summary(
 
     summary_text = generate_stock_summary(stock_data)
 
-    summary = AISummary(
-        ticker=ticker,
-        summary_type="stock",
-        summary_text=summary_text,
+    cache.store_text(
+        ticker,
+        "stock",
+        summary_text,
+        MODEL,
         price_when_generated=stock_data["current_price"],
-        model_used=MODEL,
     )
-    db.add(summary)
-    db.commit()
 
     return {
         "ticker": ticker,
@@ -603,45 +592,37 @@ async def get_all_summaries(
 
     active_tickers = _active_portfolio_tickers(db, portfolio_id)
     quotes = {q["ticker"]: q for q in get_all_quotes(active_tickers)}
-
-    # Fetch every stock summary for the active tickers in one query, then keep the
-    # latest per ticker (rows arrive newest-first, so the first seen wins). This
-    # replaces a per-ticker query in the loop — a real cost when the portfolio is
-    # fully cached and no generation happens.
-    latest_summary: dict[str, AISummary] = {}
-    if active_tickers:
-        for row in (
-            db.query(AISummary)
-            .filter(
-                AISummary.ticker.in_(active_tickers),
-                AISummary.summary_type == "stock",
-            )
-            .order_by(AISummary.generated_at.desc())
-            .all()
-        ):
-            latest_summary.setdefault(row.ticker, row)
+    cache = narrative_cache.NarrativeCache(
+        db,
+        ttl=CACHE_TTL,
+        price_drift_threshold=PRICE_DRIFT_THRESHOLD,
+    )
+    latest_summary = cache.fresh_many(
+        active_tickers,
+        "stock",
+        current_prices={
+            ticker: quotes.get(ticker, {}).get("current_price")
+            for ticker in active_tickers
+        },
+    )
 
     for ticker in active_tickers:
-        current_price = quotes.get(ticker, {}).get("current_price")
-
         cached = latest_summary.get(ticker)
 
-        if cached and _cache_is_fresh(cached, current_price=current_price):
+        if cached is not None:
             results[ticker] = {"summary": cached.summary_text, "from_cache": True}
             continue
 
         stock_data = quotes.get(ticker, {})
         if stock_data and not stock_data.get("error"):
             summary_text = generate_stock_summary(stock_data)
-            new_summary = AISummary(
-                ticker=ticker,
-                summary_type="stock",
-                summary_text=summary_text,
+            cache.store_text(
+                ticker,
+                "stock",
+                summary_text,
+                MODEL,
                 price_when_generated=stock_data.get("current_price"),
-                model_used=MODEL,
             )
-            db.add(new_summary)
-            db.commit()
             results[ticker] = {"summary": summary_text, "from_cache": False}
 
     return {"summaries": results, "count": len(results)}
@@ -1055,9 +1036,8 @@ def _brand_payload(*, ai_mode: bool = False) -> dict:
     }
 
 
-def _hydrate_cached_verdict(sig_dict: dict, cached_text: str | None) -> bool:
+def _hydrate_cached_verdict(sig_dict: dict, decoded: dict) -> bool:
     """Apply cached quip + AI bundle to sig_dict. Returns True when AI layer present."""
-    decoded = decode_verdict_cache(cached_text)
     quip = decoded.get("quip") or ""
     if quip:
         sig_dict["quip"] = quip
@@ -1243,6 +1223,7 @@ async def get_all_investment_signals(  # pylint: disable=too-many-statements,too
     signals: dict[str, dict] = {}
     missing_quip_tickers: list[str] = []
     scan_snapshot_changed = False
+    cache = narrative_cache.NarrativeCache(db, ttl=CACHE_TTL)
     # Calibration buckets are portfolio-wide (not ticker-specific), so compute them
     # once here instead of re-querying/re-aggregating on every loop iteration below.
     calibration_buckets = compute_calibration_buckets(db, window="1m", portfolio_id=portfolio_id)
@@ -1298,17 +1279,13 @@ async def get_all_investment_signals(  # pylint: disable=too-many-statements,too
                 sig_dict.get("hold_class", "auto"),
                 timing_bucket(sig_dict.get("timing")),
             )
-            cached = (
-                db.query(AISummary)
-                .filter(AISummary.ticker == ticker, AISummary.summary_type == summary_type)
-                .order_by(AISummary.generated_at.desc())
-                .first()
+            cached = cache.get_verdict(
+                ticker,
+                summary_type,
+                current_price=quote_data.get("current_price"),
             )
-            if cached and _cache_is_fresh(cached):
-                sig_dict["ai_enhanced"] = _hydrate_cached_verdict(
-                    sig_dict,
-                    getattr(cached, "summary_text", ""),
-                )
+            if cached is not None:
+                sig_dict["ai_enhanced"] = _hydrate_cached_verdict(sig_dict, cached)
             else:
                 sig_dict["quip"] = None  # will be filled by batch call
                 missing_quip_tickers.append(ticker)
@@ -1330,15 +1307,14 @@ async def get_all_investment_signals(  # pylint: disable=too-many-statements,too
             }
 
     portfolio_state = _portfolio_state_signature(signals, alloc_map)
-    cache = narrative_cache.NarrativeCache(db, ttl=CACHE_TTL)
-    portfolio_cached = cache.get_text(
+    portfolio_cached = cache.get_verdict(
         book_ticker,
         portfolio_state["summary_type"],
     )
     portfolio_quip: str | None = None
     include_portfolio_quip = False
     if portfolio_cached is not None:
-        portfolio_quip = portfolio_cached
+        portfolio_quip = portfolio_cached.get("quip") or None
     else:
         include_portfolio_quip = True
 
@@ -1403,13 +1379,15 @@ async def get_all_investment_signals(  # pylint: disable=too-many-statements,too
                 timing_bucket(signals[ticker].get("timing")),
             )
             try:
-                db.add(AISummary(
-                    ticker=ticker,
-                    summary_type=summary_type,
-                    summary_text=encode_verdict_cache(quip, ai_raw if claude_live else None),
+                cache.store_verdict(
+                    ticker,
+                    summary_type,
+                    quip,
+                    ai_raw if claude_live else None,
+                    MODEL if bundle.get("quip") and claude_live else "fallback",
                     price_when_generated=current_price,
-                    model_used=MODEL if bundle.get("quip") and claude_live else "fallback",
-                ))
+                    commit=False,
+                )
             except Exception as exc:  # pylint: disable=broad-except
                 logger.debug(
                     "Failed to cache quip for %s; exception_type=%s",
@@ -1422,10 +1400,11 @@ async def get_all_investment_signals(  # pylint: disable=too-many-statements,too
                 portfolio_state["concentration_band"],
             )
             try:
-                cache.store_text(
+                cache.store_verdict(
                     book_ticker,
                     portfolio_state["summary_type"],
-                    encode_verdict_cache(portfolio_quip, None),
+                    portfolio_quip,
+                    None,
                     MODEL if book_bundle.get("quip") and claude_live else "fallback",
                     commit=False,
                 )
@@ -1725,6 +1704,12 @@ def _briefing_snapshot(db: Session, portfolio_id: int = 1) -> tuple[dict, list[d
 
     snapshot = {
         "as_of": today,
+        "valuation": {
+            "data_quality": valuation.data_quality,
+            "missing_tickers": list(valuation.missing_tickers),
+            "priced_position_count": valuation.priced_position_count,
+            "expected_position_count": valuation.expected_position_count,
+        },
         "total_value": round(total_value, 2),
         "today_pl": {
             "dollar": round(total_daily_change, 2),
@@ -1826,7 +1811,10 @@ def _briefing_local_period(db: Session, range_key: str, portfolio_id: int = 1) -
 
     cfg = _BRIEFING_RANGES[range_key]
     phrase = cfg["phrase"]
-    _snapshot, non_watchlist = _briefing_snapshot(db, portfolio_id)
+    snapshot, non_watchlist = _briefing_snapshot(db, portfolio_id)
+    quality = snapshot.get("valuation") or {}
+    if quality.get("data_quality") != "complete":
+        return _briefing_local_quality_response(snapshot, period_label=phrase)
     period = compute_range_rows(non_watchlist, range_key)
     rows = period.get("holdings") or {}
 
@@ -1879,6 +1867,8 @@ def _briefing_local_period(db: Session, range_key: str, portfolio_id: int = 1) -
 def _briefing_local(db: Session, portfolio_id: int = 1) -> dict:
     """Compute local briefing using move_explainer. Never calls Claude."""
     snapshot, non_watchlist = _briefing_snapshot(db, portfolio_id)
+    if (snapshot.get("valuation") or {}).get("data_quality") != "complete":
+        return _briefing_local_quality_response(snapshot)
     active_tickers = [h["ticker"] for h in non_watchlist]
     quotes = {q["ticker"]: q for q in get_all_quotes(active_tickers)}
     benchmarks = get_benchmark_data()
@@ -1956,6 +1946,26 @@ def _briefing_local(db: Session, portfolio_id: int = 1) -> dict:
 
 def _briefing_fallback(snapshot: dict) -> dict:
     """Deterministic AI-mode response when Claude is unavailable."""
+    quality = snapshot.get("valuation") or {}
+    data_quality = quality.get("data_quality", "complete")
+    missing = list(quality.get("missing_tickers") or [])
+    if data_quality != "complete":
+        missing_text = ", ".join(missing) if missing else "current positions"
+        return {
+            "mode": "ai",
+            "source": "data-unavailable" if data_quality == "unavailable" else "partial-data",
+            "health": (
+                "Live valuation is unavailable; no return narrative was generated."
+                if data_quality == "unavailable"
+                else "Live valuation is partial; return figures omit unpriced positions."
+            ),
+            "drivers": [f"Missing current prices for: {missing_text}."],
+            "adjustments": ["Retry when market data is available before acting on this read."],
+            "quote": next_briefing_canned_quote(),
+            "data_quality": data_quality,
+            "missing_tickers": missing,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
     phrase = snapshot.get("period_label") or "today"
     pl = snapshot.get("today_pl") or snapshot.get("period_pl") or {}
     tr = snapshot.get("total_return") or {}
@@ -1996,6 +2006,30 @@ def _briefing_fallback(snapshot: dict) -> dict:
         "drivers": drivers,
         "adjustments": ["No changes needed — the book looks balanced."],
         "quote": next_briefing_canned_quote(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _briefing_local_quality_response(
+    snapshot: dict,
+    *,
+    period_label: str | None = None,
+) -> dict:
+    """Return an honest local briefing when live valuation is incomplete."""
+    quality = snapshot.get("valuation") or {}
+    data_quality = quality.get("data_quality", "unavailable")
+    missing = list(quality.get("missing_tickers") or [])
+    scope = f" {period_label}" if period_label else ""
+    return {
+        "mode": "local",
+        "source": "data-unavailable" if data_quality == "unavailable" else "partial-data",
+        "lead": (
+            f"Live valuation is {data_quality}{scope}; "
+            "unpriced positions are not being narrated as a complete Portfolio."
+        ),
+        "movers": [],
+        "data_quality": data_quality,
+        "missing_tickers": missing,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -2053,6 +2087,9 @@ async def get_portfolio_summary(
         raise HTTPException(
             status_code=500, detail="Briefing temporarily unavailable."
         ) from exc
+
+    if (snapshot.get("valuation") or {}).get("data_quality") != "complete":
+        return _briefing_fallback(snapshot)
 
     # Call Haiku; fall back deterministically on any failure
     try:
@@ -2184,6 +2221,10 @@ async def get_analytics_insights(
             detail="Analytics insights temporarily unavailable.",
         ) from exc
 
+    valuation_state = snapshot.get("valuation") or {}
+    if valuation_state.get("data_quality") != "complete":
+        return build_analytics_fallback(snapshot)
+
     try:
         parsed = generate_analytics_insights(snapshot)
         local_widgets = build_local_widget_insights(snapshot)
@@ -2250,12 +2291,24 @@ def _action_plan_snapshot(
         valuation = portfolio_valuation.evaluate(db, portfolio_id)
         holdings_rows = valuation.holdings
         total_value = valuation.total_value
+        valuation_quality = {
+            "data_quality": valuation.data_quality,
+            "missing_tickers": list(valuation.missing_tickers),
+            "priced_position_count": valuation.priced_position_count,
+            "expected_position_count": valuation.expected_position_count,
+        }
     except Exception as exc:
         logger.warning(
             "Action plan Portfolio valuation failed; exception_type=%s",
             type(exc).__name__,
         )
         holdings_rows, total_value = [], 0.0
+        valuation_quality = {
+            "data_quality": "unavailable",
+            "missing_tickers": list(active_tickers),
+            "priced_position_count": 0,
+            "expected_position_count": len(active_tickers),
+        }
 
     return_map = {
         h["ticker"]: float(h.get("total_return_pct") or 0)
@@ -2314,6 +2367,7 @@ def _action_plan_snapshot(
 
     snapshot: dict = {
         "as_of": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "valuation": valuation_quality,
         "total_value": round(total_value, 0),
         "regime": {
             "label": regime.get("label", ""),
@@ -2511,6 +2565,25 @@ async def get_action_plan(
             type(exc).__name__,
         )
         return _action_plan_fallback(core)
+
+    valuation_state = snapshot.get("valuation") or {}
+    if valuation_state.get("data_quality") != "complete":
+        fallback = _action_plan_fallback(core)
+        quality = valuation_state.get("data_quality", "unavailable")
+        missing = list(valuation_state.get("missing_tickers") or [])
+        fallback.update(
+            {
+                "source": "data-unavailable" if quality == "unavailable" else "partial-data",
+                "data_quality": quality,
+                "missing_tickers": missing,
+                "headline": f"Live Portfolio valuation is {quality}",
+                "thesis": (
+                    "No Claude plan was generated because unpriced positions would make "
+                    "Portfolio-level totals incomplete."
+                ),
+            }
+        )
+        return fallback
 
     # Call Claude — fall back deterministically on any failure
     try:

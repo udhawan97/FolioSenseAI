@@ -16,6 +16,7 @@ from app.services.analytics_insights import (
 
 _FAKE_SNAPSHOT = {
     "as_of": "2026-06-27",
+    "valuation": {"data_quality": "complete", "missing_tickers": []},
     "performance": {
         "has_holdings": True,
         "total_return_pct": 12.5,
@@ -86,6 +87,7 @@ def test_ai_prompt_snapshot_omits_non_key_widget_data():
         },
     }
     slim = build_ai_analytics_prompt_snapshot(full)
+    assert slim["valuation"] == {"data_quality": "complete", "missing_tickers": []}
     assert "return_calendar" not in slim["widgets"]
     assert "market_sensitivity" not in slim["widgets"]
     assert "benchmark" in slim["widgets"]
@@ -165,6 +167,35 @@ def test_analytics_insights_ai_endpoint_uses_claude():
     assert bt["insight"] == _AI_WIDGET_INSIGHTS["benchmark-tracker"]["insight"]
     assert isinstance(wids.get("total-return"), str), "total-return should stay a plain string"
     assert "correlation" not in wids, "local-only widgets must not be backfilled into AI tips"
+
+
+def test_analytics_insights_partial_valuation_skips_claude():
+    from app.routers.ai import get_analytics_insights
+
+    partial_snapshot = {
+        **_FAKE_SNAPSHOT,
+        "valuation": {
+            "data_quality": "partial",
+            "missing_tickers": ["MSFT"],
+            "priced_position_count": 1,
+            "expected_position_count": 2,
+        },
+    }
+    db = MagicMock()
+
+    with patch(
+        "app.services.analytics_insights.build_analytics_snapshot",
+        return_value=partial_snapshot,
+    ), patch("app.routers.ai.generate_analytics_insights") as gen_mock:
+        result = asyncio.run(
+            get_analytics_insights(mode="ai", force_refresh=True, db=db)
+        )
+
+    gen_mock.assert_not_called()
+    assert result["source"] == "local-fallback"
+    assert result["data_quality"] == "partial"
+    assert result["missing_tickers"] == ["MSFT"]
+    assert "partial" in result["insights"]["performance"]
 
 
 def test_analytics_insights_ai_serves_cache():

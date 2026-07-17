@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.models import Base, Holding, Portfolio
-from app.services.dca_ledger import DcaLedger
+from app.services.dca_ledger import DcaConflictError, DcaLedger
 
 
 TODAY = date(2026, 6, 12)
@@ -82,3 +82,29 @@ def test_ledger_catchup_apply_and_undo_are_traceable_and_idempotent():
     assert holding.shares == pytest.approx(10)
     assert holding.avg_cost == pytest.approx(200)
     assert holding.is_active is True
+
+
+def test_applied_contributions_block_plan_deletion_until_undone():
+    db = make_db()
+    ledger = DcaLedger(
+        db,
+        ticker_validator=lambda ticker: {"valid": True, "ticker": ticker, "suggestions": []},
+        price_history_loader=closes,
+        today=lambda: TODAY,
+    )
+    created = ledger.create_plan(
+        portfolio_id=1,
+        ticker="VOO",
+        amount=50,
+        frequency="weekly",
+        start_date=TODAY.isoformat(),
+    )
+    contribution_id = ledger.list_contributions(1)[0]["id"]
+    ledger.apply_contribution(contribution_id)
+
+    with pytest.raises(DcaConflictError, match="Undo applied buys"):
+        ledger.delete_plan(created["plan"]["id"])
+
+    assert ledger.list_contributions(1, "applied")[0]["id"] == contribution_id
+    ledger.undo_contribution(contribution_id)
+    assert "deleted" in ledger.delete_plan(created["plan"]["id"])

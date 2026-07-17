@@ -254,6 +254,19 @@ class DcaLedger:
 
     def delete_plan(self, plan_id: int) -> str:
         plan = self._plan(plan_id)
+        applied_count = (
+            self.db.query(DcaContribution)
+            .filter(
+                DcaContribution.plan_id == plan_id,
+                DcaContribution.status == "applied",
+            )
+            .count()
+        )
+        if applied_count:
+            raise DcaConflictError(
+                "Undo applied buys before deleting this plan so its holding changes "
+                "remain traceable."
+            )
         ticker = plan.ticker
         self.db.delete(plan)
         self.db.commit()

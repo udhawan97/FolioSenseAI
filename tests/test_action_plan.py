@@ -113,7 +113,28 @@ def _patch_core(monkeypatch):
 def _patch_compute_portfolio(monkeypatch):
     monkeypatch.setattr(
         "app.services.portfolio_valuation.evaluate",
-        lambda db, pid: SimpleNamespace(holdings=[], total_value=5000.0),
+        lambda db, pid: SimpleNamespace(
+            holdings=[],
+            total_value=5000.0,
+            data_quality="complete",
+            missing_tickers=(),
+            priced_position_count=0,
+            expected_position_count=0,
+        ),
+    )
+
+
+def _patch_partial_compute_portfolio(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.portfolio_valuation.evaluate",
+        lambda db, pid: SimpleNamespace(
+            holdings=[{"ticker": "AAPL", "total_return_pct": 80.0}],
+            total_value=1800.0,
+            data_quality="partial",
+            missing_tickers=("MSFT",),
+            priced_position_count=1,
+            expected_position_count=2,
+        ),
     )
 
 
@@ -318,6 +339,25 @@ class TestActionPlanFallback:
             assert isinstance(result, dict)
         except Exception as exc:  # pylint: disable=broad-except
             pytest.fail(f"get_action_plan raised unexpectedly: {exc}")
+
+    def test_partial_valuation_skips_claude_and_surfaces_missing_tickers(self, monkeypatch):
+        db = _make_db()
+        _patch_core(monkeypatch)
+        _patch_partial_compute_portfolio(monkeypatch)
+        _patch_analytics(monkeypatch)
+        claude_calls = []
+        monkeypatch.setattr(
+            ai_router,
+            "generate_action_plan",
+            lambda snapshot: claude_calls.append(snapshot) or dict(_AI_ACTION_PLAN_RESPONSE),
+        )
+
+        result = asyncio.run(ai_router.get_action_plan(force_refresh=True, db=db))
+
+        assert not claude_calls
+        assert result["source"] == "partial-data"
+        assert result["data_quality"] == "partial"
+        assert result["missing_tickers"] == ["MSFT"]
 
 
 # ── Tests — force_local (local intelligence mode) ─────────────────────────────

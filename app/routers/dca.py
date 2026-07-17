@@ -76,7 +76,7 @@ async def update_plan(
 
 @router.delete("/plans/{plan_id}")
 async def delete_plan(plan_id: int, db: Session = Depends(get_db)):
-    """Delete a plan and its bucket; already-applied holding changes remain."""
+    """Delete a plan only when its bucket has no applied buys."""
     return {"message": _call(_ledger(db).delete_plan, plan_id)}
 
 

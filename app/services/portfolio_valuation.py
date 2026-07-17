@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from math import isfinite
 from typing import Callable
 
 from sqlalchemy import func
@@ -30,6 +31,7 @@ class PortfolioValuation:  # pylint: disable=too-many-instance-attributes
     total_value: float
     total_daily_change: float
     total_cost_basis: float
+    total_return_cost_basis: float
     total_unrealized_gain: float
     realized_gain: float
     total_return: float
@@ -99,6 +101,15 @@ def _realized_gain(db: Session, portfolio_id: int) -> float:
         .scalar()
     )
     return round(float(total or 0.0), 2)
+
+
+def _current_price(quote: dict) -> float | None:
+    """Coerce a usable positive quote price without leaking bad market data."""
+    try:
+        price = float(quote.get("current_price") or 0.0)
+    except (TypeError, ValueError):
+        return None
+    return price if isfinite(price) and price > 0 else None
 
 
 def _upsert_snapshot(db: Session, valuation: PortfolioValuation) -> bool:
@@ -174,7 +185,9 @@ def evaluate(
         holding = by_ticker.get(ticker)
         if holding is None:
             continue
-        current_price = float(quote.get("current_price") or 0.0)
+        current_price = _current_price(quote)
+        if current_price is None:
+            continue
         shares = float(holding.shares or 0.0)
         avg_cost = float(holding.avg_cost or 0.0)
         is_watchlist = bool(holding.is_watchlist)
@@ -243,6 +256,11 @@ def evaluate(
         2,
     )
     realized_gain = _realized_gain(db, portfolio_id)
+    realized_cost_basis = round(
+        sum(float(item.get("cost_basis") or 0.0) for item in realized_stats.values()),
+        2,
+    )
+    total_return_cost_basis = round(total_cost_basis + realized_cost_basis, 2)
     total_return = round(total_unrealized_gain + realized_gain, 2)
     valuation = PortfolioValuation(
         portfolio_id=portfolio_id,
@@ -250,11 +268,14 @@ def evaluate(
         total_value=round(total_value, 2),
         total_daily_change=round(total_daily_change, 2),
         total_cost_basis=round(total_cost_basis, 2),
+        total_return_cost_basis=total_return_cost_basis,
         total_unrealized_gain=total_unrealized_gain,
         realized_gain=realized_gain,
         total_return=total_return,
         total_return_pct=round(
-            total_return / total_cost_basis * 100 if total_cost_basis > 0 else 0.0,
+            total_return / total_return_cost_basis * 100
+            if total_return_cost_basis > 0
+            else 0.0,
             2,
         ),
         data_quality=data_quality,
