@@ -18089,6 +18089,72 @@ body > .holding-expand-fab {
 
 /* ── Fund fee drag ───────────────────────────────────────────────────────── */
 
+/* ── Dividend income (mirrors the fee-drag card grammar) ────────────────── */
+.income-headline {
+    display: flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    padding: 0.1rem 0.1rem 0;
+}
+
+.income-annual-total {
+    font-family: var(--font-display);
+    font-size: 1.55rem;
+    font-weight: 600;
+    color: var(--accent-green, var(--text-primary));
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+}
+
+.income-annual-label { font-size: var(--ts-sm); color: var(--text-secondary); }
+
+.income-blended {
+    font-size: var(--ts-xs);
+    color: var(--text-secondary);
+    margin: 0.15rem 0 0.7rem;
+    padding-left: 0.1rem;
+}
+
+.income-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.1rem 0.1rem 0.35rem;
+}
+
+.income-row {
+    display: grid;
+    grid-template-columns: minmax(3.5rem, 1fr) auto minmax(5rem, auto);
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.32rem 0.5rem;
+    border-radius: 8px;
+    background: var(--surface);
+    border: 1px solid var(--hairline-soft);
+}
+
+.income-ticker { font-size: var(--ts-sm); font-weight: 600; color: var(--text-primary); }
+.income-yield {
+    font-size: var(--ts-xs);
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+.income-annual {
+    font-size: var(--ts-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.income-per { font-size: var(--ts-xs); font-weight: 400; color: var(--text-tertiary); }
+
+.income-note {
+    font-size: var(--ts-xs);
+    color: var(--text-tertiary);
+    margin: 0.4rem 0 0;
+    padding-left: 0.1rem;
+}
+
 .fee-drag-headline {
     display: flex;
     align-items: baseline;

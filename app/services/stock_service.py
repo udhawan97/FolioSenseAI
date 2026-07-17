@@ -164,6 +164,44 @@ def _normalized_expense_ratio(info: dict) -> float | None:
     return None
 
 
+def _positive_number(value) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    if math.isnan(number) or number <= 0:
+        return None
+    return number
+
+
+def _normalized_dividend(info: dict, price) -> tuple[float | None, float | None]:
+    """Forward dividend as ($/share rate, yield-as-fraction), or (None, None).
+
+    yfinance's `dividendYield` is a PERCENT (0.32 = 0.32%) while
+    `trailingAnnualDividendYield` is a FRACTION (0.0031) — the same fact, two
+    fields, 100x apart. `dividendRate` ($/share) is unambiguous, so the yield is
+    derived from rate/price whenever possible and the treacherous yield fields
+    are only a fallback. Everything downstream reads a fraction.
+    """
+    rate = _positive_number(info.get("dividendRate")) or _positive_number(
+        info.get("trailingAnnualDividendRate")
+    )
+    px = _positive_number(price)
+
+    if rate is not None and px is not None:
+        return rate, rate / px
+
+    # No rate: fall back to a yield field, being careful about its units.
+    as_percent = _positive_number(info.get("dividendYield"))
+    if as_percent is not None:
+        yld = as_percent / 100.0
+    else:
+        yld = _positive_number(info.get("trailingAnnualDividendYield"))  # already a fraction
+    if yld is None:
+        return None, None
+    # Backfill the $/share rate from yield x price when we have a price.
+    return (yld * px if px is not None else None), yld
+
+
 def get_stock_data(ticker: str) -> dict:
     """
     Fetch a full live quote for a single ticker via yfinance (no API key needed).
@@ -216,6 +254,7 @@ def get_stock_data(ticker: str) -> dict:
             except (TypeError, ValueError, ZeroDivisionError):
                 pass
 
+        dividend_rate, dividend_yield = _normalized_dividend(info, current_price)
         result = {
             "ticker": ticker.upper(),
             "name": info.get("longName") or info.get("shortName") or ticker,
@@ -252,7 +291,8 @@ def get_stock_data(ticker: str) -> dict:
             "gross_margin": info.get("grossMargins"),
             "operating_margin": info.get("operatingMargins"),
             "profit_margin": info.get("profitMargins"),
-            "dividend_yield": _round_or_none(info.get("dividendYield"), 4),
+            "dividend_yield": _round_or_none(dividend_yield, 5),
+            "dividend_rate": _round_or_none(dividend_rate, 4),
             "currency": info.get("currency") or "USD",
             "sector": info.get("sector") or info.get("categoryName") or "N/A",
             "quote_type": info.get("quoteType") or "EQUITY",
@@ -356,6 +396,7 @@ def get_fast_quote(ticker: str) -> dict:
             "operating_margin": None,
             "profit_margin": None,
             "dividend_yield": None,
+            "dividend_rate": None,
             "currency": str(getattr(fi, "currency", None) or "USD"),
             "sector": "N/A",
             "quote_type": "ETF" if security_type == "ETF" else "EQUITY",

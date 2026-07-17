@@ -1373,17 +1373,19 @@ function renderPortfolioValueData(data) {
         if (prevTickers !== nextTickers) {
             latestProjectionData = null;
             projectionLoadPromise = null;
-            // Fund fees and fund overlap are both read straight off the holdings
-            // set, so they go stale on a ticker change exactly as the projection
-            // does — drop them together rather than showing the old mix.
+            // Fees, overlap, and income all read off the holdings set — a ticker
+            // change makes them stale like the projection, so drop all three.
             _feeDragLoaded = false;
             _feeDragLoadPromise = null;
             _etfOverlapLoaded = false;
             _etfOverlapLoadPromise = null;
+            _incomeLoaded = false;
+            _incomeLoadPromise = null;
             if (dashboardZone === "analytics") {
                 ensureProjectionLoaded();
                 ensureFeeDragLoaded();
                 ensureEtfOverlapLoaded();
+                ensureIncomeLoaded();
             }
         }
     } catch (renderErr) {
@@ -3211,6 +3213,7 @@ function setDashboardZone(zone, opts = {}) {
         ensureProjectionLoaded();
         ensureFeeDragLoaded();
         ensureEtfOverlapLoaded();
+        ensureIncomeLoaded();
         window.AnalyticsCharts?.onAnalyticsZoneEnter?.();
         if (!_cachedActionPlan && !_actionPlanLoading) loadActionPlan();
     }
@@ -3837,6 +3840,8 @@ let _feeDragLoadPromise = null;
 let _feeDragLoaded = false;
 let _etfOverlapLoadPromise = null;
 let _etfOverlapLoaded = false;
+let _incomeLoadPromise = null;
+let _incomeLoaded = false;
 
 // The horizon the card asks for. The payload echoes it back as horizon_years,
 // and every rendered long-horizon figure is labelled from that echo, not this.
@@ -3877,6 +3882,82 @@ function ensureFeeDragLoaded() {
 function ensureEtfOverlapLoaded() {
     if (_etfOverlapLoaded) return;
     if (!_etfOverlapLoadPromise) _etfOverlapLoadPromise = loadEtfOverlap();
+}
+
+function ensureIncomeLoaded() {
+    if (_incomeLoaded) return;
+    if (!_incomeLoadPromise) _incomeLoadPromise = loadIncome();
+}
+
+// Dividend yield is a fraction (0.0032 = 0.32%); one ×100 turns it into a
+// percent, done in exactly one place so a percent-of-a-percent can't creep in.
+function _yieldPct(fraction) {
+    const value = Number(fraction);
+    if (!Number.isFinite(value)) return "";
+    return `${(value * 100).toFixed(2)}%`;
+}
+
+function renderIncome(data) {
+    const body = document.getElementById("income-body");
+    if (!body) return;
+
+    const coverage = data?.coverage || {};
+    const nonPayers = coverage.non_payers || [];
+
+    // Nothing paying is not nothing held — say which. Non-payers are named,
+    // never folded into the total as $0 income.
+    if (!data?.has_data) {
+        body.replaceChildren();
+        _cardEmpty("income-empty", true, nonPayers.length
+            ? `None of your holdings pay a dividend right now (${nonPayers.join(", ")}). Add a dividend-paying stock or fund to see income here.`
+            : "None of your holdings pay a dividend. Add a dividend-paying stock or fund to see the income here.");
+        return;
+    }
+    _cardEmpty("income-empty", false);
+
+    const rows = (data.payers || []).map(p => {
+        const yld = _yieldPct(p.yield);
+        const tip = yld ? `${p.ticker || ""} yields ${yld} on today's price` : "";
+        return `<div class="income-row"${tip ? ` title="${escapeHtml(tip)}"` : ""}>
+            <span class="income-ticker">${escapeHtml(p.ticker || "")}</span>
+            <span class="income-yield">${escapeHtml(yld)}</span>
+            <span class="income-annual">${escapeHtml(formatCurrency(p.annual_income))}<span class="income-per">/yr</span></span>
+        </div>`;
+    }).join("");
+
+    const pfYield = _yieldPct(data.portfolio_yield);
+    const blended = pfYield
+        ? `${pfYield} blended yield across ${formatCurrency(data.covered_value)} of payers`
+        : "";
+
+    const nonPayerNote = nonPayers.length
+        ? `<p class="income-note">${escapeHtml(`${nonPayers.length} ${nonPayers.length === 1 ? "holding pays" : "holdings pay"} nothing: ${nonPayers.join(", ")}.`)}</p>`
+        : "";
+
+    body.innerHTML = `<div class="income-headline">
+            <span class="income-annual-total">${escapeHtml(formatCurrency(data.total_annual_income))}</span>
+            <span class="income-annual-label">a year</span>
+        </div>
+        ${blended ? `<p class="income-blended">${escapeHtml(blended)}</p>` : ""}
+        <div class="income-rows">${rows}</div>
+        ${nonPayerNote}`;
+}
+
+async function loadIncome() {
+    _cardLoading("income-loading", true);
+    try {
+        const res = await fetch("/api/portfolio/income");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        renderIncome(await res.json());
+        _incomeLoaded = true;
+        _toggleAnalyticsCard("income-card", true);
+    } catch (err) {
+        console.warn("Dividend income fetch failed:", err);
+        _toggleAnalyticsCard("income-card", false);
+    } finally {
+        _incomeLoadPromise = null;
+        _cardLoading("income-loading", false);
+    }
 }
 
 // An expense ratio is a fraction: 0.0003 is three basis points, i.e. "0.03%".

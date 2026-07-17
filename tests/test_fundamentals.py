@@ -65,7 +65,9 @@ _GAAP = {
                                ("CY2022", 999_999, 2022))}
     },
     "NetIncomeLoss": {"units": {"USD": _rows(("CY2022", 99_000, 2022), ("CY2023", 97_000, 2023))}},
-    "EarningsPerShareDiluted": {"units": {"USD/shares": _rows(("CY2022", 6.11, 2022), ("CY2023", 6.13, 2023))}},
+    "EarningsPerShareDiluted": {
+        "units": {"USD/shares": _rows(("CY2022", 6.11, 2022), ("CY2023", 6.13, 2023))}
+    },
 }
 
 
@@ -80,7 +82,7 @@ def test_revenue_prefers_the_modern_tag_and_backfills_the_legacy_one():
 
 
 def test_revenue_series_empty_without_either_tag():
-    assert _revenue_series({"NetIncomeLoss": {"units": {"USD": []}}}) == {}
+    assert not _revenue_series({"NetIncomeLoss": {"units": {"USD": []}}})
 
 
 # --- periods: assembled, aligned, margin computed ---

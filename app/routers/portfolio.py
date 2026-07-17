@@ -18,6 +18,7 @@ from app.services import holdings_csv
 from app.services import portfolio_lifecycle
 from app.services import portfolio_valuation
 from app.services.earnings_radar import get_earnings_events
+from app.services.dividend_income import compute_portfolio_income
 from app.services.etf_overlap import compute_etf_overlap
 from app.services.fund_costs import compute_fee_drag
 from app.services.realized_recap import build_realized_recap
@@ -858,6 +859,18 @@ async def get_portfolio_etf_overlap(portfolio_id: int = 1, db: Session = Depends
     _require_portfolio(portfolio_id, db)
     valuation = portfolio_valuation.evaluate(db, portfolio_id)
     return compute_etf_overlap(_holdings_with_quote_data(valuation.holdings))
+
+
+@router.get("/income")
+async def get_portfolio_income(portfolio_id: int = 1, db: Session = Depends(get_db)):
+    """Annual dividend income the portfolio pays you, and its blended yield.
+
+    Non-paying holdings are named, never counted as $0 income. A per-share
+    dividend larger than the share price is rejected as bad data.
+    """
+    _require_portfolio(portfolio_id, db)
+    valuation = portfolio_valuation.evaluate(db, portfolio_id)
+    return compute_portfolio_income(_holdings_with_quote_data(valuation.holdings))
 
 
 @router.get("/macro-alignment")

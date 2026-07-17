@@ -1556,6 +1556,39 @@
             </div>
             <div class="row g-3 g-md-4 mb-3">
                 <div class="col-12">
+                    <div class="card bg-dark border-secondary h-100 analytics-chart-card" id="income-card">
+                        <div class="card-header d-flex align-items-center gap-2">
+                            <i class="bi bi-cash-stack analytics-card-icon"></i>
+                            <div class="analytics-card-titles">
+                                <span>What your holdings pay you</span>
+                                <span class="analytics-card-sub">dividend income</span>
+                            </div>
+                            <button class="tip-trigger ms-auto"
+                                data-tip-title="Dividend Income"
+                                data-tip-body="Annual cash your holdings pay you, at your position size, from each one's forward dividend rate. Holdings that pay nothing are named, never counted as $0 income."
+                                data-tip-hint="Forward rate × your shares"
+                                data-tip-icon="bi-cash-stack">
+                                <i class="bi bi-info-circle"></i>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div id="income-empty" class="perf-callout" style="display:none">
+                                <i class="bi bi-cash-stack perf-callout-icon"></i>
+                                <div class="perf-callout-text">
+                                    <div class="perf-callout-title">No dividend income yet</div>
+                                    <div class="perf-callout-body" id="income-empty-body">None of your holdings pay a dividend. Add a dividend-paying stock or fund to see the income here.</div>
+                                </div>
+                            </div>
+                            <div id="income-loading" class="analytics-skeleton" aria-hidden="true">
+                                <div class="shimmer-line"></div><div class="shimmer-line"></div>
+                            </div>
+                            <div id="income-body" aria-label="Dividend income by holding"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="row g-3 g-md-4 mb-3">
+                <div class="col-12">
                     <div class="card bg-dark border-secondary h-100">
                         <div class="card-header d-flex align-items-center gap-2">
                             <i class="bi bi-bar-chart-steps analytics-card-icon"></i>
