@@ -1,5 +1,5 @@
 """
-Macro regime detection — risk-on/off, rates, USD trends.
+Macro regime detection — risk-on/off, rates, USD trends, curve shape.
 Cached daily; adjusts verdict component weights.
 """
 from __future__ import annotations
@@ -7,6 +7,8 @@ from __future__ import annotations
 import logging
 import math
 from datetime import date, datetime, timezone
+
+from app.services.treasury_yield_curve import get_yield_curve
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +21,11 @@ _REGIME_TICKERS = {
     "vix": "^VIX",
     "usd": "UUP",
 }
+
+# How far back the VIX percentile looks. Five years spans a full cycle without
+# letting 2008/2020 spikes make every ordinary week look calm by comparison.
+_VIX_PERCENTILE_PERIOD = "5y"
+_MIN_PERCENTILE_SESSIONS = 250  # ~one trading year; below this, say nothing
 
 
 def _trend_from_closes(closes: list[float], lookback: int = 20) -> str:
@@ -85,7 +92,25 @@ def _vix_band(closes: list[float]) -> str:
     return "normal"
 
 
-def _component_adjustments(risk: str, rates: str, usd: str, vix_band: str) -> dict[str, int]:
+def _vix_percentile(closes: list[float]) -> float | None:
+    """Where today's VIX sits against its own recent history, 0-100.
+
+    None when there isn't enough history to say anything honest.
+    """
+    if len(closes) < _MIN_PERCENTILE_SESSIONS:
+        return None
+    current, history = closes[-1], closes[:-1]
+    below = sum(1 for close in history if close < current)
+    return round(below / len(history) * 100, 1)
+
+
+def _component_adjustments(
+    risk: str,
+    rates: str,
+    usd: str,
+    vix_band: str,
+    curve_state: str = "unknown",
+) -> dict[str, int]:
     """Return pct-point shifts for component weights (analyst, valuation, momentum, quality)."""
     adj = {"analyst": 0, "valuation": 0, "momentum": 0, "quality": 0}
     if risk == "risk_off":
@@ -107,10 +132,15 @@ def _component_adjustments(risk: str, rates: str, usd: str, vix_band: str) -> di
     if vix_band == "elevated":
         adj["momentum"] -= 3
         adj["quality"] += 3
+    # Only inversion moves weights. Flat/normal/steep are left alone rather than
+    # dressed up as signals the evidence doesn't support.
+    if curve_state == "inverted":
+        adj["momentum"] -= 3
+        adj["quality"] += 3
     return adj
 
 
-def _regime_label(risk: str, rates: str, usd: str) -> str:
+def _regime_label(risk: str, rates: str, usd: str, curve_state: str = "unknown") -> str:
     parts = []
     labels = {
         "risk_on": "Risk-on",
@@ -124,6 +154,9 @@ def _regime_label(risk: str, rates: str, usd: str) -> str:
         "usd_neutral": "USD neutral",
     }
     parts.append(labels.get(risk, risk))
+    # An inversion outranks rates/USD colour — it's the rarer, louder fact.
+    if curve_state == "inverted":
+        parts.append("Curve inverted")
     if rates != "rates_flat":
         parts.append(labels.get(rates, rates))
     if usd != "usd_neutral":
@@ -143,8 +176,10 @@ def get_market_regime(*, force_refresh: bool = False) -> dict:
 
     spy = _fetch_closes(_REGIME_TICKERS["risk"])
     tlt = _fetch_closes(_REGIME_TICKERS["rates"])
-    vix = _fetch_closes(_REGIME_TICKERS["vix"])
+    # A longer VIX window than the trend proxies need: percentile wants history.
+    vix = _fetch_closes(_REGIME_TICKERS["vix"], period=_VIX_PERCENTILE_PERIOD)
     uup = _fetch_closes(_REGIME_TICKERS["usd"])
+    curve = get_yield_curve()
 
     spy_trend = _trend_from_closes(spy)
     tlt_trend = _trend_from_closes(tlt)
@@ -154,22 +189,27 @@ def get_market_regime(*, force_refresh: bool = False) -> dict:
     rates = _classify_rates(tlt_trend)
     usd = _classify_usd(uup_trend)
     vix_band = _vix_band(vix)
+    curve_state = curve.get("curve_state", "unknown")
 
-    adjustments = _component_adjustments(risk, rates, usd, vix_band)
+    adjustments = _component_adjustments(risk, rates, usd, vix_band, curve_state)
     regime = {
         "risk_regime": risk,
         "rates_regime": rates,
         "usd_regime": usd,
         "vix_band": vix_band,
-        "label": _regime_label(risk, rates, usd),
+        "vix_percentile": _vix_percentile(vix),
+        "vix_level": round(vix[-1], 2) if vix else None,
+        "yield_curve": curve,
+        "label": _regime_label(risk, rates, usd, curve_state),
         "component_adjustments": adjustments,
         "tip_title": "Market backdrop",
         "tip_body": (
             "Reads SPY (risk appetite), TLT (rate direction), VIX (fear gauge), "
-            "and UUP (dollar strength) over the last ~20 sessions. Shifts how much "
-            "each verdict input counts — e.g. risk-off favors quality over momentum."
+            "UUP (dollar strength), and the Treasury yield curve. Shifts how much "
+            "each verdict input counts — e.g. risk-off and an inverted curve both "
+            "favor quality over momentum."
         ),
-        "source_fields": ["SPY", "TLT", "VIX", "UUP"],
+        "source_fields": ["SPY", "TLT", "VIX", "UUP", "2s10s"],
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "data_quality": "live" if spy else "partial",
     }

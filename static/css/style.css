@@ -17909,6 +17909,220 @@ body > .holding-expand-fab {
     flex-shrink: 0;
 }
 
+/* ── Fund fee drag ───────────────────────────────────────────────────────── */
+
+.fee-drag-headline {
+    display: flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    padding: 0.1rem 0.1rem 0;
+}
+
+.fee-drag-annual-total {
+    font-family: var(--font-display);
+    font-size: 1.55rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+}
+
+.fee-drag-annual-label {
+    font-size: var(--ts-sm);
+    color: var(--text-secondary);
+}
+
+.fee-drag-blended {
+    font-size: var(--ts-xs);
+    color: var(--text-secondary);
+    margin: 0.15rem 0 0.7rem;
+    padding-left: 0.1rem;
+}
+
+.fee-drag-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.1rem 0.1rem 0.35rem;
+}
+
+.fee-drag-row {
+    display: grid;
+    grid-template-columns: minmax(3.5rem, 1fr) auto minmax(4.5rem, auto);
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.32rem 0.5rem;
+    border-radius: 8px;
+    background: var(--surface);
+    border: 1px solid var(--hairline-soft);
+}
+
+.fee-drag-row--unknown {
+    background: transparent;
+    border-style: dashed;
+}
+
+.fee-drag-row--unknown .fee-drag-ticker,
+.fee-drag-row--unknown .fee-drag-annual {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.fee-drag-ticker {
+    font-size: var(--ts-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.fee-drag-bps {
+    font-size: var(--ts-xs);
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.fee-drag-annual {
+    font-size: var(--ts-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.fee-drag-horizon {
+    display: flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    margin-top: 0.4rem;
+    padding: 0.5rem 0.6rem;
+    border-radius: 8px;
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+}
+
+.fee-drag-horizon-value {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.fee-drag-horizon-label {
+    font-size: var(--ts-xs);
+    color: var(--text-secondary);
+}
+
+.fee-drag-note {
+    font-size: var(--ts-xs);
+    line-height: 1.45;
+    color: var(--text-tertiary);
+    margin: 0.45rem 0 0;
+    padding-left: 0.1rem;
+}
+
+/* ── Fund overlap ────────────────────────────────────────────────────────── */
+
+.etf-overlap-basis {
+    font-size: var(--ts-label);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+    margin: 0 0 0.6rem;
+    padding-left: 0.1rem;
+}
+
+.etf-overlap-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    padding: 0 0.1rem 0.2rem;
+}
+
+.etf-overlap-row {
+    display: grid;
+    grid-template-columns: minmax(6rem, 34%) minmax(0, 1fr) 3rem;
+    align-items: center;
+    gap: 0.5rem 0.6rem;
+}
+
+.etf-overlap-pair {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: var(--ts-sm);
+    color: var(--text-primary);
+    min-width: 0;
+}
+
+.etf-overlap-amp {
+    color: var(--text-secondary);
+    font-size: var(--ts-xs);
+}
+
+.etf-overlap-track {
+    height: 10px;
+    border-radius: 999px;
+    background: var(--control-bg);
+    border: 1px solid var(--hairline-soft);
+    overflow: hidden;
+    min-width: 0;
+}
+
+.etf-overlap-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: var(--accent-cyan);
+    opacity: 0.88;
+    min-width: 2px;
+    transition: width 0.45s ease;
+}
+
+.etf-overlap-pct {
+    font-size: var(--ts-xs);
+    font-weight: 600;
+    color: var(--text-primary);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.etf-overlap-shared {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+}
+
+.etf-overlap-shared-label {
+    font-size: var(--ts-label);
+    color: var(--text-secondary);
+    margin-right: 0.1rem;
+}
+
+.etf-overlap-chip {
+    font-size: var(--ts-label);
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: var(--surface);
+    border: 1px solid var(--hairline-soft);
+    border-radius: 999px;
+    padding: 0.08rem 0.4rem;
+}
+
+.etf-overlap-note {
+    font-size: var(--ts-xs);
+    line-height: 1.45;
+    color: var(--text-tertiary);
+    margin: 0.45rem 0 0;
+    padding-left: 0.1rem;
+}
+
+.etf-overlap-note--caveat {
+    border-top: 1px solid var(--hairline);
+    padding-top: 0.5rem;
+    margin-top: 0.6rem;
+}
+
 .contribution-waterfall {
     display: flex;
     flex-direction: column;
@@ -18877,6 +19091,7 @@ body > .correlation-cell-tip {
     .verdict-mix-stat,
     .markets-tape-track,
     .geo-bar-fill,
+    .etf-overlap-fill,
     .contribution-bar,
     .portfolio-contrib-bar-fill,
     .portfolio-contrib-row,
@@ -20138,6 +20353,151 @@ body > .correlation-cell-tip {
 }
 
 /* ── Feed groups ── */
+/* ── SEC filings timeline ──────────────────────────────────────────────────
+   Public-record filings under the news feed. Same visual grammar as the news
+   groups above it; the link row is the whole hit target. */
+.filings-wrap {
+    margin-top: 1.25rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--hairline);
+}
+
+.filings-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+}
+
+.filings-head .bi {
+    color: var(--text-tertiary);
+    align-self: center;
+}
+
+.filings-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.filings-sub {
+    font-size: 0.78rem;
+    color: var(--text-tertiary);
+}
+
+.filings-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.filing-group {
+    border: 1px solid var(--hairline);
+    border-radius: 0.7rem;
+    background: var(--surface);
+    overflow: hidden;
+}
+
+.filing-group-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid var(--hairline-soft);
+}
+
+.filing-ticker {
+    font-size: 0.82rem;
+    color: var(--text-primary);
+}
+
+.filing-company {
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.filing-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.filing-row + .filing-row {
+    border-top: 1px solid var(--hairline-soft);
+}
+
+.filing-link {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 0.75rem;
+    text-decoration: none;
+    color: inherit;
+    transition: background 0.15s var(--ease);
+}
+
+a.filing-link:hover {
+    background: var(--surface-hover);
+}
+
+.filing-link--plain {
+    cursor: default;
+}
+
+.filing-date {
+    font-variant-numeric: tabular-nums;
+    font-size: 0.74rem;
+    color: var(--text-tertiary);
+    flex: 0 0 auto;
+}
+
+.filing-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.filing-items {
+    font-size: 0.7rem;
+    color: var(--text-tertiary);
+    flex: 0 0 auto;
+}
+
+.filing-out {
+    font-size: 0.7rem;
+    color: var(--text-tertiary);
+    flex: 0 0 auto;
+    opacity: 0;
+    transition: opacity 0.15s var(--ease);
+}
+
+a.filing-link:hover .filing-out,
+a.filing-link:focus-visible .filing-out {
+    opacity: 1;
+}
+
+.filings-note {
+    font-size: 0.74rem;
+    color: var(--text-tertiary);
+    margin: 0.5rem 0 0;
+}
+
+.filings-note--degraded {
+    color: var(--accent-yellow);
+}
+
+@media (max-width: 560px) {
+    .filing-items { display: none; }
+}
+
 .news-feed-wrap {
     display: flex;
     flex-direction: column;

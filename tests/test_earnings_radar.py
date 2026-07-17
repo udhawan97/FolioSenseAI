@@ -16,11 +16,12 @@ def _clear_cache():
     er._RADAR_CACHE.clear()
 
 
-def _patch(monkeypatch, *, dates, classify=None, info=None):
-    """Wire up the three yfinance-facing calls with in-memory fakes.
+def _patch(monkeypatch, *, dates, classify=None, info=None, estimates=None):
+    """Wire up the yfinance-facing calls with in-memory fakes.
 
     `dates` maps symbol -> date|None|Exception returned by fetch_next_earnings.
     `classify` maps symbol -> SecurityType (defaults to STOCK for everything).
+    `estimates` maps symbol -> the fetch_earnings_estimate payload (default None).
     """
     monkeypatch.setattr(er, "get_ticker_info", lambda s: (info or {}))
 
@@ -35,6 +36,9 @@ def _patch(monkeypatch, *, dates, classify=None, info=None):
 
     monkeypatch.setattr(er, "classify_security", _classify)
     monkeypatch.setattr(er, "fetch_next_earnings", _fetch)
+    monkeypatch.setattr(
+        er, "fetch_earnings_estimate", lambda s, _d: (estimates or {}).get(s)
+    )
 
 
 def test_window_filter_and_labels(monkeypatch):

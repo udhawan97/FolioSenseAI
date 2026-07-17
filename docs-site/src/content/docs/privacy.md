@@ -11,6 +11,7 @@ FolioOrb is local-first, not cloud-hosted.
 | Config and API keys | Stored in local `.env`; `.env` is excluded from git |
 | Browser cache | Uses `localStorage` for faster dashboard paint |
 | Market data | Requested from Yahoo Finance through `yfinance` |
+| Filings and the yield curve | Requested from SEC EDGAR and the US Treasury — public, keyless sources |
 | Claude prompts | Sent to Anthropic only when Claude features are enabled and requested |
 | Generated AI summaries | Cached locally in SQLite for reuse and cost control |
 
@@ -23,12 +24,30 @@ FolioOrb is local-first, not cloud-hosted.
 
 ## What actually leaves your machine
 
-Two categories of outbound calls, both explicit:
+Every outbound call, and nothing else:
 
 1. **Yahoo Finance** — always, for prices, history, and headlines. Required for the
    dashboard to function.
-2. **Anthropic Claude** — only when a key is configured and a Claude-backed feature is
+2. **US Treasury** (`home.treasury.gov`) — the daily par yield curve behind the market
+   backdrop. A public file; no key, and nothing about you is sent.
+3. **SEC EDGAR** (`sec.gov`, `data.sec.gov`) — filings for the companies you hold. Public
+   record, no key. See the contact-address note below.
+4. **Anthropic Claude** — only when a key is configured and a Claude-backed feature is
    requested. No prompt is sent otherwise.
+5. **GitHub** (`api.github.com`, `github.com`) — only to check for and download updates.
 
-Nothing else leaves. There's no telemetry, no analytics beacon, and no third service
-in between.
+What every one of these has in common: the request carries a ticker or a date, never your
+holdings, your share counts, or anything about your positions. There's no telemetry, no
+analytics beacon, and no third service in between.
+
+### The SEC contact address
+
+The SEC requires software to identify itself with a contact address, and returns `403` to
+anything that doesn't. FolioOrb sends its maintainer's address by default, so filings work
+out of the box. If you'd rather speak for yourself, set `FOLIO_SEC_CONTACT` in your `.env`:
+
+```bash
+FOLIO_SEC_CONTACT=you@example.com
+```
+
+That address goes to the SEC and nowhere else. It is not a login, and no account is created.

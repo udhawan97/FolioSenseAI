@@ -1371,7 +1371,18 @@ function renderPortfolioValueData(data) {
         if (prevTickers !== nextTickers) {
             latestProjectionData = null;
             projectionLoadPromise = null;
-            if (dashboardZone === "analytics") ensureProjectionLoaded();
+            // Fund fees and fund overlap are both read straight off the holdings
+            // set, so they go stale on a ticker change exactly as the projection
+            // does — drop them together rather than showing the old mix.
+            _feeDragLoaded = false;
+            _feeDragLoadPromise = null;
+            _etfOverlapLoaded = false;
+            _etfOverlapLoadPromise = null;
+            if (dashboardZone === "analytics") {
+                ensureProjectionLoaded();
+                ensureFeeDragLoaded();
+                ensureEtfOverlapLoaded();
+            }
         }
     } catch (renderErr) {
         console.warn("Portfolio render error (data is current):", renderErr);
@@ -3052,13 +3063,31 @@ function formatEarnDate(iso) {
     return `${MONTHS[m - 1]} ${d}`;
 }
 
+/**
+ * Consensus estimate and recent beat record, as tooltip text.
+ * Returns "" when the estimate is unknown — thin coverage is common and the
+ * date alone is still worth showing.
+ */
+function _earningsEstimateText(e) {
+    if (!e) return "";
+    const parts = [];
+    if (Number.isFinite(Number(e.eps_estimate))) {
+        parts.push(`Est. EPS ${Number(e.eps_estimate).toFixed(2)}`);
+    }
+    const beats = Number(e.beats), quarters = Number(e.quarters);
+    if (Number.isFinite(beats) && Number.isFinite(quarters) && quarters > 0) {
+        parts.push(`beat ${beats} of last ${quarters}`);
+    }
+    return parts.length ? ` · ${parts.join(" · ")}` : "";
+}
+
 // Row badge — only for the near term (<=14d); the strip covers the 15-30d tail.
 function earningsBadgeHtml(h) {
     const e = cachedEarnings[(h.ticker || "").toUpperCase()];
     if (!e || !Number.isFinite(e.days_until) || e.days_until < 0 || e.days_until > 14) return "";
     const text = e.days_until === 0 ? "Today" : e.days_until === 1 ? "1d" : `${e.days_until}d`;
     const soon = e.days_until <= 3 ? " earnings-badge--soon" : "";
-    const tip = `Earnings ~${formatEarnDate(e.date)} — ${String(e.label || "").toLowerCase()}`;
+    const tip = `Earnings ~${formatEarnDate(e.date)} — ${String(e.label || "").toLowerCase()}${_earningsEstimateText(e)}`;
     return `<span class="badge earnings-badge${soon} ms-1" title="${escapeHtml(tip)}"><i class="bi bi-calendar-event me-1"></i>${escapeHtml(text)}</span>`;
 }
 
@@ -3080,7 +3109,7 @@ function renderEarningsStrip() {
         const soon = e.days_until <= 3 ? " earnings-chip--soon" : "";
         const flask = e.is_watchlist ? '<i class="bi bi-flask" aria-hidden="true"></i> ' : "";
         const when = e.days_until === 0 ? "today" : e.days_until === 1 ? "tomorrow" : `in ${e.days_until}d`;
-        const tip = `${e.ticker} earnings ~${formatEarnDate(e.date)}`;
+        const tip = `${e.ticker} earnings ~${formatEarnDate(e.date)}${_earningsEstimateText(e)}`;
         return `<span class="earnings-chip${soon}" title="${escapeHtml(tip)}">${flask}<strong>${escapeHtml(e.ticker)}</strong> · ${escapeHtml(when)}</span>`;
     }).join("");
     const more = overflow > 0 ? `<span class="earnings-chip earnings-chip--more">+${overflow} more</span>` : "";
@@ -3178,6 +3207,8 @@ function setDashboardZone(zone, opts = {}) {
             if (projectionChart) { projectionChart.resize(); projectionChart.update("none"); }
         });
         ensureProjectionLoaded();
+        ensureFeeDragLoaded();
+        ensureEtfOverlapLoaded();
         window.AnalyticsCharts?.onAnalyticsZoneEnter?.();
         if (!_cachedActionPlan && !_actionPlanLoading) loadActionPlan();
     }
@@ -3790,6 +3821,241 @@ async function loadProjection() {
     } catch (err) {
         projectionLoadPromise = null;
         console.warn("Unable to load projection:", err);
+    }
+}
+
+// ── Fund costs & fund overlap (Analytics → Exposure) ───────────────────────
+//
+// Two cards over two local endpoints. Both backends are deliberately careful
+// about the limits of what they could see — a fund with no readable expense
+// ratio is reported unknown rather than free, and overlap is top-10-only. The
+// cards carry those limits through rather than rounding them off.
+
+let _feeDragLoadPromise = null;
+let _feeDragLoaded = false;
+let _etfOverlapLoadPromise = null;
+let _etfOverlapLoaded = false;
+
+// The horizon the card asks for. The payload echoes it back as horizon_years,
+// and every rendered long-horizon figure is labelled from that echo, not this.
+const FEE_DRAG_HORIZON_YEARS = 10;
+
+// analytics-charts.js has its own showLoading/showEmpty, but they live inside
+// that file's IIFE — the zone loaders in this file keep their own pair.
+function _cardLoading(id, on) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.display = on ? "" : "none";
+    el.setAttribute("aria-hidden", on ? "false" : "true");
+}
+
+/** Toggle a card's empty callout, optionally replacing its reason text. */
+function _cardEmpty(id, on, message) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.display = on ? "" : "none";
+    const body = document.getElementById(`${id}-body`);
+    if (on && message && body) body.textContent = message;
+}
+
+/** Show or drop a card, and the grid column holding it, as one unit. */
+function _toggleAnalyticsCard(cardId, visible) {
+    const card = document.getElementById(cardId);
+    if (!card) return;
+    const column = card.parentElement;
+    const target = column && column.className.includes("col-") ? column : card;
+    target.style.display = visible ? "" : "none";
+}
+
+function ensureFeeDragLoaded() {
+    if (_feeDragLoaded) return;
+    if (!_feeDragLoadPromise) _feeDragLoadPromise = loadFeeDrag();
+}
+
+function ensureEtfOverlapLoaded() {
+    if (_etfOverlapLoaded) return;
+    if (!_etfOverlapLoadPromise) _etfOverlapLoadPromise = loadEtfOverlap();
+}
+
+// An expense ratio is a fraction: 0.0003 is three basis points, i.e. "0.03%".
+// Exactly one multiplication by 100 turns a fraction into a percent. The bps
+// form is read straight off the payload, never derived here — one conversion,
+// in one place, so a percent-of-a-percent has nowhere to creep in.
+function _feePct(fraction) {
+    const value = Number(fraction);
+    if (!Number.isFinite(value)) return "";
+    return `${(value * 100).toFixed(2)}%`;
+}
+
+function renderFeeDrag(data) {
+    const body = document.getElementById("fee-drag-body");
+    if (!body) return;
+
+    const coverage = data?.coverage || {};
+    const uncovered = coverage.uncovered_tickers || [];
+
+    // Nothing priced is not the same as nothing held. Say which one it is —
+    // a fund we couldn't read a ratio for is named, not quietly counted as free.
+    if (!data?.has_data) {
+        body.replaceChildren();
+        _cardEmpty("fee-drag-empty", true, uncovered.length
+            ? `Fee unknown for ${uncovered.join(", ")} — no expense ratio published, so there is nothing to total.`
+            : "Expense ratios come from funds. Add one to see what it costs you.");
+        return;
+    }
+    _cardEmpty("fee-drag-empty", false);
+
+    const rows = (data.holdings || []).map(h => {
+        const bps = Number(h.expense_ratio_bps);
+        const pct = _feePct(h.expense_ratio);
+        const tip = pct ? `${h.ticker || ""} charges ${pct} a year` : "";
+        return `<div class="fee-drag-row"${tip ? ` title="${escapeHtml(tip)}"` : ""}>
+            <span class="fee-drag-ticker">${escapeHtml(h.ticker || "")}</span>
+            <span class="fee-drag-bps">${escapeHtml(Number.isFinite(bps) ? `${bps} bps` : "")}</span>
+            <span class="fee-drag-annual">${escapeHtml(formatCurrency(h.annual_fee))}</span>
+        </div>`;
+    }).join("");
+
+    // A fund left out of the list would read as a fund with no fee. Each one we
+    // couldn't price gets a row too, with the cost column explicitly unknown —
+    // an em dash, never a zero. flags[] carries the backend's reason why.
+    const unknownRows = uncovered.map(ticker => `<div class="fee-drag-row fee-drag-row--unknown" title="${escapeHtml(`${ticker}: no expense ratio published`)}">
+            <span class="fee-drag-ticker">${escapeHtml(ticker)}</span>
+            <span class="fee-drag-bps">Fee unknown</span>
+            <span class="fee-drag-annual">—</span>
+        </div>`).join("");
+
+    const blendedBps = Number(data.blended_expense_ratio_bps);
+    const blendedPct = _feePct(data.blended_expense_ratio);
+    const blended = Number.isFinite(blendedBps)
+        ? `${blendedBps} bps${blendedPct ? ` (${blendedPct})` : ""} blended across ${formatCurrency(data.covered_value)} of funds`
+        : "";
+
+    // The long-horizon figure is a projection under a stated assumption, so it
+    // never appears without the backend's own words about that assumption.
+    const years = Number(data.horizon_years) || 0;
+    const note = data.assumptions?.note || "";
+    const horizon = years > 0 ? `<div class="fee-drag-horizon">
+            <span class="fee-drag-horizon-value">${escapeHtml(formatCurrency(data.horizon_fee_cost))}</span>
+            <span class="fee-drag-horizon-label">projected over ${escapeHtml(String(years))} years</span>
+        </div>
+        ${note ? `<p class="fee-drag-note">${escapeHtml(note)}</p>` : ""}` : "";
+
+    const notes = [];
+    if (data.data_quality === "partial") {
+        notes.push(`Partial coverage — ${coverage.covered_count} of ${coverage.fund_count} funds have a readable expense ratio.`);
+    }
+    const stocks = Number(coverage.stock_count) || 0;
+    if (stocks > 0) {
+        notes.push(`${stocks} ${stocks === 1 ? "stock is" : "stocks are"} excluded — individual shares carry no expense ratio.`);
+    }
+    (data.flags || []).forEach(flag => notes.push(flag));
+
+    body.innerHTML = `<div class="fee-drag-headline">
+            <span class="fee-drag-annual-total">${escapeHtml(formatCurrency(data.annual_fee_cost))}</span>
+            <span class="fee-drag-annual-label">a year</span>
+        </div>
+        ${blended ? `<p class="fee-drag-blended">${escapeHtml(blended)}</p>` : ""}
+        <div class="fee-drag-rows">${rows}${unknownRows}</div>
+        ${horizon}
+        ${notes.map(n => `<p class="fee-drag-note">${escapeHtml(n)}</p>`).join("")}`;
+}
+
+async function loadFeeDrag() {
+    _cardLoading("fee-drag-loading", true);
+    try {
+        const res = await fetch(`/api/portfolio/fee-drag?horizon_years=${FEE_DRAG_HORIZON_YEARS}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        renderFeeDrag(await res.json());
+        _feeDragLoaded = true;
+        // An earlier blip may have pulled the card; a good read brings it back.
+        _toggleAnalyticsCard("fee-drag-card", true);
+    } catch (err) {
+        // A fee read we couldn't get is a quiet absence, not a broken zone.
+        console.warn("Fee drag fetch failed:", err);
+        _toggleAnalyticsCard("fee-drag-card", false);
+    } finally {
+        _feeDragLoadPromise = null;
+        _cardLoading("fee-drag-loading", false);
+    }
+}
+
+// The service can only see each fund's top-10 published holdings and says so in
+// `basis`/`caveat`. Both are read off the payload: if the backend ever widens
+// its basis, the card follows rather than lying in either direction.
+const ETF_OVERLAP_BASIS_LABELS = { top_10_holdings: "top 10 holdings" };
+
+function renderEtfOverlap(data) {
+    const body = document.getElementById("etf-overlap-body");
+    if (!body) return;
+
+    const uncovered = data?.uncovered_tickers || [];
+    const covered = data?.covered_tickers || [];
+
+    if (!data?.has_data) {
+        body.replaceChildren();
+        _cardEmpty("etf-overlap-empty", true, uncovered.length
+            ? `No published holdings for ${uncovered.join(", ")} — nothing to compare them against.`
+            : "Overlap needs at least two funds with published holdings.");
+        return;
+    }
+    _cardEmpty("etf-overlap-empty", false);
+
+    const rows = (data.pairs || []).map(pair => {
+        const pct = Number(pair.overlap_pct) || 0;
+        const width = Math.max(2, Math.min(100, pct));
+        const chips = (pair.shared_holdings || []).map(s => {
+            // Weights are already percentage points off the payload — no maths here.
+            const tip = `${s.symbol}: ${s.weight_a}% of ${pair.a}, ${s.weight_b}% of ${pair.b}`;
+            return `<span class="etf-overlap-chip" title="${escapeHtml(tip)}">${escapeHtml(s.symbol || "")}</span>`;
+        }).join("");
+        const shared = Number(pair.shared_count) || 0;
+        return `<div class="etf-overlap-row">
+            <div class="etf-overlap-pair">
+                <strong>${escapeHtml(pair.a || "")}</strong>
+                <span class="etf-overlap-amp">&amp;</span>
+                <strong>${escapeHtml(pair.b || "")}</strong>
+            </div>
+            <div class="etf-overlap-track" aria-hidden="true">
+                <div class="etf-overlap-fill" style="width:${width.toFixed(1)}%"></div>
+            </div>
+            <span class="etf-overlap-pct">${escapeHtml(pct.toFixed(1))}%</span>
+            <div class="etf-overlap-shared">
+                <span class="etf-overlap-shared-label">${escapeHtml(`${shared} shared`)}</span>${chips}
+            </div>
+        </div>`;
+    }).join("");
+
+    const basisText = ETF_OVERLAP_BASIS_LABELS[data.basis] || "published holdings";
+    const notes = [];
+    if (uncovered.length) {
+        notes.push(`No published holdings for ${uncovered.join(", ")} — left out of the comparison.`);
+    }
+    if (data.data_quality === "partial") {
+        notes.push(`Partial — ${covered.length} of ${data.etf_count} funds had holdings to read.`);
+    }
+
+    body.innerHTML = `<p class="etf-overlap-basis">Compared on each fund's ${escapeHtml(basisText)}</p>
+        <div class="etf-overlap-rows">${rows}</div>
+        ${data.caveat ? `<p class="etf-overlap-note etf-overlap-note--caveat">${escapeHtml(data.caveat)}</p>` : ""}
+        ${notes.map(n => `<p class="etf-overlap-note">${escapeHtml(n)}</p>`).join("")}`;
+}
+
+async function loadEtfOverlap() {
+    _cardLoading("etf-overlap-loading", true);
+    try {
+        const res = await fetch("/api/portfolio/etf-overlap");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        renderEtfOverlap(await res.json());
+        _etfOverlapLoaded = true;
+        _toggleAnalyticsCard("etf-overlap-card", true);
+    } catch (err) {
+        // Overlap leans on a live holdings scrape; losing it is survivable.
+        console.warn("ETF overlap fetch failed:", err);
+        _toggleAnalyticsCard("etf-overlap-card", false);
+    } finally {
+        _etfOverlapLoadPromise = null;
+        _cardLoading("etf-overlap-loading", false);
     }
 }
 
@@ -4696,13 +4962,15 @@ function _buildMarketBackdropBlock(regime, coverageData) {
     const ratesRegime = _rf(regime.rates_regime);
     const vixBand     = _rf(regime.vix_band);
     const usdRegime   = _rf(regime.usd_regime);
-    if (!riskRegime && !ratesRegime && !vixBand && !usdRegime) return "";
+    const curveState  = _rf(regime.yield_curve?.curve_state);
+    if (!riskRegime && !ratesRegime && !vixBand && !usdRegime && !curveState) return "";
 
     // Known enum sets — only render cards for values the backend explicitly supports.
     const KNOWN_RISK  = new Set(["risk_on", "risk_off", "neutral", "mixed"]);
     const KNOWN_RATES = new Set(["rates_rising", "rates_falling", "rates_steady", "steady"]);
     const KNOWN_VIX   = new Set(["elevated", "low", "normal"]);
     const KNOWN_USD   = new Set(["usd_strong", "usd_weak", "usd_steady", "steady"]);
+    const KNOWN_CURVE = new Set(["inverted", "flat", "normal", "steep"]);
 
     const items = [];
     if (KNOWN_RISK.has(riskRegime)) {
@@ -4720,11 +4988,32 @@ function _buildMarketBackdropBlock(regime, coverageData) {
             : { icon: "bi-bank", label: "Rates", value: "Steady", detail: "Rates holding near current level", tone: "blue" });
     }
     if (KNOWN_VIX.has(vixBand)) {
+        // Where today's VIX sits against its own recent range beats an absolute
+        // band \u2014 but only when the backend had enough history to rank it.
+        const vixPct = Number(regime.vix_percentile);
+        const pctDetail = Number.isFinite(vixPct)
+            ? `Above ${Math.round(vixPct)}% of the last 5 years`
+            : null;
         items.push(vixBand === "elevated"
-            ? { icon: "bi-activity", label: "Fear gauge", value: "Jittery", detail: "Volatility above normal",           tone: "negative" }
+            ? { icon: "bi-activity", label: "Fear gauge", value: "Jittery", detail: pctDetail || "Volatility above normal",           tone: "negative" }
             : vixBand === "low"
-            ? { icon: "bi-activity", label: "Fear gauge", value: "Calm",    detail: "Markets relaxed \u2014 low volatility", tone: "positive" }
-            : { icon: "bi-activity", label: "Fear gauge", value: "Normal",  detail: "Volatility in usual range",         tone: "blue"     });
+            ? { icon: "bi-activity", label: "Fear gauge", value: "Calm",    detail: pctDetail || "Markets relaxed \u2014 low volatility", tone: "positive" }
+            : { icon: "bi-activity", label: "Fear gauge", value: "Normal",  detail: pctDetail || "Volatility in usual range",         tone: "blue"     });
+    }
+    if (KNOWN_CURVE.has(curveState)) {
+        // The curve card carries one icon in every state; tone and value do the talking.
+        const spread = Number(regime.yield_curve?.spread_2s10s);
+        const spreadText = Number.isFinite(spread)
+            ? `2s10s ${spread >= 0 ? "+" : "\u2212"}${Math.abs(Math.round(spread))}bp`
+            : "";
+        const withSpread = (fallback) => spreadText ? `${spreadText} \u00b7 ${fallback}` : fallback;
+        items.push(curveState === "inverted"
+            ? { icon: "bi-bar-chart-steps", label: "Yield curve", value: "Inverted", detail: withSpread("10yr under 2yr"),      tone: "negative" }
+            : curveState === "flat"
+            ? { icon: "bi-bar-chart-steps", label: "Yield curve", value: "Flat",     detail: withSpread("Short and long yields converging"), tone: "gold" }
+            : curveState === "steep"
+            ? { icon: "bi-bar-chart-steps", label: "Yield curve", value: "Steep",    detail: withSpread("Long yields well clear of short"),  tone: "cyan" }
+            : { icon: "bi-bar-chart-steps", label: "Yield curve", value: "Normal",   detail: withSpread("Long yields above short"),          tone: "blue" });
     }
     if (KNOWN_USD.has(usdRegime)) {
         items.push(usdRegime === "usd_strong"
@@ -12834,6 +13123,83 @@ function _newsRenderFeed(feedData) {
     _newsShowFeed(true);
 }
 
+/**
+ * Render the SEC filings timeline.
+ *
+ * Only operating companies file, so funds and crypto are named as non-filers
+ * rather than shown as companies with an empty record.
+ */
+function _newsRenderFilings(filingsData) {
+    const wrap = document.getElementById("filings-wrap");
+    const body = document.getElementById("filings-body");
+    if (!wrap || !body) return;
+
+    const holdings = (filingsData?.holdings || []);
+    const filers   = holdings.filter(h => h.is_filer && (h.filings || []).length > 0);
+
+    if (!filers.length) {
+        wrap.hidden = true;
+        return;
+    }
+
+    // escapeHtml keeps text out of the markup, but it would escape a
+    // javascript: URL straight into an href. Filings live on sec.gov or nowhere.
+    const _secUrl = (url) => {
+        const clean = String(url || "");
+        return clean.startsWith("https://www.sec.gov/") ? clean : "";
+    };
+
+    const groupHtml = (h) => {
+        const rows = (h.filings || []).map(f => {
+            const items = String(f.items || "").trim();
+            const url   = _secUrl(f.url);
+            const inner = `<span class="filing-date">${escapeHtml(f.filed_at || "")}</span>
+                    <span class="filing-label">${escapeHtml(f.label || f.form || "")}</span>
+                    ${items ? `<span class="filing-items">Items ${escapeHtml(items)}</span>` : ""}`;
+            return `<li class="filing-row">
+                ${url
+                    ? `<a class="filing-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">
+                    ${inner}
+                    <i class="bi bi-box-arrow-up-right filing-out" aria-hidden="true"></i>
+                </a>`
+                    : `<span class="filing-link filing-link--plain">${inner}</span>`}
+            </li>`;
+        }).join("");
+        return `<div class="filing-group">
+            <div class="filing-group-head">
+                <strong class="filing-ticker">${escapeHtml(h.ticker || "")}</strong>
+                <span class="filing-company">${escapeHtml(h.company_name || "")}</span>
+            </div>
+            <ul class="filing-list">${rows}</ul>
+        </div>`;
+    };
+
+    const notFilers = (filingsData?.not_filers || []);
+    const footNote = notFilers.length
+        ? `<p class="filings-note">${escapeHtml(notFilers.join(", "))} ${notFilers.length === 1 ? "doesn't file" : "don't file"} with the SEC — funds and crypto have no filing record to show.</p>`
+        : "";
+    const degradedNote = filingsData?.degraded
+        ? `<p class="filings-note filings-note--degraded">Some filings couldn't be reached just now — this list may be short.</p>`
+        : "";
+
+    body.innerHTML = filers.map(groupHtml).join("") + footNote + degradedNote;
+    wrap.hidden = false;
+}
+
+/** Fetch the filings timeline. Local-safe: never gated on Claude. */
+async function _newsLoadFilings() {
+    try {
+        const res = await fetch("/api/news/filings");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        _newsRenderFilings(await res.json());
+    } catch (err) {
+        // A missing timeline is a quiet absence, not a broken news zone.
+        console.warn("Filings fetch failed:", err);
+        const wrap = document.getElementById("filings-wrap");
+        if (wrap) wrap.hidden = true;
+    }
+}
+
 /** Render the AI briefing text from the themes response. */
 function _newsRenderBriefing(themesData) {
     const body = document.getElementById("news-briefing-body");
@@ -12912,6 +13278,9 @@ async function loadNewsZone() {
     } finally {
         _newsShowLoading(false);
     }
+
+    // Public record, no key required — loads in both engines.
+    await _newsLoadFilings();
 
     // AI layer — only in Claude mode; 503 / failures are silently swallowed.
     if (!isLocalIntelligenceMode()) {

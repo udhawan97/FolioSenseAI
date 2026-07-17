@@ -18,6 +18,8 @@ from app.services import holdings_csv
 from app.services import portfolio_lifecycle
 from app.services import portfolio_valuation
 from app.services.earnings_radar import get_earnings_events
+from app.services.etf_overlap import compute_etf_overlap
+from app.services.fund_costs import compute_fee_drag
 from app.services.realized_recap import build_realized_recap
 from app.services.portfolio_projection import get_cached_projection
 from app.services.portfolio_analytics import (
@@ -50,6 +52,23 @@ def _require_portfolio(portfolio_id, db):
         return portfolio_lifecycle.require_portfolio(db, portfolio_id)
     except portfolio_lifecycle.PortfolioNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+def _holdings_with_quote_data(holdings: list[dict]) -> list[dict]:
+    """Merge full quotes onto priced valuation rows.
+
+    The valuation prices the book with fast quotes, which carry no fund
+    metadata; expense ratio and quote type only exist on the full quote. Rows
+    whose quote failed keep their valuation fields and simply arrive without
+    fund metadata, which the fee/overlap services report as unknown.
+    """
+    tickers = [h["ticker"] for h in holdings]
+    quotes = {
+        str(quote.get("ticker") or ""): quote
+        for quote in get_all_quotes(tickers)
+        if not quote.get("error")
+    }
+    return [{**quotes.get(h["ticker"], {}), **h} for h in holdings]
 
 
 def _record_reduction(holding, old_shares, new_shares, db, *, sale_price=None, sale_date=None):
@@ -806,6 +825,39 @@ async def get_confidence_spectrum(portfolio_id: int = 1, db: Session = Depends(g
         portfolio_id=portfolio_id, db=db, force_local=True
     )
     return compute_confidence_spectrum(result, sig_payload.get("signals") or {})
+
+
+@router.get("/fee-drag")
+async def get_portfolio_fee_drag(
+    portfolio_id: int = 1,
+    horizon_years: int = Query(10, ge=0, le=40),
+    db: Session = Depends(get_db),
+):
+    """What the portfolio's funds cost in fees — per year and over `horizon_years`.
+
+    Only ETFs/funds carry an expense ratio; stocks are excluded rather than
+    counted as unknown. A fund whose ratio is missing or implausible is listed
+    as fee-unknown, never charged $0. The long-horizon number assumes a constant
+    growth rate, stated in the payload's `assumptions`.
+    """
+    _require_portfolio(portfolio_id, db)
+    valuation = portfolio_valuation.evaluate(db, portfolio_id)
+    return compute_fee_drag(
+        _holdings_with_quote_data(valuation.holdings),
+        horizon_years=horizon_years,
+    )
+
+
+@router.get("/etf-overlap")
+async def get_portfolio_etf_overlap(portfolio_id: int = 1, db: Session = Depends(get_db)):
+    """Pairwise overlap between held ETFs, from each fund's top-10 holdings.
+
+    Top-10 only — the payload's `basis`/`caveat` say so. Funds without holdings
+    data are excluded and reported in `uncovered_tickers`.
+    """
+    _require_portfolio(portfolio_id, db)
+    valuation = portfolio_valuation.evaluate(db, portfolio_id)
+    return compute_etf_overlap(_holdings_with_quote_data(valuation.holdings))
 
 
 @router.get("/macro-alignment")

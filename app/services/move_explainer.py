@@ -8,14 +8,19 @@ import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 import yfinance as yf
 
+from app.services.edgar_service import get_recent_filings
 from app.services.security_type import SecurityType, classify_security
 
 logger = logging.getLogger(__name__)
+
+# A filing can only explain today's move if it's days old, not months. Five
+# calendar days covers a weekend plus the day either side of it.
+_FILING_LOOKBACK_DAYS = 5
 
 SECTOR_ETF_MAP: dict[str, str] = {
     "Technology": "XLK",
@@ -112,6 +117,37 @@ class HoldingMoveSummary:  # pylint: disable=too-many-instance-attributes
     explanation_text: str = ""
     is_etf: bool = False
     volume_vs_avg: Optional[float] = None
+
+
+def _recent_filing_catalysts(
+    ticker: str, *, lookback_days: int = _FILING_LOOKBACK_DAYS
+) -> list[FilingCatalyst]:
+    """Filings fresh enough to plausibly explain today's move.
+
+    EDGAR trouble is never allowed to sink an explanation — the rest of the
+    summary stands on its own.
+    """
+    cutoff = (date.today() - timedelta(days=lookback_days)).isoformat()
+    try:
+        rows = get_recent_filings(ticker, limit=5)
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.debug("Filing lookup failed for %s: %s", ticker, type(exc).__name__)
+        return []
+
+    catalysts = []
+    for row in rows:
+        filed_at = str(row.get("filed_at") or "")
+        if not filed_at or filed_at < cutoff:
+            continue
+        catalysts.append(
+            FilingCatalyst(
+                filing_type=row.get("form", ""),
+                title=row.get("label", ""),
+                url=row.get("url", ""),
+                filed_at=filed_at,
+            )
+        )
+    return catalysts
 
 
 def _day_change_pct(ticker: str) -> float:
@@ -329,6 +365,7 @@ def explain_move(  # pylint: disable=too-many-branches,too-many-statements
     stock_data: dict,
     shared_benchmarks: Optional[dict] = None,
     _benchmark_cache: Optional[dict] = None,
+    include_filings: bool = False,
 ) -> HoldingMoveSummary:
     """
     Explain why this holding moved today.
@@ -336,6 +373,9 @@ def explain_move(  # pylint: disable=too-many-branches,too-many-statements
     Pass shared_benchmarks={SPY: pct, QQQ: pct} from get_benchmark_data() to
     avoid refetching those across multiple holdings.  _benchmark_cache is a
     mutable dict shared across calls to cache per-ticker primary benchmarks.
+
+    include_filings costs one EDGAR round trip, so it stays off for callers
+    looping over a whole portfolio and on for a single holding on demand.
     """
     ticker = str(stock_data.get("ticker", "UNKNOWN")).upper()
     day_chg_pct = float(stock_data.get("day_change_pct") or 0)
@@ -722,7 +762,11 @@ def explain_move(  # pylint: disable=too-many-branches,too-many-statements
         attribution_type=attribution_type,
         drivers=drivers[:5],
         confidence=confidence,
-        filings=[],
+        filings=(
+            _recent_filing_catalysts(ticker)
+            if include_filings and not is_etf
+            else []
+        ),
         macro_context=macro,
         explanation_text=explanation,
         is_etf=is_etf,

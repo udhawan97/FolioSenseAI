@@ -1491,6 +1491,70 @@
                 </div>
             </div>
             <div class="row g-3 g-md-4 mb-3">
+                <div class="col-12 col-lg-6">
+                    <div class="card bg-dark border-secondary h-100 analytics-chart-card" id="fee-drag-card">
+                        <div class="card-header d-flex align-items-center gap-2">
+                            <i class="bi bi-receipt-cutoff analytics-card-icon"></i>
+                            <div class="analytics-card-titles">
+                                <span>What your funds cost</span>
+                                <span class="analytics-card-sub">expense ratio fee drag</span>
+                            </div>
+                            <button class="tip-trigger ms-auto"
+                                data-tip-title="Fund Fees"
+                                data-tip-body="What the funds you hold charge each year. Only funds carry an expense ratio — individual stocks are left out rather than counted as free, and a fund whose ratio can't be read is named as unknown."
+                                data-tip-hint="The long-horizon figure is a projection"
+                                data-tip-icon="bi-receipt-cutoff">
+                                <i class="bi bi-info-circle"></i>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div id="fee-drag-empty" class="perf-callout" style="display:none">
+                                <i class="bi bi-receipt-cutoff perf-callout-icon"></i>
+                                <div class="perf-callout-text">
+                                    <div class="perf-callout-title">No fund fees to show</div>
+                                    <div class="perf-callout-body" id="fee-drag-empty-body">Expense ratios come from funds. Add one to see what it costs you.</div>
+                                </div>
+                            </div>
+                            <div id="fee-drag-loading" class="analytics-skeleton" aria-hidden="true">
+                                <div class="shimmer-line"></div><div class="shimmer-line"></div>
+                            </div>
+                            <div id="fee-drag-body" aria-label="Fund fee drag"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-6">
+                    <div class="card bg-dark border-secondary h-100 analytics-chart-card" id="etf-overlap-card">
+                        <div class="card-header d-flex align-items-center gap-2">
+                            <i class="bi bi-intersect analytics-card-icon"></i>
+                            <div class="analytics-card-titles">
+                                <span>Where your funds repeat</span>
+                                <span class="analytics-card-sub">top-10 holdings overlap</span>
+                            </div>
+                            <button class="tip-trigger ms-auto"
+                                data-tip-title="Fund Overlap"
+                                data-tip-body="How much two funds hold the same names. Only each fund's top 10 published holdings are visible, so this is a floor on real overlap — never the whole picture."
+                                data-tip-hint="Top 10 holdings only"
+                                data-tip-icon="bi-intersect">
+                                <i class="bi bi-info-circle"></i>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div id="etf-overlap-empty" class="perf-callout" style="display:none">
+                                <i class="bi bi-intersect perf-callout-icon"></i>
+                                <div class="perf-callout-text">
+                                    <div class="perf-callout-title">Nothing to compare yet</div>
+                                    <div class="perf-callout-body" id="etf-overlap-empty-body">Overlap needs at least two funds with published holdings.</div>
+                                </div>
+                            </div>
+                            <div id="etf-overlap-loading" class="analytics-skeleton" aria-hidden="true">
+                                <div class="shimmer-line"></div><div class="shimmer-line"></div>
+                            </div>
+                            <div id="etf-overlap-body" aria-label="Fund overlap by pair"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="row g-3 g-md-4 mb-3">
                 <div class="col-12">
                     <div class="card bg-dark border-secondary h-100">
                         <div class="card-header d-flex align-items-center gap-2">
@@ -2141,6 +2205,18 @@
             <!-- ── Grouped feed (always visible once loaded) ──────────── -->
             <div class="news-feed-wrap" id="news-feed-wrap" hidden>
                 <!-- Populated by JS — one .news-group per holding -->
+            </div>
+
+            <!-- ── SEC filings timeline (local-safe, no Claude needed) ── -->
+            <div class="filings-wrap" id="filings-wrap" hidden>
+                <div class="filings-head">
+                    <i class="bi bi-file-earmark-text" aria-hidden="true"></i>
+                    <h3 class="filings-title">Straight from the filings</h3>
+                    <span class="filings-sub">What your companies told the SEC — public record, no middleman.</span>
+                </div>
+                <div class="filings-body" id="filings-body">
+                    <!-- Populated by JS — one .filing-group per filer -->
+                </div>
             </div>
 
             <!-- ── Empty state ────────────────────────────────────────── -->

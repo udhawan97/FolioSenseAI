@@ -1,3 +1,88 @@
+# FolioOrb v5.5.0 Release Notes
+
+**Release date:** July 17, 2026
+
+## Headline
+
+FolioOrb now reads the primary sources directly: what your companies filed with
+the SEC, what the Treasury says the yield curve is doing, and what your funds
+actually charge you. All of it public, keyless, and free — no account, no key,
+no middleman.
+
+## What's New
+
+### 🗂️ Straight from the filings
+
+The News tab now shows what your companies told the SEC — material events (8-K),
+quarterly and annual reports (10-Q, 10-K), and proxy statements — pulled straight
+from EDGAR and linked to the source document. A filing from the last few days
+also shows up as a possible catalyst in that holding's move explanation.
+
+Only operating companies file with the SEC. Funds, crypto, and most foreign
+listings have no filing record at all, so they are named as non-filers rather
+than displayed as companies that happened to file nothing. No Claude key is
+needed; filings work the same on Local Intelligence.
+
+### 📐 The curve, and where fear actually sits
+
+The market backdrop now reads the US Treasury par yield curve — the 2s10s and
+3m10y spreads, published every business day — and reports where the VIX sits in
+its own five-year range, which says more than the number alone.
+
+An inverted curve is the bond market pricing cuts ahead, and it is one of the few
+signals allowed to shift verdict weights toward quality and away from momentum. A
+flat, normal, or steep curve is reported and left at that. If the curve cannot be
+reached, it says so and the rest of the backdrop carries on.
+
+### 💸 What your funds cost you
+
+A new Exposure card turns each fund's expense ratio into the number that matters:
+dollars per year at your position size, and what that compounds to over a decade —
+including the growth those fees never got to earn. The long-horizon figure is a
+projection under a stated growth assumption, and the assumption is printed next to
+it. A fund whose fee cannot be read is listed as fee-unknown, never charged $0.
+
+### 🧬 Whether your ETFs are the same bet
+
+Holding three funds is not diversification if they hold the same companies. A new
+card compares each pair of your ETFs across their top 10 published holdings and
+shows what they share. It says exactly what it measured: top-10 overlap is a floor,
+not the whole book.
+
+### 🎯 Earnings with the bar attached
+
+The earnings radar now carries the consensus EPS estimate for the upcoming report
+and how often the company beat that estimate over the last four quarters — so
+"reports in 3 days" arrives with the bar it is expected to clear. When there is no
+estimate, the date still shows and FolioOrb does not guess.
+
+## Fixed
+
+### 🛡️ Fund fees were reading 100× too high
+
+Yahoo reports expense ratios in two units that are exactly 100× apart, and
+FolioOrb used whichever arrived first. The result: an ETF's fee could be scored in
+the most expensive tier when it was in fact among the cheapest — a 0.03% index fund
+read as "High" cost, quietly dragging its quality score and its verdict. Expense
+ratios are now normalized once, at the source, so the fee view, the ETF quality
+score, and the dashboard all agree.
+
+## Under the hood
+
+Each outside source now sits behind exactly one module — Yahoo, SEC EDGAR, and the
+Treasury curve — so a provider can be swapped, throttled, or degraded in one place
+instead of at every call site. The EDGAR client owns the SEC's two hard rules: a
+declared contact address and a ceiling of ten requests a second. Filings are fetched
+only for a single holding on demand, never for every holding on a dashboard load.
+
+FolioOrb now sends a contact address to the SEC because the SEC requires one. Set
+`FOLIO_SEC_CONTACT` in your `.env` to speak for yourself; it goes to the SEC and
+nowhere else, and creates no account. No schema migration is required, and
+installing over v5.4.2 preserves the existing SQLite database, holdings, trades,
+DCA history, settings, and API key.
+
+---
+
 # FolioOrb v5.4.2 Release Notes
 
 **Release date:** July 16, 2026

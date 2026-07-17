@@ -15,7 +15,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 
-from app.services.event_calendar import fetch_next_earnings
+from app.services.event_calendar import fetch_earnings_estimate, fetch_next_earnings
 from app.services.log_safety import sanitize_for_log
 from app.services.security_type import SecurityType, classify_security
 from app.services.stock_service import (
@@ -45,25 +45,33 @@ def _label(days_until: int) -> str:
     return f"In {days_until} days"
 
 
-def _resolve_earnings_iso(symbol: str) -> str | None:
-    """Next earnings date (ISO str) for one already-normalized symbol, or None.
+def _resolve_earnings(symbol: str) -> dict | None:
+    """Next earnings date and consensus estimate for one normalized symbol.
 
-    Cached for ``_RADAR_TTL``. Non-stocks (ETFs/funds/cash/crypto) and tickers
-    with no known date cache as None, so a flaky or irrelevant ticker isn't
-    re-classified or re-scraped on every call.
+    Cached for ``_RADAR_TTL`` as one record — the date and the estimate come
+    from different yfinance calls but are useless apart, and resolving them
+    together keeps the fan-out to a single pass.
+
+    Non-stocks (ETFs/funds/cash/crypto) and tickers with no known date cache as
+    None, so a flaky or irrelevant ticker isn't re-classified or re-scraped on
+    every call.
     """
     now = time.monotonic()
     cached = _RADAR_CACHE.get(symbol)
     if cached and cached[0] > now:
         return cached[1]
 
-    iso: str | None = None
+    resolved: dict | None = None
     try:
         info = get_ticker_info(symbol)
         if classify_security(symbol, info) == SecurityType.STOCK:
             earnings = fetch_next_earnings(symbol)
             if earnings is not None:
-                iso = earnings.isoformat()
+                resolved = {
+                    "iso": earnings.isoformat(),
+                    # A date with no estimate is still worth showing.
+                    "estimate": fetch_earnings_estimate(symbol, earnings),
+                }
     except Exception as exc:  # pylint: disable=broad-except
         # One bad ticker must never break the fan-out. Cache None below so it
         # isn't retried on every call until the TTL lapses.
@@ -71,8 +79,8 @@ def _resolve_earnings_iso(symbol: str) -> str | None:
             "earnings_radar: resolve failed; ticker=%s exception_type=%s",
             sanitize_for_log(symbol), type(exc).__name__,
         )
-    _RADAR_CACHE[symbol] = (now + _RADAR_TTL, iso)
-    return iso
+    _RADAR_CACHE[symbol] = (now + _RADAR_TTL, resolved)
+    return resolved
 
 
 def get_earnings_events(
@@ -98,9 +106,9 @@ def get_earnings_events(
     if not symbols:
         return []
 
-    resolved: dict[str, str | None] = {}
+    resolved: dict[str, dict | None] = {}
     with ThreadPoolExecutor(max_workers=min(_MAX_WORKERS, len(symbols))) as pool:
-        futures = {pool.submit(_resolve_earnings_iso, s): s for s in symbols}
+        futures = {pool.submit(_resolve_earnings, s): s for s in symbols}
         try:
             for future in as_completed(futures, timeout=_FETCH_TIMEOUT):
                 symbol = futures[future]
@@ -121,7 +129,8 @@ def get_earnings_events(
     today = date.today()
     events: list[dict] = []
     for symbol in symbols:
-        iso = resolved.get(symbol)
+        record = resolved.get(symbol)
+        iso = (record or {}).get("iso")
         if not iso:
             continue
         try:
@@ -131,11 +140,15 @@ def get_earnings_events(
         days_until = (earnings_date - today).days
         if days_until < 0 or days_until > window_days:
             continue
+        estimate = record.get("estimate") or {}
         events.append({
             "ticker": symbol,
             "date": iso,
             "days_until": days_until,
             "label": _label(days_until),
+            "eps_estimate": estimate.get("eps_estimate"),
+            "beats": estimate.get("beats"),
+            "quarters": estimate.get("quarters"),
         })
 
     events.sort(key=lambda event: (event["days_until"], event["ticker"]))

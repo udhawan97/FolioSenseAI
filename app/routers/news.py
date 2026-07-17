@@ -11,10 +11,16 @@ GET /api/news/feed   — Always available (local-safe). Returns grouped news
 GET /api/news/themes — Claude mode only. Heartbeat-gated; cached by headline
                        signature so re-opening the zone costs 0 extra tokens;
                        returns HTTP 503 when Claude is unreachable or fails.
+
+GET /api/news/filings — Always available (local-safe). Recent SEC filings per
+                       holding, straight from EDGAR. Only operating companies
+                       file: funds and crypto are reported as non-filers rather
+                       than as companies that happened to file nothing.
 """
 import hashlib
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -23,6 +29,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Holding
 from app.services.ai_service import generate_news_themes, get_cached_claude_heartbeat
+from app.services.edgar_service import get_cik, get_recent_filings
 from app.services.news_service import (
     build_themes_snapshot,
     fetch_portfolio_news,
@@ -36,6 +43,10 @@ router = APIRouter(prefix="/api/news", tags=["news"])
 # Keyed by SHA-1 of the headline set — identical feeds cost 0 Claude tokens.
 _THEMES_CACHE: dict[str, tuple[float, dict]] = {}
 _THEMES_TTL = 30 * 60  # 30 min
+
+# ── Filings timeline ──────────────────────────────────────────────────────────
+_FILINGS_PER_HOLDING = 5
+_FILINGS_WORKERS = 8
 
 
 # ── Shared helpers ─────────────────────────────────────────────────────────────
@@ -174,3 +185,78 @@ async def get_news_themes(portfolio_id: int = 1, db: Session = Depends(get_db)):
     }
     _THEMES_CACHE[sig] = (now + _THEMES_TTL, result)
     return result
+
+
+@router.get("/filings")
+async def get_portfolio_filings(portfolio_id: int = 1, db: Session = Depends(get_db)):
+    """
+    Recent SEC filings for every active holding — always available, no AI.
+
+    Only operating companies have a CIK, so funds, crypto and most foreign
+    listings are flagged ``is_filer: false`` instead of being shown as
+    companies that filed nothing. EDGAR trouble degrades to empty timelines
+    with ``degraded: true`` rather than an error page.
+    """
+    holdings = _get_active_holdings(db, portfolio_id)
+    tickers = [normalize_ticker(h.ticker) for h in holdings]
+
+    degraded = False
+
+    def _filings_for(ticker: str) -> tuple[str, bool, list[dict]]:
+        try:
+            if not get_cik(ticker):
+                return ticker, False, []
+            return ticker, True, get_recent_filings(ticker, limit=_FILINGS_PER_HOLDING)
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.debug(
+                "Filing lookup failed; ticker=%s exception_type=%s",
+                ticker,
+                type(exc).__name__,
+            )
+            raise
+
+    results: dict[str, tuple[bool, list[dict]]] = {}
+    if tickers:
+        # EDGAR throttles at the service layer; a pool just stops one slow
+        # holding from stalling the rest.
+        with ThreadPoolExecutor(max_workers=_FILINGS_WORKERS) as pool:
+            for ticker, future in [
+                (t, pool.submit(_filings_for, t)) for t in tickers
+            ]:
+                try:
+                    _, is_filer, filings = future.result()
+                    results[ticker] = (is_filer, filings)
+                except Exception:  # pylint: disable=broad-except
+                    degraded = True
+                    results[ticker] = (True, [])
+
+    enriched: list[dict] = []
+    not_filers: list[str] = []
+    for h in holdings:
+        ticker = normalize_ticker(h.ticker)
+        is_filer, filings = results.get(ticker, (True, []))
+        if not is_filer:
+            not_filers.append(ticker)
+        brief = _holding_info_brief(ticker)
+        enriched.append({
+            "ticker":       ticker,
+            "company_name": brief["company_name"],
+            "sector":       brief["sector"],
+            "is_watchlist": bool(h.is_watchlist),
+            "is_filer":     is_filer,
+            "filings":      filings,
+        })
+
+    # Holdings with fresh filings first; then filers; then the rest by ticker.
+    enriched.sort(key=lambda h: (
+        not h["filings"],
+        not h["is_filer"],
+        h["ticker"],
+    ))
+
+    return {
+        "holdings":     enriched,
+        "not_filers":   not_filers,
+        "degraded":     degraded,
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+    }

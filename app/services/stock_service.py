@@ -138,6 +138,32 @@ def get_ticker_info(ticker: str) -> dict:
     return info
 
 
+def _normalized_expense_ratio(info: dict) -> float | None:
+    """Expense ratio as a fraction — 0.0003 means 0.03%.
+
+    yfinance reports the same fee in two units, exactly 100x apart: VFIAX comes
+    back with annualReportExpenseRatio 0.0086 *and* netExpenseRatio 0.86 for one
+    0.86% fund. ETFs generally only carry the percent form. Every consumer here
+    (etf_quality's cost tiers, the fee view, the UI) reads decimal, so the two
+    are reconciled once, at the chokepoint, rather than guessed at downstream.
+    """
+    def _number(value) -> float | None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        number = float(value)
+        if math.isnan(number) or number < 0:
+            return None
+        return number
+
+    already_decimal = _number(info.get("annualReportExpenseRatio"))
+    if already_decimal is not None:
+        return already_decimal
+    as_percent = _number(info.get("netExpenseRatio"))
+    if as_percent is not None:
+        return as_percent / 100.0
+    return None
+
+
 def get_stock_data(ticker: str) -> dict:
     """
     Fetch a full live quote for a single ticker via yfinance (no API key needed).
@@ -215,11 +241,7 @@ def get_stock_data(ticker: str) -> dict:
             "bid": bid,
             "ask": ask,
             "bid_ask_spread_pct": bid_ask_spread_pct,
-            "expense_ratio": (
-                info.get("annualReportExpenseRatio")
-                or info.get("expenseRatio")
-                or info.get("netExpenseRatio")
-            ),
+            "expense_ratio": _normalized_expense_ratio(info),
             "holdings_count": info.get("holdingsCount"),
             "pe_ratio": _round_or_none(info.get("trailingPE"), 2),
             "forward_pe": _round_or_none(info.get("forwardPE"), 2),

@@ -72,7 +72,7 @@ FolioOrb is the same dashboard whichever way you launch it — a local server th
 
 Most portfolio trackers stop at the number. Green means good, red means bad — and if you want to know *why*, that's a separate tab, a separate app, or a group chat with someone who read the news this morning and you didn't.
 
-FolioOrb closes that gap: holdings, live prices, risk math, market regime, news, and optional Claude-written narration, all in one place that runs on your own machine and reports to nobody. It doesn't connect to a brokerage and it doesn't place trades — but it will tell you, with a straight face, whether your "diversified" portfolio is actually just four tech stocks in a trench coat.
+FolioOrb closes that gap: holdings, live prices, risk math, market regime, news, SEC filings, and optional Claude-written narration, all in one place that runs on your own machine and reports to nobody. It doesn't connect to a brokerage and it doesn't place trades — but it will tell you, with a straight face, whether your "diversified" portfolio is actually just four tech stocks in a trench coat.
 
 | Do this | Get this |
 | --- | --- |
@@ -82,7 +82,10 @@ FolioOrb closes that gap: holdings, live prices, risk math, market regime, news,
 | 🧭 Open a ticker | A Hold / Add / Trim / Exit verdict with confidence, horizon, and scenario context |
 | ✅ Check the action plan | Bucketed portfolio moves with thesis text, priorities, and regime context |
 | 📈 Open Analytics | Performance, risk, exposure, beta, drawdown, volatility, sector tilt, and signals |
+| 💸 Check what your funds cost | Each fund's expense ratio as real dollars per year — and what it compounds to over a decade. "Fee unknown" stays unknown; it never quietly becomes $0 |
+| 🧬 Compare your ETFs | Whether the funds you own are quietly the same bet — pairwise overlap across their top-10 holdings, labelled for exactly what it measures |
 | 🗞️ Open News | Grouped headlines for everything you hold or watch, plus optional Claude themes |
+| 🗂️ Read the filings | What your companies actually told the SEC — 8-K, 10-Q, 10-K — pulled straight from EDGAR and linked to the source. Public record, no key, no middleman |
 | 📥 Import / export CSV | Move holdings in and out — a strict template locally, or let Claude map a messy brokerage export onto it |
 | 🔁 Set up a DCA plan | Mirror a recurring auto-invest locally: each interval's buy is priced at that day's *real* close and waits in a review bucket you apply — or undo — one tap at a time |
 | 🔐 Paste a Claude key | The dashboard validates it, verifies it reaches Anthropic, and connects live — no restart (disconnect any time) |

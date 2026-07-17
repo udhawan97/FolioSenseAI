@@ -15,6 +15,7 @@ import architecture from '../../assets/architecture.svg';
 | Backend | Python 3.11+, FastAPI 0.138.2, Uvicorn 0.48.0 |
 | Data | SQLite, SQLAlchemy 2.0.51, Pydantic 2.13.4 |
 | Market data | `yfinance` 1.5.1 and Yahoo Finance |
+| Public data | SEC EDGAR (filings) and US Treasury (yield curve) — keyless, public domain |
 | AI | Anthropic SDK 0.105.2, optional Claude calls (Haiku 4.5 + Sonnet 4.5), local deterministic fallback |
 | Frontend | Single HTML shell, Bootstrap 5.3.2, Bootstrap Icons, Chart.js 4.4.0, vanilla JavaScript |
 | Desktop | PyInstaller + pywebview native window, in-app auto-update |
@@ -24,8 +25,15 @@ import architecture from '../../assets/architecture.svg';
 
 The browser dashboard talks to the FastAPI app over HTTP/JSON. Routers are thin HTTP
 adapters: they validate request shapes, call domain modules, and translate domain errors
-into responses. The modules read/write SQLite, call Yahoo Finance for market data, and
-optionally call Anthropic Claude when narration is requested and a key is configured.
+into responses. The modules read/write SQLite, call Yahoo Finance for market data, read
+public filings and rates from SEC EDGAR and the US Treasury, and optionally call Anthropic
+Claude when narration is requested and a key is configured.
+
+Each outside source sits behind exactly one module — `stock_service` for Yahoo,
+`edgar_service` for the SEC, `treasury_yield_curve` for the curve — so a provider can be
+swapped, throttled, or degraded in one place instead of at every call site. `edgar_service`
+owns the SEC's two hard rules: a declared contact address, and a ceiling of ten requests a
+second.
 
 ## Portfolio integrity modules
 

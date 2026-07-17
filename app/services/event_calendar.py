@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 
 _EARNINGS_WINDOW_DAYS = 14
 _ADD_CONF_CAP_NEAR_EARNINGS = 55
+_EARNINGS_TABLE_LIMIT = 8
+_BEAT_LOOKBACK_QUARTERS = 4
 
 
 def _parse_earnings_date(info: dict) -> Optional[date]:
@@ -43,6 +45,76 @@ def fetch_next_earnings(ticker: str) -> Optional[date]:
     except Exception as exc:
         logger.debug(
             "Earnings fetch failed for %s: %s", sanitize_for_log(ticker), type(exc).__name__
+        )
+        return None
+
+
+def _fetch_earnings_table(ticker: str):
+    """yfinance's earnings table: one row per quarter, estimate + surprise."""
+    import yfinance as yf
+
+    return yf.Ticker(ticker).get_earnings_dates(limit=_EARNINGS_TABLE_LIMIT)
+
+
+def _parse_earnings_table(
+    table, on_date: date, *, lookback_quarters: int = _BEAT_LOOKBACK_QUARTERS
+) -> dict | None:
+    """Estimate for ``on_date`` plus how often the last quarters beat.
+
+    Returns None unless the table actually carries a row for that date — an
+    estimate attached to the wrong quarter is worse than no estimate.
+    """
+    if table is None or getattr(table, "empty", True):
+        return None
+
+    estimate = None
+    matched = False
+    for stamp, row in table.iterrows():
+        try:
+            row_date = stamp.date()
+        except AttributeError:
+            continue
+        if row_date != on_date:
+            continue
+        matched = True
+        raw = row.get("EPS Estimate")
+        if raw is not None and not _is_nan(raw):
+            estimate = round(float(raw), 4)
+        break
+
+    if not matched:
+        return None
+
+    # Surprise is only populated once a quarter has actually reported.
+    surprises = [
+        float(value)
+        for value in table.get("Surprise(%)", [])
+        if value is not None and not _is_nan(value)
+    ][:lookback_quarters]
+
+    return {
+        "eps_estimate": estimate,
+        "beats": sum(1 for s in surprises if s > 0),
+        "quarters": len(surprises),
+    }
+
+
+def _is_nan(value) -> bool:
+    try:
+        return value != value  # NaN is the only value unequal to itself
+    except Exception:  # pylint: disable=broad-except
+        return False
+
+
+def fetch_earnings_estimate(ticker: str, on_date: date) -> dict | None:
+    """EPS estimate and recent beat record for a ticker's ``on_date`` report."""
+    try:
+        return _parse_earnings_table(_fetch_earnings_table(ticker), on_date)
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.debug(
+            "Earnings estimate fetch failed for %s: %s",
+            sanitize_for_log(ticker),
+            type(exc).__name__,
         )
         return None
 

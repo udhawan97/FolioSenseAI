@@ -7,6 +7,27 @@ The full changelog lives in
 [`RELEASE_NOTES.md`](https://github.com/udhawan97/FolioOrb/blob/main/RELEASE_NOTES.md)
 in the repository. Highlights of the current release below.
 
+## v5.5.0 — Straight From the Source
+
+- **The filings, unfiltered.** The News tab shows what your companies actually told the SEC —
+  8-K, 10-Q, 10-K — pulled from EDGAR and linked to the source document. Funds and crypto are
+  named as non-filers, never shown as companies that filed nothing. No Claude key needed.
+- **The curve, and where fear actually sits.** The market backdrop reads the US Treasury yield
+  curve (2s10s, 3m10y) and reports where the VIX sits in its own five-year range. An inverted
+  curve nudges verdicts toward quality; flat, normal, and steep are reported and left alone.
+- **What your funds cost you.** Expense ratios as real dollars per year and over a decade,
+  with the growth assumption stated next to the projection. A fee that can't be read stays
+  unknown — never a quiet $0.
+- **Whether your ETFs are the same bet.** Pairwise overlap across your funds' top 10 published
+  holdings, labeled for exactly what it measures.
+- **Earnings with the bar attached.** The radar carries the consensus EPS estimate and the
+  recent beat record alongside the date.
+- **Fixed: fund fees read 100× too high.** An expense ratio could be scored in the most
+  expensive tier when it was among the cheapest, dragging that fund's quality score. Ratios are
+  now normalized once, at the source.
+- Installing over v5.4.2 keeps the existing database, holdings, trades, DCA history, settings,
+  and API key. No schema migration is required.
+
 ## v5.4.2 — Honest Valuation, Safer Ledgers
 
 - **Return math now matches the full investment.** Portfolio total-return percentage includes

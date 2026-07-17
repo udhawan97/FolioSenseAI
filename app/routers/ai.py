@@ -705,7 +705,9 @@ async def get_move_explanation(ticker: str):
     if stock_data.get("error"):
         raise HTTPException(status_code=404, detail=QUOTE_FETCH_ERROR)
 
-    summary = explain_move(stock_data)
+    # One holding, user-initiated: worth an EDGAR round trip for the filings
+    # that might explain the move. The /all loop below deliberately skips them.
+    summary = explain_move(stock_data, include_filings=True)
     return _summary_to_dict(summary)
 
 
