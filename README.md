@@ -84,6 +84,9 @@ FolioOrb closes that gap: holdings, live prices, risk math, market regime, news,
 | 📈 Open Analytics | Performance, risk, exposure, beta, drawdown, volatility, sector tilt, and signals |
 | 💸 Check what your funds cost | Each fund's expense ratio as real dollars per year — and what it compounds to over a decade. "Fee unknown" stays unknown; it never quietly becomes $0 |
 | 🧬 Compare your ETFs | Whether the funds you own are quietly the same bet — pairwise overlap across their top-10 holdings, labelled for exactly what it measures |
+| 💵 See what pays you | Annual dividend income at your position size, blended yield, and an ex-dividend heads-up. Non-payers are named, never counted as $0 |
+| 🕵️ Watch the insiders | Recent open-market buys and sells by a company's own officers and directors (SEC Form 4) — grants and tax withholding shown but never counted as conviction |
+| 📊 Read the financials | Revenue, margin, and EPS by year from what a company actually filed (SEC XBRL) — missing numbers stay blank, never a fabricated zero |
 | 🗞️ Open News | Grouped headlines for everything you hold or watch, plus optional Claude themes |
 | 🗂️ Read the filings | What your companies actually told the SEC — 8-K, 10-Q, 10-K — pulled straight from EDGAR and linked to the source. Public record, no key, no middleman |
 | 📥 Import / export CSV | Move holdings in and out — a strict template locally, or let Claude map a messy brokerage export onto it |

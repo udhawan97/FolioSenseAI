@@ -7,6 +7,24 @@ The full changelog lives in
 [`RELEASE_NOTES.md`](https://github.com/udhawan97/FolioOrb/blob/main/RELEASE_NOTES.md)
 in the repository. Highlights of the current release below.
 
+## v5.6.0 — Inside Out
+
+- **Insider activity (SEC Form 4).** Recent open-market buys and sells by a company's own
+  officers and directors, in each stock's expanded detail. Grants, gifts, and tax withholding
+  are shown but never counted as conviction; funds have no insiders and say so.
+- **Financials over time (SEC XBRL).** Revenue, net margin, and diluted EPS by fiscal year
+  from filed numbers, with revenue history stitched across the 2018 GAAP tag change. Missing
+  metrics stay blank, never a fabricated zero.
+- **Dividend income view.** Annual cash your holdings pay you at your position size, blended
+  yield, and an ex-dividend heads-up. Non-payers are named, never counted as $0.
+- **Filings in plain English.** 8-K item codes are labelled by what they report ("Results
+  announced," "Officer or director change") instead of raw numbers.
+- **Fixed: low-yield dividend yields read 100× too high.** yfinance reports dividend yield in
+  two fields 100× apart; a sub-1% yield rendered as tens of percent. Normalized once at the
+  source — Apple now reads 0.32%, not 32%.
+- Installing over v5.5.0 keeps the existing database, holdings, trades, DCA history, settings,
+  and API key. No schema migration is required.
+
 ## v5.5.0 — Straight From the Source
 
 - **The filings, unfiltered.** The News tab shows what your companies actually told the SEC —

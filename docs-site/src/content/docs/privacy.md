@@ -30,8 +30,9 @@ Every outbound call, and nothing else:
    dashboard to function.
 2. **US Treasury** (`home.treasury.gov`) — the daily par yield curve behind the market
    backdrop. A public file; no key, and nothing about you is sent.
-3. **SEC EDGAR** (`sec.gov`, `data.sec.gov`) — filings for the companies you hold. Public
-   record, no key. See the contact-address note below.
+3. **SEC EDGAR** (`sec.gov`, `data.sec.gov`) — filings, financial statements, and insider
+   (Form 4) records for the companies you hold. Public record, no key. See the
+   contact-address note below.
 4. **Anthropic Claude** — only when a key is configured and a Claude-backed feature is
    requested. No prompt is sent otherwise.
 5. **GitHub** (`api.github.com`, `github.com`) — only to check for and download updates.

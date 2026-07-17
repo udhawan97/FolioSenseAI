@@ -51,3 +51,15 @@ compares each pair of your ETFs and shows what they share.
 It compares each fund's **top 10 published holdings** — that's what's freely available, and
 the view says so rather than implying it has seen the full book. Two S&P-heavy funds will
 show a high overlap; that reading is real, but it's a floor, not the whole picture.
+
+## What your holdings pay you
+
+The income view is the other side of holding: not what your positions are worth, but what
+they pay *you*. It turns each holding's forward dividend rate into annual cash at your
+position size, totals it, and shows the blended yield across the holdings that actually pay.
+
+Holdings that pay nothing are named, never counted as $0 income padding the coverage. Each
+payer shows its yield on today's price, and an **ex-dividend heads-up** appears when a
+payment's cutoff date is near — the date by which you need to own the shares to collect the
+next one. A per-share dividend larger than the share price is rejected as bad data rather
+than trusted.

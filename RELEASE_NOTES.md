@@ -1,3 +1,65 @@
+# FolioOrb v5.6.0 Release Notes
+
+**Release date:** July 17, 2026
+
+## Headline
+
+FolioOrb now reads a company from the inside out — what its insiders are doing,
+what it actually earns, and what it pays you — all from primary sources that are
+public, keyless, and free.
+
+## What's New
+
+### 🕵️ Insider activity, straight from Form 4
+
+Expand any stock and see recent open-market buys and sells by the company's own
+officers and directors, pulled from SEC Form 4 filings. Only open-market trades
+count as conviction: option exercises, grants, gifts, and tax withholding are
+shown for completeness but never folded into the buy/sell headline, because they
+aren't decisions to buy or sell at the market. Funds and ETFs have no insiders,
+so they say so. Every row links to the filing on `sec.gov`.
+
+### 📊 Financials over time
+
+The same expanded view now charts revenue, net margin, and diluted EPS by fiscal
+year, from the numbers a company actually filed (SEC XBRL). Revenue bars scale to
+the window's own peak so the trend reads at a glance. A metric a company didn't
+file shows an em dash, never a fabricated zero, and the revenue history stitches
+across the GAAP tag change most large filers made around 2018.
+
+### 💵 What your holdings pay you
+
+A new Analytics card turns each holding's forward dividend rate into annual cash
+at your position size, totals it, and shows the blended yield across your payers.
+Holdings that pay nothing are named, never counted as $0 income. Each payer shows
+its yield and an ex-dividend heads-up when a payment's cutoff date is near.
+
+### 🏷️ Filings in plain English
+
+The filings timeline now labels each 8-K by what it reports — "Results announced,"
+"Officer or director change," "Shareholder vote" — instead of raw item codes.
+
+## Fixed
+
+### 🛡️ Dividend yields read 100× too high for low-yield stocks
+
+Same class of bug as the v5.5.0 expense-ratio fix. yfinance reports dividend yield
+in two fields with units 100× apart — `dividendYield` is a percent, the trailing
+field a fraction — while everything downstream expected a fraction, so a sub-1%
+yield rendered 100× too high (Apple showed a 32% dividend yield). Yield is now
+normalized once, preferring the unambiguous rate-over-price, so Apple reads 0.32%.
+
+## Under the hood
+
+The SEC EDGAR client gained a throttled company-facts fetch (XBRL financials) and a
+document fetch (Form 4), both behind the same contact-address and 10-requests-a-second
+rules as the filings timeline. Every new outside call is still keyless and public;
+`FOLIO_SEC_CONTACT` continues to let you speak for yourself. No schema migration is
+required, and installing over v5.5.0 preserves the existing database, holdings, trades,
+DCA history, settings, and API key.
+
+---
+
 # FolioOrb v5.5.0 Release Notes
 
 **Release date:** July 17, 2026

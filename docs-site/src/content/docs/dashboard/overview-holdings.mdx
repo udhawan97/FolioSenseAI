@@ -34,12 +34,26 @@ Expanding a ticker surfaces deeper context:
 - Peer-relative positioning within its sector
 - Event flags (earnings, dividends, and other calendar items)
 - Contribution breakdown — how much of your P&L this position is actually responsible for
+- **Insider activity** — recent open-market buys and sells by the company's own officers
+  and directors, from SEC Form 4
+- **Financials over time** — revenue, net margin, and diluted EPS by fiscal year, from
+  what the company actually filed
 - Equity or ETF-specific detail depending on the holding type
 
 The earnings radar carries the consensus **EPS estimate** for the upcoming report and how
 often the company has beaten that estimate over the last four quarters — so "reports in 3
 days" comes with the bar it's expected to clear. Coverage is thin for some tickers; when
 there's no estimate, the date still shows and the app just doesn't guess.
+
+The **insider activity** panel counts only open-market buys and sells as conviction — the
+signal that someone chose to put their own money in or take it out. Option exercises, grants,
+gifts, and tax withholding are shown for completeness but never counted, because they aren't
+decisions to buy or sell at the market. Funds and ETFs have no insiders, so they say so.
+
+The **financials** panel reads SEC XBRL data straight from filings — revenue bars scaled to
+the window's own peak, with net margin and EPS beside each year. A metric a company didn't
+file shows an em dash, never a fabricated zero, and the revenue history stitches across the
+GAAP tag change most large filers made around 2018.
 
 None of this requires Claude. It's all part of Local Intelligence, running deterministically
 against live market data. Claude, when connected, adds narration on top — not a replacement

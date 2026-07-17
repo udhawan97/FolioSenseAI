@@ -17,6 +17,10 @@ actually told the SEC. FolioOrb reads EDGAR directly — material events (8-K), 
 annual reports (10-Q, 10-K), and proxy statements — and links each one to the source
 document on `sec.gov`. No key, no account, no middleman: filings are public record.
 
+Each 8-K is labelled in plain English by what it reports — "Results announced," "Officer or
+director change," "Shareholder vote" — instead of raw SEC item codes like 2.02 or 5.02. A
+code the app doesn't recognise is shown as-is rather than guessed at.
+
 Only operating companies file with the SEC. Funds, crypto, and most foreign listings have
 no filing record at all, so they're named as non-filers rather than displayed as companies
 that happened to file nothing. When a recent filing lands within a few days of a price move,
