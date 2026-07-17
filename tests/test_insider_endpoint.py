@@ -54,3 +54,36 @@ def test_endpoint_rejects_a_malformed_ticker(monkeypatch):
         raised = exc.status_code == 422
     assert raised
     assert not called
+
+
+# --- fundamentals endpoint (same lazy, non-filer-safe contract) ---
+
+
+def test_fundamentals_endpoint_returns_the_service_payload(monkeypatch):
+    captured = {}
+
+    def _fake(ticker, **_kw):
+        captured["ticker"] = ticker
+        return {"ticker": ticker, "periods": [{"year": 2025, "revenue": 1.0}],
+                "data_quality": "live"}
+
+    monkeypatch.setattr(ai_router, "get_fundamentals", _fake)
+    result = asyncio.run(ai_router.get_fundamentals_endpoint("aapl"))
+    assert captured["ticker"] == "AAPL"
+    assert result["periods"][0]["year"] == 2025
+
+
+def test_fundamentals_endpoint_rejects_a_malformed_ticker(monkeypatch):
+    called = []
+    monkeypatch.setattr(
+        ai_router, "get_fundamentals", lambda t, **_kw: called.append(t) or {}
+    )
+    from fastapi import HTTPException
+
+    try:
+        asyncio.run(ai_router.get_fundamentals_endpoint("../x"))
+        raised = False
+    except HTTPException as exc:
+        raised = exc.status_code == 422
+    assert raised
+    assert not called

@@ -54,6 +54,7 @@ from app.services.stock_service import (
     ticker_shape_is_safe,
 )
 from app.services.insider_activity import get_insider_activity
+from app.services.fundamentals import get_fundamentals
 from app.services.investment_signal import (
     build_investment_signal,
     signal_to_dict,
@@ -726,6 +727,19 @@ async def get_insider_activity_endpoint(ticker: str):
     if not ticker_shape_is_safe(symbol):
         raise HTTPException(status_code=422, detail="Invalid ticker.")
     return get_insider_activity(symbol)
+
+
+@router.get("/fundamentals/{ticker}")
+async def get_fundamentals_endpoint(ticker: str):
+    """Annual revenue, net income, and diluted EPS from SEC XBRL filings.
+
+    Per-ticker and user-initiated. Funds and non-filers have no financials and
+    return an honest empty-but-live payload rather than an error.
+    """
+    symbol = (ticker or "").strip().upper()
+    if not ticker_shape_is_safe(symbol):
+        raise HTTPException(status_code=422, detail="Invalid ticker.")
+    return get_fundamentals(symbol)
 
 
 @router.get("/move-explanations/all")

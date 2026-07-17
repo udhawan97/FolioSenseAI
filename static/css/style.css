@@ -6423,6 +6423,79 @@ a.insider-link:hover { background: var(--surface-hover); }
 a.insider-link:hover .insider-out,
 a.insider-link:focus-visible .insider-out { opacity: 1; }
 
+/* ── Fundamentals over time (SEC XBRL) ──────────────────────────────────── */
+.intel-fundamentals {
+    padding: var(--intel-pad);
+    position: relative;
+    z-index: 3;
+    font-size: var(--intel-body-size);
+    line-height: 1.48;
+}
+
+.fund-note {
+    margin: 0.4rem 0 0;
+    font-size: 0.78rem;
+    color: var(--text-tertiary);
+}
+
+.fund-head,
+.fund-row {
+    display: grid;
+    grid-template-columns: 2.6rem 1fr 3.4rem 3rem 3rem;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.fund-head {
+    margin: 0.5rem 0 0.3rem;
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-tertiary);
+    text-align: right;
+}
+
+.fund-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.fund-year {
+    font-variant-numeric: tabular-nums;
+    font-size: 0.74rem;
+    color: var(--text-secondary);
+}
+
+.fund-bar-track {
+    height: 0.5rem;
+    border-radius: 999px;
+    background: var(--hairline-soft);
+    overflow: hidden;
+}
+
+.fund-bar-fill {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg,
+        color-mix(in srgb, var(--brand-cyan, var(--accent-blue)) 70%, transparent),
+        var(--brand-cyan, var(--accent-blue)));
+    min-width: 2px;
+}
+
+.fund-rev,
+.fund-margin,
+.fund-eps {
+    font-variant-numeric: tabular-nums;
+    font-size: 0.74rem;
+    text-align: right;
+    color: var(--text-secondary);
+}
+
+.fund-margin,
+.fund-eps { color: var(--text-tertiary); }
+
 .intel-coverage-section > .intel-coverage,
 .intel-move-section > .intel-move {
     flex: 1;

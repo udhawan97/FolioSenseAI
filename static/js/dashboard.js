@@ -732,6 +732,7 @@ let allocationFocusRefreshFrame = null;
 let cachedIntelligence = {};   // ticker → intelligence object (coverage data)
 let cachedExplanations = {};   // ticker → explanation object (move data)
 let cachedInsider = {};        // ticker → insider-activity object (SEC Form 4)
+let cachedFundamentals = {};   // ticker → fundamentals object (SEC XBRL facts)
 let intelligenceLoaded = false;
 let intelligenceLoading = false;
 let _aiSummariesLoading = false;
@@ -5338,6 +5339,55 @@ function renderInsiderActivity(section, data) {
     </div>`;
 }
 
+// ── Fundamentals over time (SEC XBRL) ────────────────────────────────────────
+//
+// Revenue, profit, and EPS from the numbers a company actually filed. Revenue
+// bars are scaled to the window's own peak so the trend reads at a glance; a
+// missing metric shows an em dash, never a fabricated zero.
+function renderFundamentals(section, data) {
+    if (!section) return;
+    if (!data) { section.innerHTML = ""; return; }
+
+    if (data.data_quality === "unavailable") {
+        section.innerHTML = `<div class="intel-fundamentals">
+            <div class="intel-label"><i class="bi bi-bar-chart-line" aria-hidden="true"></i><span>Financials</span></div>
+            <p class="fund-note">Couldn't reach SEC EDGAR just now — financials unavailable.</p>
+        </div>`;
+        return;
+    }
+
+    const periods = Array.isArray(data.periods) ? data.periods : [];
+    if (!periods.length) {
+        section.innerHTML = `<div class="intel-fundamentals">
+            <div class="intel-label"><i class="bi bi-bar-chart-line" aria-hidden="true"></i><span>Financials</span></div>
+            <p class="fund-note">No filed financials. ETFs and funds don't file company financials.</p>
+        </div>`;
+        return;
+    }
+
+    const peakRevenue = Math.max(...periods.map(p => Number(p.revenue) || 0), 0);
+    const money = (n) => isFiniteNumber(n) ? formatCompactNumber(n) : "—";
+    const rowsHtml = periods.map(p => {
+        const rev = Number(p.revenue) || 0;
+        const barPct = peakRevenue > 0 ? Math.round(rev / peakRevenue * 100) : 0;
+        const margin = isFiniteNumber(p.net_margin) ? `${Number(p.net_margin).toFixed(1)}%` : "—";
+        const eps = isFiniteNumber(p.eps_diluted) ? `$${Number(p.eps_diluted).toFixed(2)}` : "—";
+        return `<div class="fund-row">
+            <span class="fund-year">${escapeHtml(String(p.year))}</span>
+            <span class="fund-bar-track"><span class="fund-bar-fill" style="width:${barPct}%"></span></span>
+            <span class="fund-rev">${escapeHtml(money(p.revenue))}</span>
+            <span class="fund-margin" title="Net margin">${escapeHtml(margin)}</span>
+            <span class="fund-eps" title="Diluted EPS">${escapeHtml(eps)}</span>
+        </div>`;
+    }).join("");
+
+    section.innerHTML = `<div class="intel-fundamentals">
+        <div class="intel-label"><i class="bi bi-bar-chart-line" aria-hidden="true"></i><span>Financials · filed with the SEC</span></div>
+        <div class="fund-head"><span></span><span></span><span>Revenue</span><span title="Net margin">Margin</span><span title="Diluted EPS">EPS</span></div>
+        <div class="fund-rows">${rowsHtml}</div>
+    </div>`;
+}
+
 // ── Holding Coverage ("What It Covers") ──────────────────────────────────────
 
 const COVERAGE_TYPE_HINTS = {
@@ -6266,6 +6316,7 @@ function injectSummaryRows(tbody) {
                 <div class="intel-coverage-section"></div>
                 <div class="intel-move-section"></div>
                 <div class="intel-insider-section"></div>
+                <div class="intel-fundamentals-section"></div>
                 <div class="intel-verdict-section"></div>
                 <div class="intel-slow-hint" hidden>
                     <i class="bi bi-hourglass-split"></i>
@@ -6318,6 +6369,8 @@ function injectSummaryRows(tbody) {
         // quiet loading state until the lazy fetch lands.
         const insiderSectionA = expandRow.querySelector(".intel-insider-section");
         if (insiderSectionA) renderInsiderActivity(insiderSectionA, cachedInsider[ticker]);
+        const fundamentalsSectionA = expandRow.querySelector(".intel-fundamentals-section");
+        if (fundamentalsSectionA) renderFundamentals(fundamentalsSectionA, cachedFundamentals[ticker]);
 
         // Verdict section: render shimmer while intel is loading; render card when data arrives
         if (verdictSection) {
@@ -6349,6 +6402,8 @@ function renderExpandedTicker(ticker) {
     if (moveSection) renderMoveExplainer(moveSection, cachedExplanations[ticker], cachedIntelligence[ticker]);
     const insiderSectionB = expandRow.querySelector(".intel-insider-section");
     if (insiderSectionB) renderInsiderActivity(insiderSectionB, cachedInsider[ticker]);
+    const fundamentalsSectionB = expandRow.querySelector(".intel-fundamentals-section");
+    if (fundamentalsSectionB) renderFundamentals(fundamentalsSectionB, cachedFundamentals[ticker]);
     if (verdictSection) renderAiVerdict(verdictSection, cachedVerdicts[ticker], ticker);
     if (holdingIntelSettled(ticker)) {
         mainRow.classList.add("has-intel-ready");
@@ -10890,6 +10945,8 @@ function _renderAllExpandedIntelRows(tbody) {
         if (moveSection)     renderMoveExplainer(moveSection, cachedExplanations[ticker], cachedIntelligence[ticker]);
         const insiderSectionC = expandRow.querySelector(".intel-insider-section");
         if (insiderSectionC) renderInsiderActivity(insiderSectionC, cachedInsider[ticker]);
+        const fundamentalsSectionC = expandRow.querySelector(".intel-fundamentals-section");
+        if (fundamentalsSectionC) renderFundamentals(fundamentalsSectionC, cachedFundamentals[ticker]);
         if (verdictSection)  renderAiVerdict(verdictSection, cachedVerdicts[ticker], ticker);
     });
 }
@@ -10920,11 +10977,12 @@ async function loadTargetedHoldingIntelligence(ticker) {
         const moveP = fetch("/api/ai/move-explanations/all");
         const verdictSuffix = isLocalIntelligenceMode() ? "?force_local=true" : "";
         const verdictP = fetch(`/api/ai/investment-signal/${encodeURIComponent(normalized)}${verdictSuffix}`);
-        // Insider filings are keyless/public — loaded in both engines, not gated on Claude.
+        // Insider filings and financials are keyless/public — loaded in both engines.
         const insiderP = fetch(`/api/ai/insider-activity/${encodeURIComponent(normalized)}`);
+        const fundamentalsP = fetch(`/api/ai/fundamentals/${encodeURIComponent(normalized)}`);
 
-        const [intelRes, moveRes, verdictRes, insiderRes] = await Promise.allSettled([
-            intelP, moveP, verdictP, insiderP,
+        const [intelRes, moveRes, verdictRes, insiderRes, fundamentalsRes] = await Promise.allSettled([
+            intelP, moveP, verdictP, insiderP, fundamentalsP,
         ]);
 
         if (intelRes.status === "fulfilled" && intelRes.value.ok) {
@@ -10950,6 +11008,10 @@ async function loadTargetedHoldingIntelligence(ticker) {
 
         if (insiderRes?.status === "fulfilled" && insiderRes.value.ok) {
             cachedInsider[normalized] = await insiderRes.value.json();
+        }
+
+        if (fundamentalsRes?.status === "fulfilled" && fundamentalsRes.value.ok) {
+            cachedFundamentals[normalized] = await fundamentalsRes.value.json();
         }
     } catch (err) {
         console.warn(`Unable to refresh intelligence for ${normalized}:`, err);

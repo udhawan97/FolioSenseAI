@@ -234,6 +234,13 @@ def get_recent_filings(
     return list(filings)
 
 
+def fetch_company_facts(cik: str) -> str | None:
+    """Fetch a company's full XBRL fact set (financials), throttled like all EDGAR."""
+    if not cik:
+        return None
+    return _get(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json")
+
+
 def fetch_filing_document(url: str) -> str | None:
     """Fetch one filing document by URL, throttled like every EDGAR call.
 
