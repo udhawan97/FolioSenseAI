@@ -1,4 +1,7 @@
 """Tests for macro regime detection."""
+# The _fetch_closes stub must keep the real `period` keyword in its signature —
+# the caller passes it by name — even though the fake ignores it.
+# pylint: disable=unused-argument
 from app.services.market_regime import (
     _classify_risk,
     _classify_rates,

@@ -62,7 +62,7 @@ _FORM_LABELS = {
 }
 
 _lock = threading.Lock()
-_last_request_at = 0.0
+_THROTTLE: dict = {"last_request_at": 0.0}
 _TICKER_MAP_CACHE: dict = {"fetched_at": 0.0, "raw": None}
 _FILINGS_CACHE: dict[str, tuple[float, list[dict]]] = {}
 
@@ -74,12 +74,13 @@ def _user_agent() -> str:
 
 def _throttle() -> None:
     """Serialize EDGAR calls so the whole app can't exceed SEC's fair-access rate."""
-    global _last_request_at  # pylint: disable=global-statement
     with _lock:
-        wait = _MIN_REQUEST_INTERVAL - (time.monotonic() - _last_request_at)
+        wait = _MIN_REQUEST_INTERVAL - (
+            time.monotonic() - _THROTTLE["last_request_at"]
+        )
         if wait > 0:
             time.sleep(wait)
-        _last_request_at = time.monotonic()
+        _THROTTLE["last_request_at"] = time.monotonic()
 
 
 def _get(url: str) -> str | None:

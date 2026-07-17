@@ -118,8 +118,8 @@ def test_parse_carries_8k_item_codes():
 
 
 def test_parse_survives_a_malformed_payload():
-    assert _parse_filings('{"filings": {}}', cik="0000320193") == []
-    assert _parse_filings("not json", cik="0000320193") == []
+    assert not _parse_filings('{"filings": {}}', cik="0000320193")
+    assert not _parse_filings("not json", cik="0000320193")
 
 
 def test_parse_survives_ragged_arrays():
@@ -127,7 +127,7 @@ def test_parse_survives_ragged_arrays():
     ragged = json.dumps(
         {"filings": {"recent": {"form": ["8-K", "10-Q"], "filingDate": ["2026-06-10"]}}}
     )
-    assert _parse_filings(ragged, cik="0000320193") == []
+    assert not _parse_filings(ragged, cik="0000320193")
 
 
 def test_labels_are_human_readable():
@@ -164,17 +164,17 @@ def test_get_recent_filings_is_empty_for_an_etf_with_no_cik(monkeypatch):
     # honest empty state, not an error.
     monkeypatch.setattr(edgar_service, "_fetch_ticker_map", lambda: _TICKER_MAP)
     monkeypatch.setattr(edgar_service, "_fetch_submissions", lambda cik: _SUBMISSIONS)
-    assert get_recent_filings("VOO", force_refresh=True) == []
+    assert not get_recent_filings("VOO", force_refresh=True)
 
 
 def test_get_recent_filings_is_empty_when_edgar_is_unreachable(monkeypatch):
     monkeypatch.setattr(edgar_service, "_fetch_ticker_map", lambda: None)
     monkeypatch.setattr(edgar_service, "_fetch_submissions", lambda cik: None)
-    assert get_recent_filings("AAPL", force_refresh=True) == []
+    assert not get_recent_filings("AAPL", force_refresh=True)
 
 
 def test_get_recent_filings_is_empty_for_a_blank_ticker():
-    assert get_recent_filings("", force_refresh=True) == []
+    assert not get_recent_filings("", force_refresh=True)
 
 
 def test_get_recent_filings_serves_from_cache(monkeypatch):

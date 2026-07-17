@@ -40,7 +40,7 @@ def test_a_stale_filing_cannot_explain_todays_move(monkeypatch):
     monkeypatch.setattr(
         move_explainer, "get_recent_filings", lambda *a, **k: [_edgar_row(_days_ago(90))]
     )
-    assert _recent_filing_catalysts("AAPL") == []
+    assert not _recent_filing_catalysts("AAPL")
 
 
 def test_lookback_window_is_inclusive_of_its_edge(monkeypatch):
@@ -56,7 +56,7 @@ def test_lookback_window_is_inclusive_of_its_edge(monkeypatch):
 
 def test_no_filings_means_no_catalysts(monkeypatch):
     monkeypatch.setattr(move_explainer, "get_recent_filings", lambda *a, **k: [])
-    assert _recent_filing_catalysts("AAPL") == []
+    assert not _recent_filing_catalysts("AAPL")
 
 
 def test_edgar_trouble_never_breaks_a_move_explanation(monkeypatch):
@@ -64,13 +64,13 @@ def test_edgar_trouble_never_breaks_a_move_explanation(monkeypatch):
         raise RuntimeError("EDGAR down")
 
     monkeypatch.setattr(move_explainer, "get_recent_filings", _boom)
-    assert _recent_filing_catalysts("AAPL") == []
+    assert not _recent_filing_catalysts("AAPL")
 
 
 def test_rows_missing_a_date_are_skipped(monkeypatch):
     bad = {"form": "8-K", "label": "x", "url": "https://sec.gov/x", "filed_at": ""}
     monkeypatch.setattr(move_explainer, "get_recent_filings", lambda *a, **k: [bad])
-    assert _recent_filing_catalysts("AAPL") == []
+    assert not _recent_filing_catalysts("AAPL")
 
 
 # --- explain_move only pays for filings when asked ---
@@ -108,8 +108,8 @@ def test_explain_move_skips_filings_by_default(monkeypatch):
         lambda *a, **k: called.append("hit") or [],
     )
     summary = explain_move(_STOCK_DATA, shared_benchmarks=dict(_BENCHMARKS))
-    assert summary.filings == []
-    assert called == []  # no EDGAR round trip on the batch path
+    assert not summary.filings
+    assert not called  # no EDGAR round trip on the batch path
 
 
 def test_explain_move_attaches_filings_when_asked(monkeypatch):
@@ -142,5 +142,5 @@ def test_explain_move_never_looks_up_filings_for_an_etf(monkeypatch):
     summary = explain_move(
         etf_data, shared_benchmarks=dict(_BENCHMARKS), include_filings=True
     )
-    assert summary.filings == []
-    assert called == []
+    assert not summary.filings
+    assert not called

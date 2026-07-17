@@ -4,6 +4,7 @@ Earnings & event calendar — cap confidence near earnings for stocks.
 from __future__ import annotations
 
 import logging
+import math
 from datetime import date, datetime, timezone
 from typing import Optional
 
@@ -100,9 +101,10 @@ def _parse_earnings_table(
 
 
 def _is_nan(value) -> bool:
+    """True for the NaN that yfinance leaves in not-yet-reported quarters."""
     try:
-        return value != value  # NaN is the only value unequal to itself
-    except Exception:  # pylint: disable=broad-except
+        return math.isnan(float(value))
+    except (TypeError, ValueError):
         return False
 
 
