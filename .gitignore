@@ -54,3 +54,6 @@ logs/
 /settings.json
 /backups/
 /updates/
+
+# === Session memory (local only, not versioned) ===
+.remember/
