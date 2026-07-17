@@ -189,3 +189,21 @@ def test_get_recent_filings_serves_from_cache(monkeypatch):
     get_recent_filings("AAPL", force_refresh=True)
     get_recent_filings("AAPL")
     assert len(calls) == 1
+
+
+# --- fetching a filing document (Form 4 XML etc.) ---
+
+
+def test_fetch_filing_document_refuses_non_sec_hosts(monkeypatch):
+    # This function takes URLs that originated in parsed EDGAR data; if that
+    # data were ever poisoned, the fetcher must not become an SSRF vector.
+    calls: list[str] = []
+    monkeypatch.setattr(edgar_service, "_get", lambda url: calls.append(url) or "x")
+    assert edgar_service.fetch_filing_document("https://evil.example/form4.xml") is None
+    assert not calls
+
+
+def test_fetch_filing_document_fetches_sec_urls(monkeypatch):
+    monkeypatch.setattr(edgar_service, "_get", lambda url: "<xml/>")
+    url = "https://www.sec.gov/Archives/edgar/data/1/2/form4.xml"
+    assert edgar_service.fetch_filing_document(url) == "<xml/>"

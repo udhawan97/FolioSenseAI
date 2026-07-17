@@ -234,6 +234,17 @@ def get_recent_filings(
     return list(filings)
 
 
+def fetch_filing_document(url: str) -> str | None:
+    """Fetch one filing document by URL, throttled like every EDGAR call.
+
+    URLs here originate in parsed EDGAR data; if that data were ever poisoned,
+    this must not become a fetch-anything vector — sec.gov or nothing.
+    """
+    if not str(url or "").startswith("https://www.sec.gov/"):
+        return None
+    return _get(url)
+
+
 def get_cik(ticker: str, *, force_refresh: bool = False) -> str | None:
     """Resolve a ticker to its SEC CIK, or None if it isn't an SEC filer."""
     now = time.monotonic()
