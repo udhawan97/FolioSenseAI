@@ -7,6 +7,20 @@ The full changelog lives in
 [`RELEASE_NOTES.md`](https://github.com/udhawan97/FolioOrb/blob/main/RELEASE_NOTES.md)
 in the repository. Highlights of the current release below.
 
+## v5.7.0 — Reasons and Seasons
+
+- **Your thesis, on every holding.** Each expanded holding gets a box for the reason you own
+  it, in your own words. Claude never reads or writes it, it round-trips through CSV, and a
+  background refresh can't clobber an edit in progress.
+- **A dividend calendar.** The income card now shows which months pay you, not just the annual
+  total — twelve bars built from each payer's real trailing ex-dates, so a monthly REIT and a
+  quarterly stock land in their own months rather than an assumed rhythm.
+- **Honest about what the months mean.** They're ex-dividend months — the cutoffs to own each
+  payer — and the card says so, since cash lands later. A payer whose schedule can't be read
+  from history is named as unscheduled, never smeared across months nobody observed.
+- Installing over v5.6.0 keeps the existing database, holdings, trades, DCA history, settings,
+  and API key. No schema migration is required.
+
 ## v5.6.0 — Inside Out
 
 - **Insider activity (SEC Form 4).** Recent open-market buys and sells by a company's own

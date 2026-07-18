@@ -1,3 +1,61 @@
+# FolioOrb v5.7.0 Release Notes
+
+**Release date:** July 18, 2026
+
+## Headline
+
+Two things the market can't tell you: *why* you bought something, and *when* it
+pays you. This release adds both — your own thesis on every holding, and a
+month-by-month calendar of the income your portfolio is due.
+
+## What's New
+
+### 📓 Your thesis, on every holding
+
+Every expanded holding now has a **Your thesis** box: the reason you own the
+thing, in your own words. Write it when conviction is cheap and easy to
+articulate; read it back mid-drawdown, when it isn't.
+
+The text is yours alone — Claude never reads or writes it, and it stays in your
+local database like everything else. It already round-trips through CSV import
+and export, so it survives a move between machines. Editing is inline and safe:
+a background refresh can't clobber what you're typing, and a failed save leaves
+your words on screen rather than eating them.
+
+### 🗓️ When your dividends actually land
+
+The income card told you how much a year. It now also tells you *which months*.
+A twelve-month strip projects each payer's income into the months it actually
+pays, so the lumpy reality of dividend timing — three quiet months, then three
+payers at once — is visible instead of averaged away.
+
+The schedule comes from each holding's real trailing ex-dates, not an assumed
+quarterly rhythm: a monthly payer like a REIT shows twelve bars, a quarterly
+payer shows four, in its own months. The amounts come from the same forward
+dividend rate the rows above use, so a freshly raised dividend projects at the
+new rate on the established schedule.
+
+Two honesty rules carry over from the income view. The months shown are
+**ex-dividend months** — the cutoffs to own each payer — and the card says so,
+because the cash itself usually lands days to weeks later. And a payer whose
+schedule can't be read from history is named as unscheduled rather than smeared
+across months that were never observed.
+
+## Under the hood
+
+The dividend calendar's cadence inference is a pure function over injected
+ex-date history — no network in the projection path — so it is fully covered by
+offline tests. The one outside call reuses the same shape as the existing
+history fetches: keyless, day-keyed cache, bounded concurrency, pruned so a
+long-running desktop process can't accumulate stale entries. A calendar outage
+clears only the strip and leaves the income card itself standing.
+
+Thesis notes required no schema change — the `notes` column has existed since
+early versions and was simply never surfaced. Installing over v5.6.0 preserves
+the existing database, holdings, trades, DCA history, settings, and API key.
+
+---
+
 # FolioOrb v5.6.0 Release Notes
 
 **Release date:** July 17, 2026

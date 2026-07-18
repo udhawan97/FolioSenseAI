@@ -63,3 +63,20 @@ payer shows its yield on today's price, and an **ex-dividend heads-up** appears 
 payment's cutoff date is near — the date by which you need to own the shares to collect the
 next one. A per-share dividend larger than the share price is rejected as bad data rather
 than trusted.
+
+## When your dividends land
+
+Below the income rows, a twelve-month strip shows *which months* pay you. Dividend income is
+lumpy — three quiet months and then three payers at once — and an annual total hides that
+entirely.
+
+The schedule is read from each holding's **real trailing ex-dates**, not an assumed quarterly
+rhythm, so a monthly payer shows twelve bars and a quarterly payer shows four, each in its own
+months. The amounts come from the same forward dividend rate as the rows above, which means a
+recently raised dividend projects at the new rate on the established schedule.
+
+Two things the strip is careful about. The months are **ex-dividend months** — the cutoffs to
+own each payer — not pay dates; the cash itself usually arrives days to weeks later, and the
+card says so rather than implying money in hand. And a payer whose schedule can't be read from
+history is listed as **unscheduled** with its annual amount, rather than spread across months
+that were never actually observed.
