@@ -3954,7 +3954,75 @@ function renderIncome(data) {
         </div>
         ${blended ? `<p class="income-blended">${escapeHtml(blended)}</p>` : ""}
         <div class="income-rows">${rows}</div>
-        ${nonPayerNote}`;
+        ${nonPayerNote}
+        <div id="income-calendar"></div>`;
+}
+
+// ── Dividend calendar strip ──────────────────────────────────────────────────
+//
+// WHEN the income lands, month by month — cadence read from each payer's real
+// ex-date history, amounts from the same forward rate as the rows above. The
+// months shown are ex-dividend months (cash usually follows days to weeks
+// later), and a payer whose cadence can't be read is named as unscheduled,
+// never smeared across invented months.
+const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function renderIncomeCalendar(data) {
+    const host = document.getElementById("income-calendar");
+    if (!host) return;
+
+    const months = Array.isArray(data?.months) ? data.months : [];
+    const unscheduled = Array.isArray(data?.unscheduled) ? data.unscheduled : [];
+
+    const unscheduledNote = unscheduled.length
+        ? `<p class="income-cal-note">${escapeHtml(`Schedule unreadable for ${unscheduled.map(u => u.ticker).join(", ")} — kept off the calendar rather than guessed.`)}</p>`
+        : "";
+
+    if (!data?.has_data || !months.length) {
+        // No scheduled months at all: the honesty note (if any) still shows.
+        host.innerHTML = unscheduledNote;
+        return;
+    }
+
+    const peak = Math.max(...months.map(m => Number(m.total) || 0), 0);
+    const bars = months.map(m => {
+        const total = Number(m.total) || 0;
+        const [year, monthNo] = String(m.month || "").split("-").map(Number);
+        const label = MONTH_SHORT[(monthNo || 1) - 1] || "";
+        const height = peak > 0 ? Math.max(total > 0 ? 8 : 0, Math.round(total / peak * 100)) : 0;
+        const who = (m.payers || []).map(p => `${p.ticker} ${formatCurrency(p.amount)}`).join(" · ");
+        const tip = total > 0 ? `${label} ${year} — ${formatCurrency(total)}${who ? `: ${who}` : ""}` : `${label} ${year} — no ex-dividend dates`;
+        return `<div class="income-cal-col" title="${escapeHtml(tip)}">
+            <div class="income-cal-bar"><div class="income-cal-fill" style="height:${height}%"></div></div>
+            <span class="income-cal-month">${escapeHtml(label[0])}</span>
+        </div>`;
+    }).join("");
+
+    host.innerHTML = `<div class="income-cal">
+        <div class="income-cal-head">
+            <span class="income-cal-title">Next 12 months</span>
+            <span class="income-cal-total">${escapeHtml(formatCurrency(data.total_next_12m))} projected</span>
+        </div>
+        <div class="income-cal-bars">${bars}</div>
+        <p class="income-cal-basis">Months are ex-dividend months — the cutoffs to own each payer; cash usually lands shortly after.</p>
+        ${unscheduledNote}
+    </div>`;
+}
+
+async function loadIncomeCalendar() {
+    const host = document.getElementById("income-calendar");
+    if (!host) return;
+    try {
+        const res = await fetch("/api/portfolio/income-calendar");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        renderIncomeCalendar(await res.json());
+    } catch (err) {
+        // The strip is a bonus on the income card — a calendar outage clears
+        // it quietly and leaves the card itself standing.
+        console.warn("Dividend calendar fetch failed:", err);
+        host.replaceChildren();
+    }
 }
 
 async function loadIncome() {
@@ -3965,6 +4033,8 @@ async function loadIncome() {
         renderIncome(await res.json());
         _incomeLoaded = true;
         _toggleAnalyticsCard("income-card", true);
+        // The when-does-it-land strip rides on top; it never gates the card.
+        loadIncomeCalendar();
     } catch (err) {
         console.warn("Dividend income fetch failed:", err);
         _toggleAnalyticsCard("income-card", false);

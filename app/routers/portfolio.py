@@ -14,6 +14,7 @@ from app.services.stock_service import (
     ticker_shape_is_safe,
     validate_ticker_symbol,
 )
+from app.services import dividend_calendar
 from app.services import holdings_csv
 from app.services import portfolio_lifecycle
 from app.services import portfolio_valuation
@@ -872,6 +873,29 @@ async def get_portfolio_income(portfolio_id: int = 1, db: Session = Depends(get_
     _require_portfolio(portfolio_id, db)
     valuation = portfolio_valuation.evaluate(db, portfolio_id)
     return compute_portfolio_income(_holdings_with_quote_data(valuation.holdings))
+
+
+@router.get("/income-calendar")
+async def get_income_calendar(portfolio_id: int = 1, db: Session = Depends(get_db)):
+    """Which months pay you — the income card's payers projected over the next
+    twelve months from each one's real ex-date history.
+
+    A payerless portfolio returns an honest empty without a single history
+    fetch; a payer with unreadable history lands in ``unscheduled``, never
+    smeared across invented months.
+    """
+    _require_portfolio(portfolio_id, db)
+    valuation = portfolio_valuation.evaluate(db, portfolio_id)
+    income = compute_portfolio_income(_holdings_with_quote_data(valuation.holdings))
+    if not income["has_data"]:
+        return {"has_data": False, "months": [], "unscheduled": [],
+                "total_next_12m": 0.0, "basis": "ex_date"}
+    history = dividend_calendar.fetch_dividend_ex_dates(
+        [p["ticker"] for p in income["payers"]]
+    )
+    return dividend_calendar.build_income_calendar(
+        income["payers"], history, date.today()
+    )
 
 
 @router.get("/macro-alignment")
