@@ -1,30 +1,36 @@
 """
 app/services/stock_service.py
 
-Central data-fetching layer for all yfinance calls.
+Quotes, price history, and symbol search — Yahoo's fields as the app reads them.
+
+The vendor is not named in this module. Every read goes through
+``market_data``, the one place that imports yfinance. What lives *here* is what
+a quote means: which of Yahoo's several price fields to believe, how a dividend
+yield and an expense ratio are denominated, which symbols are safe to store or
+log, and how long each answer is worth keeping.
 
 Design note — shared `.info` cache:
   Every service that needs Yahoo Finance fundamentals (quotes, analyst recs,
-  holding intelligence, ETF profiles) calls `get_ticker_info()` instead of
-  `yf.Ticker(t).info` directly. This ensures the expensive network scrape
-  happens at most once per ticker per cache window and is reused everywhere,
-  eliminating the biggest source of repeated latency on dashboard load.
+  holding intelligence, ETF profiles) calls `get_ticker_info()` rather than
+  reading the seam itself, so the expensive scrape happens at most once per
+  ticker per cache window and is reused everywhere — the single biggest source
+  of repeated latency on dashboard load.
 """
 from __future__ import annotations
 
 import logging
 import math
 import re
-import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import pytz
-import yfinance as yf
 
 from app.config import settings
+from app.services import market_data
 from app.services.security_type import classify_security
+from app.services.ttl_cache import ttl_cache
 
 logger = logging.getLogger(__name__)
 
@@ -43,13 +49,10 @@ SUPPORTED_QUOTE_TYPES = {"EQUITY", "ETF", "MUTUALFUND", "CRYPTOCURRENCY", "INDEX
 # Populated from DEFAULT_HOLDINGS in .env; used when no ticker list is supplied.
 DEFAULT_HOLDINGS: list[str] = settings.DEFAULT_HOLDINGS
 
-# ── Cache tables ───────────────────────────────────────────────────────────────
-# Each entry is (expiry_monotonic, payload); stale entries are replaced on read.
-
-_INFO_CACHE: dict[str, tuple[float, dict]] = {}
-_QUOTE_CACHE: dict[str, tuple[float, dict]] = {}
-_HISTORY_CACHE: dict[tuple[str, str], tuple[float, list]] = {}
-
+# ── Cache windows ──────────────────────────────────────────────────────────────
+# Expiry, storage, and the force_refresh bypass live in `ttl_cache`; each fetcher
+# below says only how long its answer is worth keeping.
+#
 # TTLs in seconds.  Caches live longer while the market is closed because
 # prices and fundamentals barely move outside trading hours.
 _INFO_TTL = 300             # 5 min while open
@@ -59,6 +62,18 @@ _QUOTE_TTL_CLOSED = 900     # 15 min while closed
 _HISTORY_TTL = 300
 
 _EASTERN = pytz.timezone("America/New_York")
+
+
+class InfoUnavailable(RuntimeError):
+    """The `.info` read itself failed — not the same as Yahoo having nothing to say.
+
+    ``market_data`` reports both as absence, but this module has to tell them
+    apart: an empty record is an *answer* and is worth remembering for the
+    window, while an unreachable Yahoo has to be retried. Raising is what keeps
+    the failure out of the store, since ``ttl_cache`` remembers returns and
+    never raises. Every caller of `get_ticker_info` already guards it with
+    ``except Exception``, so this needs no handling it doesn't already get.
+    """
 
 
 # ── Pure helpers ───────────────────────────────────────────────────────────────
@@ -121,20 +136,22 @@ def _info_ttl() -> float:
 
 # ── Core fetch functions ───────────────────────────────────────────────────────
 
+@ttl_cache(ttl=_info_ttl, key=normalize_ticker)
 def get_ticker_info(ticker: str) -> dict:
     """
-    Fetch and cache yfinance `.info` for a ticker.
+    Fetch and cache Yahoo's full `.info` record for a ticker.
 
-    Call this instead of ``yf.Ticker(t).info`` directly so the expensive
-    Yahoo scrape happens at most once per ticker per cache window.
+    Call this instead of reading `market_data.get_info` directly so the
+    expensive Yahoo scrape happens at most once per ticker per cache window.
+
+    An empty record is remembered like any other answer — Yahoo says nothing
+    about some symbols, and re-asking every call won't change its mind. A read
+    that was *unavailable* raises `InfoUnavailable` instead, so a flaky network
+    is never pinned for the window as "this symbol has no data".
     """
-    symbol = normalize_ticker(ticker)
-    now = time.monotonic()
-    cached = _INFO_CACHE.get(symbol)
-    if cached and cached[0] > now:
-        return cached[1]
-    info = yf.Ticker(symbol).info or {}
-    _INFO_CACHE[symbol] = (now + _info_ttl(), info)
+    info = market_data.get_info(ticker)
+    if info is None:
+        raise InfoUnavailable("ticker info read unavailable")
     return info
 
 
@@ -213,19 +230,22 @@ def _normalized_dividend(info: dict, price) -> tuple[float | None, float | None]
     return (yld * px if px is not None else None), yld
 
 
+@ttl_cache(
+    ttl=_quote_ttl,
+    key=normalize_ticker,
+    # A quote that failed is never remembered, so the next caller retries
+    # instead of staring at an error for the whole window.
+    cache_when=lambda quote: not quote.get("error"),
+)
 def get_stock_data(ticker: str) -> dict:
     """
-    Fetch a full live quote for a single ticker via yfinance (no API key needed).
+    Fetch a full live quote for a single ticker from Yahoo (no API key needed).
 
     Returns a dict with price, change, range, valuation ratios, and metadata.
     On failure returns a dict with an ``"error"`` key so callers never raise.
     Results are cached for `_QUOTE_TTL` seconds.
     """
     ticker = normalize_ticker(ticker)
-    now = time.monotonic()
-    cached = _QUOTE_CACHE.get(ticker)
-    if cached and cached[0] > now:
-        return cached[1]
 
     try:
         info = get_ticker_info(ticker)
@@ -311,7 +331,6 @@ def get_stock_data(ticker: str) -> dict:
             "security_type": security_type,
             "error": None,
         }
-        _QUOTE_CACHE[ticker] = (now + _quote_ttl(), result)
         return result
 
     except Exception as exc:
@@ -326,33 +345,31 @@ def get_stock_data(ticker: str) -> dict:
         }
 
 
+@ttl_cache(ttl=_quote_ttl, key=normalize_ticker)
 def get_fast_quote(ticker: str) -> dict:
     """
-    Lightweight quote via yfinance ``fast_info`` — much faster than ``.info``.
+    Lightweight quote from the cheap price snapshot — much faster than ``.info``.
     Used for portfolio valuation on dashboard load.
-    Falls back to `get_stock_data` when ``fast_info`` returns no usable price.
+    Falls back to `get_stock_data` when the snapshot carries no usable price.
+
+    Every answer is remembered, the fallback included: a ticker whose snapshot
+    never carries a price must not re-run that network call on every dashboard
+    valuation refresh.
     """
     ticker = normalize_ticker(ticker)
-    cache_key = f"fast:{ticker}"
-    now = time.monotonic()
-    cached = _QUOTE_CACHE.get(cache_key)
-    if cached and cached[0] > now:
-        return cached[1]
-
-    def _fallback() -> dict:
-        # Cache the full-quote fallback under the fast key too, so a ticker whose
-        # fast_info never carries a price doesn't re-run the fast_info network call
-        # on every dashboard valuation refresh.
-        result = get_stock_data(ticker)
-        _QUOTE_CACHE[cache_key] = (now + _quote_ttl(), result)
-        return result
 
     try:
-        fi = yf.Ticker(ticker).fast_info
-        current_price = _fast_float(getattr(fi, "last_price", None))
-        prev_close = _fast_float(getattr(fi, "previous_close", None))
+        fast = market_data.get_fast_info(ticker)
+        if fast is None:
+            logger.warning(
+                "Fast quote unavailable, falling back to full fetch; ticker=%s", ticker
+            )
+            return get_stock_data(ticker)
+
+        current_price = _fast_float(fast.get("last_price"))
+        prev_close = _fast_float(fast.get("previous_close"))
         if current_price <= 0:
-            return _fallback()
+            return get_stock_data(ticker)
 
         if prev_close > 0:
             day_change = current_price - prev_close
@@ -361,12 +378,8 @@ def get_fast_quote(ticker: str) -> dict:
             day_change = 0.0
             day_change_pct = 0.0
 
-        year_high = _fast_float(
-            getattr(fi, "year_high", None) or getattr(fi, "fifty_two_week_high", None)
-        )
-        year_low = _fast_float(
-            getattr(fi, "year_low", None) or getattr(fi, "fifty_two_week_low", None)
-        )
+        year_high = _fast_float(fast.get("year_high"))
+        year_low = _fast_float(fast.get("year_low"))
         security_type = classify_security(ticker, None).value
 
         result = {
@@ -376,17 +389,17 @@ def get_fast_quote(ticker: str) -> dict:
             "prev_close": round(prev_close, 2),
             "day_change": round(day_change, 2),
             "day_change_pct": round(day_change_pct, 2),
-            "day_high": round(_fast_float(getattr(fi, "day_high", None), current_price), 2),
-            "day_low": round(_fast_float(getattr(fi, "day_low", None), current_price), 2),
+            "day_high": round(_fast_float(fast.get("day_high"), current_price), 2),
+            "day_low": round(_fast_float(fast.get("day_low"), current_price), 2),
             "fifty_two_week_high": round(year_high, 2) if year_high > 0 else 0,
             "fifty_two_week_low": round(year_low, 2) if year_low > 0 else 0,
             # Fields unavailable from fast_info; callers should upgrade to get_stock_data
             # if they need these ratios.
             "fifty_day_average": None,
             "two_hundred_day_average": None,
-            "volume": int(_fast_float(getattr(fi, "last_volume", None))),
+            "volume": int(_fast_float(fast.get("last_volume"))),
             "average_volume": 0,
-            "market_cap": int(_fast_float(getattr(fi, "market_cap", None))),
+            "market_cap": int(_fast_float(fast.get("market_cap"))),
             "enterprise_value": None,
             "total_revenue": None,
             "ebitda": None,
@@ -410,13 +423,12 @@ def get_fast_quote(ticker: str) -> dict:
             "dividend_yield": None,
             "dividend_rate": None,
             "ex_dividend_date": None,
-            "currency": str(getattr(fi, "currency", None) or "USD"),
+            "currency": str(fast.get("currency") or "USD"),
             "sector": "N/A",
             "quote_type": "ETF" if security_type == "ETF" else "EQUITY",
             "security_type": security_type,
             "error": None,
         }
-        _QUOTE_CACHE[cache_key] = (now + _quote_ttl(), result)
         return result
 
     except Exception as exc:
@@ -425,7 +437,7 @@ def get_fast_quote(ticker: str) -> dict:
             ticker,
             type(exc).__name__,
         )
-        return _fallback()
+        return get_stock_data(ticker)
 
 
 # ── Search and validation ──────────────────────────────────────────────────────
@@ -437,18 +449,9 @@ def suggest_tickers(query: str, limit: int = 3) -> list[dict]:
         return []
 
     try:
-        search = yf.Search(
-            query,
-            max_results=max(limit, 3),
-            news_count=0,
-            lists_count=0,
-            include_research=False,
-            raise_errors=False,
-            timeout=5,
-        )
         suggestions = []
         seen: set[str] = set()
-        for item in search.quotes or []:
+        for item in market_data.search(query, limit=max(limit, 3)):
             symbol = str(item.get("symbol") or "").upper().strip()
             if not symbol or symbol in seen or not ticker_shape_is_safe(symbol):
                 continue
@@ -541,8 +544,8 @@ def warm_caches(tickers: Optional[list[str]] = None) -> None:
     if not targets:
         return
     try:
-        # get_all_quotes fills both _QUOTE_CACHE and _INFO_CACHE (via get_ticker_info),
-        # so analyst recs and holding intelligence also benefit from the warmup.
+        # get_all_quotes warms both the quote cache and the `.info` cache (via
+        # get_ticker_info), so analyst recs and holding intelligence benefit too.
         get_all_quotes(targets)
         get_portfolio_quotes(targets)
     except Exception as exc:  # pylint: disable=broad-except
@@ -551,6 +554,13 @@ def warm_caches(tickers: Optional[list[str]] = None) -> None:
 
 # ── Historical price data ──────────────────────────────────────────────────────
 
+@ttl_cache(
+    ttl=_HISTORY_TTL,
+    key=lambda ticker, period: (ticker.upper(), period),
+    # An empty series means the fetch failed or the symbol has no history;
+    # neither is worth pinning for the window.
+    cache_when=bool,
+)
 def get_historical_prices(ticker: str, period: str = "1mo") -> list[dict]:
     """
     Return daily OHLCV data for a ticker.
@@ -558,41 +568,27 @@ def get_historical_prices(ticker: str, period: str = "1mo") -> list[dict]:
     Accepted period strings: "1d", "5d", "1mo", "3mo", "6mo", "1y", "2y",
     "5y", "10y", "ytd", "max".  Returns [] on fetch failure.
 
-    Rows where any OHLCV field is NaN or non-finite are silently dropped so
-    callers always receive JSON-safe floats (Starlette serializes with
-    allow_nan=False).
+    Bars where any OHLCV field is missing are silently dropped so callers always
+    receive JSON-safe floats (Starlette serializes with allow_nan=False); the
+    seam has already turned NaN and Inf into None by the time they arrive.
     """
-    cache_key = (ticker.upper(), period)
-    now = time.monotonic()
-    cached = _HISTORY_CACHE.get(cache_key)
-    if cached and cached[0] > now:
-        return cached[1]
-
-    try:
-        hist = yf.Ticker(ticker).history(period=period)
-        results = []
-        for date, row in hist.iterrows():
-            open_ = float(row["Open"])
-            high = float(row["High"])
-            low = float(row["Low"])
-            close = float(row["Close"])
-            volume = float(row["Volume"])
-            if not all(math.isfinite(v) for v in (open_, high, low, close, volume)):
-                continue
-            results.append({
-                "date": date.strftime("%Y-%m-%d"),
-                "open": round(open_, 2),
-                "high": round(high, 2),
-                "low": round(low, 2),
-                "close": round(close, 2),
-                "volume": int(volume),
-            })
-        if results:
-            _HISTORY_CACHE[cache_key] = (now + _HISTORY_TTL, results)
-        return results
-    except Exception as exc:
-        logger.error("Error fetching historical data; exception_type=%s", type(exc).__name__)
-        return []
+    results = []
+    for session in market_data.get_history(ticker, period=period):
+        open_, high, low, close, volume = (
+            session["open"], session["high"], session["low"],
+            session["close"], session["volume"],
+        )
+        if None in (open_, high, low, close, volume):
+            continue
+        results.append({
+            "date": session["date"],
+            "open": round(open_, 2),
+            "high": round(high, 2),
+            "low": round(low, 2),
+            "close": round(close, 2),
+            "volume": int(volume),
+        })
+    return results
 
 
 def get_daily_closes(ticker: str, start: str, end: str) -> dict[str, float]:
@@ -601,21 +597,20 @@ def get_daily_closes(ticker: str, start: str, end: str) -> dict[str, float]:
     (both inclusive). ``start``/``end`` are ISO date strings.
 
     Used by the DCA engine to price historical buys on the exact days they would
-    have executed. Non-finite or non-positive closes are dropped; returns ``{}``
-    on any fetch failure so callers can degrade gracefully.
+    have executed. Missing or non-positive closes are dropped; returns ``{}``
+    on an unparseable window so callers can degrade gracefully.
     """
     try:
-        # yfinance treats ``end`` as exclusive, so push it out a day to include it.
+        # ``end`` names the first day *not* included, so push it out a day.
         end_excl = (
             datetime.strptime(end, "%Y-%m-%d") + timedelta(days=1)
         ).strftime("%Y-%m-%d")
-        hist = yf.Ticker(ticker).history(start=start, end=end_excl)
-        out: dict[str, float] = {}
-        for dt, row in hist.iterrows():
-            close = float(row["Close"])
-            if math.isfinite(close) and close > 0:
-                out[dt.strftime("%Y-%m-%d")] = round(close, 2)
-        return out
-    except Exception as exc:
+    except ValueError as exc:
         logger.error("Error fetching daily closes; exception_type=%s", type(exc).__name__)
         return {}
+
+    return {
+        session["date"]: round(session["close"], 2)
+        for session in market_data.get_history(ticker, start=start, end=end_excl)
+        if session["close"] is not None and session["close"] > 0
+    }

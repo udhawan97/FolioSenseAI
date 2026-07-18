@@ -14,18 +14,17 @@ result, the same "nothing to show" honesty as the filings timeline.
 from __future__ import annotations
 
 import logging
-import time
 import xml.etree.ElementTree as ET
 from datetime import date, datetime, timedelta, timezone
 
 from app.services.edgar_service import fetch_filing_document, get_recent_filings
+from app.services.ttl_cache import ttl_cache
 
 logger = logging.getLogger(__name__)
 
 _WINDOW_DAYS = 90
 _MAX_FILINGS = 10  # one throttled fetch each; enough to cover a busy quarter
 _ACTIVITY_TTL = 6 * 3600
-_ACTIVITY_CACHE: dict[str, tuple[float, dict]] = {}
 
 # SEC transaction codes. P and S are real money changing hands on the open
 # market; everything else is plumbing or transfers.
@@ -167,14 +166,18 @@ def _summarize(transactions: list[dict], *, window_days: int = _WINDOW_DAYS) -> 
     }
 
 
-def get_insider_activity(ticker: str, *, force_refresh: bool = False) -> dict:
+@ttl_cache(
+    ttl=_ACTIVITY_TTL,
+    key=lambda ticker: (ticker or "").strip().upper(),
+    # Only a live read is remembered; an EDGAR outage is retried next call
+    # rather than pinned as "no insider activity" for six hours.
+    cache_when=lambda activity: activity["data_quality"] == "live",
+    copy=dict,
+)
+def get_insider_activity(ticker: str) -> dict:
     """Open-market insider trades for a ticker over the last 90 days."""
     symbol = (ticker or "").strip().upper()
     empty = _summarize([])
-
-    cached = _ACTIVITY_CACHE.get(symbol)
-    if not force_refresh and cached and cached[0] > time.monotonic():
-        return dict(cached[1])
 
     try:
         filings = get_recent_filings(symbol, forms=("4",), limit=_MAX_FILINGS)
@@ -204,5 +207,4 @@ def get_insider_activity(ticker: str, *, force_refresh: bool = False) -> dict:
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
-    _ACTIVITY_CACHE[symbol] = (time.monotonic() + _ACTIVITY_TTL, activity)
-    return dict(activity)
+    return activity

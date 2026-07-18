@@ -1,8 +1,8 @@
 """
 Timing signal helpers for FolioOrb verdicts.
 
-The module is deterministic after price history is supplied. yfinance history
-fetches are batched, de-duped, and cached by ticker for the current calendar day.
+The module is deterministic after price history is supplied. History fetches are
+batched, de-duped, and cached by ticker for the current calendar day.
 """
 from __future__ import annotations
 
@@ -12,13 +12,16 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from typing import Any, Iterable, Mapping
 
-import yfinance as yf
-
-from app.services.etf_price_signal import history_closes
+from app.services import market_data
+from app.services.ttl_cache import ttl_cache
 
 logger = logging.getLogger(__name__)
 
-_HISTORY_CACHE: dict[tuple[str, str, str], list[float]] = {}
+# Daily closes are a day's worth of truth, so the calendar date is part of the
+# key — that, not the clock, is what makes a stored series go out of date. The
+# TTL only stops yesterday's entries from outliving their usefulness on a
+# desktop process that never restarts.
+_HISTORY_TTL = 24 * 3600
 
 
 def _safe_log_value(value: Any) -> str:
@@ -262,77 +265,63 @@ def build_timing_signal(
 
 
 def _fetch_history_closes(ticker: str, period: str) -> list[float]:
-    try:
-        stock = yf.Ticker(ticker)
-        return history_closes(stock.history(period=period, auto_adjust=True))
-    except Exception as exc:  # pylint: disable=broad-except
-        logger.debug(
-            "Timing history fetch failed for %s; exception_type=%s",
-            _safe_log_value(ticker),
-            type(exc).__name__,
-        )
-        return []
+    """Usable daily closes for one ticker; empty when Yahoo can't be reached."""
+    return market_data.get_closes(ticker, period=period)
 
 
+@ttl_cache(
+    ttl=_HISTORY_TTL,
+    key=lambda ticker, period: (ticker.upper(), period, date.today().isoformat()),
+    copy=list,
+)
 def get_cached_history_closes(ticker: str, period: str = "1y") -> list[float]:
-    """Return cached daily closes for ticker/period/current day."""
-    symbol = ticker.upper()
-    key = (symbol, period, date.today().isoformat())
-    if key not in _HISTORY_CACHE:
-        _HISTORY_CACHE[key] = _fetch_history_closes(symbol, period)
-    return list(_HISTORY_CACHE[key])
+    """Return cached daily closes for ticker/period/current day.
+
+    The seam reports an unreachable Yahoo as absence rather than raising, so
+    ``[]`` is remembered for the day — the same answer a retry would produce,
+    without a fresh network call per read.
+    """
+    return _fetch_history_closes(ticker.upper(), period)
 
 
 def get_batched_history_closes(
     tickers: Iterable[str],
     period: str = "1y",
 ) -> dict[str, list[float]]:
-    """Concurrent, de-duped, same-day cached history fetch for verdict scans."""
+    """Concurrent, de-duped, same-day cached history fetch for verdict scans.
+
+    Peeks at the store first so a scan whose tickers are all cached — the
+    common case once a dashboard is warm — never pays to spin up a thread pool.
+    """
     symbols = sorted({str(t).upper() for t in tickers if t})
     if not symbols:
         return {}
 
     today = date.today().isoformat()
-    # Every lookup keys on TODAY's date, so a prior day's entries are provably
-    # dead weight — they can never be read again. Without this prune, a
-    # long-running desktop process accumulates one stale entry per
-    # (ticker, period) for every calendar day it's ever been used.
-    stale = [key for key in _HISTORY_CACHE if key[2] != today]
-    for key in stale:
-        del _HISTORY_CACHE[key]
-
-    results: dict[str, list[float]] = {}
-    missing: list[str] = []
-    for symbol in symbols:
-        key = (symbol, period, today)
-        if key in _HISTORY_CACHE:
-            results[symbol] = list(_HISTORY_CACHE[key])
-        else:
-            missing.append(symbol)
+    store = get_cached_history_closes.cache
+    missing = [s for s in symbols if (s, period, today) not in store]
 
     if missing:
         with ThreadPoolExecutor(max_workers=min(10, len(missing))) as pool:
             futures = {
-                pool.submit(_fetch_history_closes, symbol, period): symbol
+                pool.submit(get_cached_history_closes, symbol, period): symbol
                 for symbol in missing
             }
             for future in as_completed(futures):
                 symbol = futures[future]
                 try:
-                    closes = future.result()
+                    future.result()
                 except Exception as exc:  # pylint: disable=broad-except
                     logger.debug(
                         "Timing history future failed for %s; exception_type=%s",
-                        symbol,
+                        _safe_log_value(symbol),
                         type(exc).__name__,
                     )
-                    closes = []
-                _HISTORY_CACHE[(symbol, period, today)] = closes
-                results[symbol] = list(closes)
 
-    return results
+    # Every symbol is a cache hit by now, bar one whose fetch somehow raised.
+    return {symbol: get_cached_history_closes(symbol, period) for symbol in symbols}
 
 
 def clear_history_cache() -> None:
     """Test helper."""
-    _HISTORY_CACHE.clear()
+    get_cached_history_closes.cache_clear()

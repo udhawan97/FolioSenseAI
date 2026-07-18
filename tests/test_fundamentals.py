@@ -1,6 +1,8 @@
 """Tests for fundamentals-over-time (SEC XBRL company facts)."""
 import json
 
+import pytest
+
 from app.services import fundamentals
 from app.services.fundamentals import (
     _annual_series,
@@ -8,6 +10,14 @@ from app.services.fundamentals import (
     _revenue_series,
     get_fundamentals,
 )
+
+
+@pytest.fixture(autouse=True)
+def _clear_cache():
+    """Each test starts and ends with an empty per-company facts cache."""
+    fundamentals.get_fundamentals.cache_clear()
+    yield
+    fundamentals.get_fundamentals.cache_clear()
 
 
 def _rows(*triples):
@@ -122,7 +132,6 @@ def test_build_periods_caps_to_the_requested_window():
 
 
 def _wire(monkeypatch, *, cik, facts):
-    monkeypatch.setattr(fundamentals, "_FUNDAMENTALS_CACHE", {})
     monkeypatch.setattr(fundamentals, "get_cik", lambda t, **_k: cik)
     monkeypatch.setattr(fundamentals, "fetch_company_facts", lambda c: facts)
 
@@ -141,14 +150,14 @@ def test_get_fundamentals_for_a_non_filer_is_empty_but_live(monkeypatch):
     _wire(monkeypatch, cik=None, facts=None)
     result = get_fundamentals("VOO", force_refresh=True)
     assert result["data_quality"] == "live"
-    assert result["periods"] == []
+    assert not result["periods"]
 
 
 def test_get_fundamentals_when_edgar_is_unreachable(monkeypatch):
     _wire(monkeypatch, cik="0000320193", facts=None)
     result = get_fundamentals("AAPL", force_refresh=True)
     assert result["data_quality"] == "unavailable"
-    assert result["periods"] == []
+    assert not result["periods"]
 
 
 def test_get_fundamentals_survives_garbage_json(monkeypatch):
@@ -164,7 +173,6 @@ def test_get_fundamentals_is_cached(monkeypatch):
         calls.append(cik)
         return json.dumps({"facts": {"us-gaap": _GAAP}})
 
-    monkeypatch.setattr(fundamentals, "_FUNDAMENTALS_CACHE", {})
     monkeypatch.setattr(fundamentals, "get_cik", lambda t, **_k: "0000320193")
     monkeypatch.setattr(fundamentals, "fetch_company_facts", _facts)
     get_fundamentals("AAPL", force_refresh=True)

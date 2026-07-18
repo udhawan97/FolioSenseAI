@@ -241,16 +241,23 @@ def test_full_coverage_reports_complete(stub_holdings):
     assert not result["uncovered_tickers"]
 
 
-def test_fetch_seam_returns_nothing_when_yfinance_is_unreachable(monkeypatch):
+def test_fetch_seam_returns_nothing_when_the_fund_is_unknown(fake_market_data):
     """Offline, the network edge must hand back 'no data' — never raise into the
     endpoint. Everything above it then reports the fund as uncovered."""
-    def _boom(_ticker):
-        raise OSError("no network")
+    fake_market_data(fund_holdings={"QQQ": [{"symbol": "AAPL", "weight": 9.0}]})
 
-    monkeypatch.setattr("yfinance.Ticker", _boom)
-    etf_overlap._holdings_cache.clear()
+    assert not etf_overlap._fetch_top_holdings("VOO")
 
-    assert etf_overlap._fetch_top_holdings("VOO") == []
+
+def test_fetch_seam_passes_the_funds_own_rows_through(fake_market_data):
+    """The seam already answers in {symbol, name, weight}; caching is all this adds."""
+    rows = [{"symbol": "AAPL", "name": "Apple Inc", "weight": 7.2}]
+    fake = fake_market_data(fund_holdings={"VOO": rows})
+
+    assert etf_overlap._fetch_top_holdings("voo ") == rows
+    assert etf_overlap._fetch_top_holdings("VOO") == rows
+    # Second read came off the cache, not the seam.
+    assert fake.calls.count(("get_fund_holdings", "VOO")) == 1
 
 
 def test_watchlist_etfs_are_not_part_of_the_book(stub_holdings):

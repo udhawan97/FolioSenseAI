@@ -1,11 +1,11 @@
 """
 Tests for app/services/news_service.py — normalization, dedup, and
-feed-route integration.  No real network calls: yfinance is monkeypatched.
+feed-route integration.  No real network calls: articles come from the
+market-data seam's fake adapter.
 """
 # pylint: disable=protected-access
 import asyncio
 import time
-from unittest.mock import MagicMock
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -192,7 +192,7 @@ class TestArticleUrl:
 class TestFetchTickerNews:
     def test_rejects_unsafe_ticker(self):
         result = fetch_ticker_news("../../etc/passwd")
-        assert result == []
+        assert not result
 
     def test_unsafe_ticker_is_sanitized_before_logging(self, caplog):
         """A CR/LF in the rejected ticker must not inject a fake log line."""
@@ -203,66 +203,50 @@ class TestFetchTickerNews:
             assert "\n" not in record.getMessage()
             assert "\r" not in record.getMessage()
 
-    def test_returns_empty_list_on_yfinance_failure(self, monkeypatch):
-        # Clear the cache so this test hits the real fetch path.
-        news_service._NEWS_CACHE.clear()
+    def test_returns_empty_list_when_the_payload_cannot_be_read(self, fake_market_data):
+        """A payload the normalizer chokes on degrades to no news, never raises."""
+        fake_market_data(news={"AAPL": [{"content": "not a dict"}]})
 
-        def boom(_ticker):
-            raise RuntimeError("yfinance down")
+        assert not fetch_ticker_news("AAPL")
 
-        monkeypatch.setattr("app.services.news_service.yf.Ticker", boom)
-        result = fetch_ticker_news("AAPL")
-        assert result == []
+    def test_an_empty_read_is_not_remembered(self):
+        """The seam reads an unreachable Yahoo and a genuinely quiet symbol the
+        same way, so an empty answer has to stay retryable — pinning it would
+        show a whole window of "no news" after one transient failure."""
+        assert not fetch_ticker_news("AAPL")
+        assert "AAPL" not in news_service._cached_ticker_news.cache
 
-    def test_normalizes_and_sorts_newest_first(self, monkeypatch):
-        news_service._NEWS_CACHE.clear()
-
+    def test_normalizes_and_sorts_newest_first(self, fake_market_data):
         older = _make_raw_item(
             title="Old news", article_id="old", pub_date="2026-06-25T08:00:00Z"
         )
         newer = _make_raw_item(
             title="New news", article_id="new", pub_date="2026-06-27T14:00:00Z"
         )
-
-        mock_ticker = MagicMock()
-        mock_ticker.news = [older, newer]
-        monkeypatch.setattr(
-            "app.services.news_service.yf.Ticker", lambda _: mock_ticker
-        )
+        fake_market_data(news={"AAPL": [older, newer]})
 
         result = fetch_ticker_news("AAPL")
         assert len(result) == 2
         assert result[0]["title"] == "New news"
         assert result[1]["title"] == "Old news"
 
-    def test_cache_is_populated(self, monkeypatch):
-        news_service._NEWS_CACHE.clear()
-
-        mock_ticker = MagicMock()
-        mock_ticker.news = [_make_raw_item()]
-        monkeypatch.setattr(
-            "app.services.news_service.yf.Ticker", lambda _: mock_ticker
-        )
+    def test_cache_is_populated(self, fake_market_data):
+        fake_market_data(news={"MSFT": [_make_raw_item()]})
 
         fetch_ticker_news("MSFT")
-        assert "MSFT" in news_service._NEWS_CACHE
+        assert "MSFT" in news_service._cached_ticker_news.cache
 
-    def test_cache_hit_skips_network(self, monkeypatch):
+    def test_cache_hit_skips_network(self, fake_market_data):
         # Pre-populate the cache with a future expiry.
-        news_service._NEWS_CACHE["GOOG"] = (
+        news_service._cached_ticker_news.cache["GOOG"] = (
             time.monotonic() + 9999,
             [{"ticker": "GOOG", "title": "Cached"}],
         )
-        called = []
-        monkeypatch.setattr(
-            "app.services.news_service.yf.Ticker",
-            lambda _: called.append(True) or MagicMock(news=[]),
-        )
+        fake = fake_market_data(news={"GOOG": [_make_raw_item()]})
+
         result = fetch_ticker_news("GOOG")
-        assert not called
+        assert not fake.calls
         assert result[0]["title"] == "Cached"
-        # Cleanup
-        del news_service._NEWS_CACHE["GOOG"]
 
 
 # ── fetch_portfolio_news ──────────────────────────────────────────────────────
@@ -272,18 +256,10 @@ class TestFetchPortfolioNews:
         result = fetch_portfolio_news([])
         assert not result
 
-    def test_dedup_across_tickers(self, monkeypatch):
+    def test_dedup_across_tickers(self, fake_market_data):
         """An article returned under two tickers should appear only once."""
-        news_service._NEWS_CACHE.clear()
-
         shared_item = _make_raw_item(title="Shared story", article_id="shared-001")
-
-        def fake_ticker(_):
-            mock = MagicMock()
-            mock.news = [shared_item]  # same article for both tickers
-            return mock
-
-        monkeypatch.setattr("app.services.news_service.yf.Ticker", fake_ticker)
+        fake_market_data(news={"AAPL": [shared_item], "MSFT": [shared_item]})
 
         result = fetch_portfolio_news(["AAPL", "MSFT"])
         # Shared article must appear under exactly one ticker.
@@ -294,32 +270,20 @@ class TestFetchPortfolioNews:
         ]
         assert all_titles.count("Shared story") == 1
 
-    def test_one_bad_ticker_doesnt_break_others(self, monkeypatch):
-        news_service._NEWS_CACHE.clear()
-
+    def test_one_bad_ticker_doesnt_break_others(self, fake_market_data):
         good_item = _make_raw_item(title="Good news", article_id="good-001")
-
-        def fake_ticker(t):
-            if t == "BAD":
-                raise RuntimeError("yfinance exploded")
-            mock = MagicMock()
-            mock.news = [good_item]
-            return mock
-
-        monkeypatch.setattr("app.services.news_service.yf.Ticker", fake_ticker)
+        fake_market_data(news={
+            "GOOD": [good_item],
+            "BAD": [{"content": "not a dict"}],  # unreadable payload
+        })
 
         result = fetch_portfolio_news(["GOOD", "BAD"])
         assert "GOOD" in result
         assert len(result["GOOD"]) == 1
-        assert result.get("BAD", []) == []
+        assert not result.get("BAD", [])
 
-    def test_all_tickers_present_in_result(self, monkeypatch):
-        news_service._NEWS_CACHE.clear()
-
-        mock_ticker = MagicMock()
-        mock_ticker.news = []
-        monkeypatch.setattr("app.services.news_service.yf.Ticker", lambda _: mock_ticker)
-
+    def test_all_tickers_present_in_result(self):
+        """Nothing preloaded: every ticker still gets an entry, empty or not."""
         result = fetch_portfolio_news(["AAPL", "MSFT", "GOOG"])
         for t in ("AAPL", "MSFT", "GOOG"):
             assert t in result

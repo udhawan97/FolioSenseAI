@@ -1,31 +1,30 @@
 """
 app/services/news_service.py
 
-yfinance news fetching, normalization, dedup, and theme-snapshot building
-for the News zone.  Designed to be fully useful without any AI dependency —
-Claude is an optional enrichment layer added by the router.
+News fetching, normalization, dedup, and theme-snapshot building for the News
+zone.  Articles come from the ``market_data`` seam; everything downstream of the
+raw payload — the two article shapes Yahoo alternates between, dedup across a
+portfolio, and the Claude snapshot — lives here.  Designed to be fully useful
+without any AI dependency: Claude is an optional enrichment layer added by the
+router.
 """
 from __future__ import annotations
 
 import logging
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import yfinance as yf
-
+from app.services import market_data
 from app.services.log_safety import sanitize_for_log
 from app.services.stock_service import (
     _market_is_open,
     normalize_ticker,
     ticker_shape_is_safe,
 )
+from app.services.ttl_cache import ttl_cache
 
 logger = logging.getLogger(__name__)
 
-# ── Cache ─────────────────────────────────────────────────────────────────────
-# Each entry is (expiry_monotonic, payload); replaced on read when stale.
-_NEWS_CACHE: dict[str, tuple[float, list[dict]]] = {}
-
+# ── Cache window ──────────────────────────────────────────────────────────────
 _NEWS_TTL_OPEN   = 15 * 60   # 15 min while market open
 _NEWS_TTL_CLOSED = 60 * 60   # 60 min while market closed
 
@@ -107,11 +106,33 @@ def _normalize_item(item: dict, ticker: str) -> dict | None:
 
 # ── Single-ticker fetch ───────────────────────────────────────────────────────
 
+@ttl_cache(ttl=_news_ttl, key=normalize_ticker, cache_when=bool)
+def _cached_ticker_news(symbol: str) -> list[dict]:
+    """Normalized, newest-first articles for one already-validated symbol.
+
+    An empty result is never remembered. The seam reports an unreachable Yahoo
+    and a genuinely quiet symbol the same way — both are ``[]`` — so the only
+    honest reading of an empty list is "ask again", and pinning it would risk
+    showing a whole window of "no news" after one transient failure. The cost is
+    that a quiet symbol is re-asked; the alternative costs correctness.
+    """
+    items: list[dict] = []
+    for raw in market_data.get_news(symbol):
+        normalized = _normalize_item(raw, symbol)
+        if normalized:
+            items.append(normalized)
+    # Sort newest-first; ISO-8601 strings compare correctly lexicographically.
+    items.sort(key=lambda a: a["published_at"], reverse=True)
+    logger.debug("news_service: fetched %d articles for %s", len(items), symbol)
+    return items
+
+
 def fetch_ticker_news(ticker: str) -> list[dict]:
     """
     Fetch and cache news for a single ticker symbol.
     Returns a list of normalized article dicts (may be empty on failure).
-    Validates the ticker shape before any network call.
+    Validates the ticker shape before any network call — and before the cache,
+    so a hostile symbol can never claim an entry.
     """
     symbol = normalize_ticker(ticker)
     if not ticker_shape_is_safe(symbol):
@@ -121,23 +142,8 @@ def fetch_ticker_news(ticker: str) -> list[dict]:
         )
         return []
 
-    now    = time.monotonic()
-    cached = _NEWS_CACHE.get(symbol)
-    if cached and cached[0] > now:
-        return cached[1]
-
     try:
-        raw_news = yf.Ticker(symbol).news or []
-        items: list[dict] = []
-        for raw in raw_news:
-            normalized = _normalize_item(raw, symbol)
-            if normalized:
-                items.append(normalized)
-        # Sort newest-first; ISO-8601 strings compare correctly lexicographically.
-        items.sort(key=lambda a: a["published_at"], reverse=True)
-        _NEWS_CACHE[symbol] = (now + _news_ttl(), items)
-        logger.debug("news_service: fetched %d articles for %s", len(items), symbol)
-        return items
+        return _cached_ticker_news(symbol)
     except Exception as exc:  # pylint: disable=broad-except
         logger.warning(
             "news_service: fetch failed; ticker=%s exception_type=%s",

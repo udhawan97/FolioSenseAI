@@ -1,9 +1,10 @@
 """
 Tests for app/services/analyst_recommendation.py
-No real network calls — yfinance is mocked throughout.
+No real network calls — the `.info` record is stubbed and the market-data seam
+answers from the suite's fake adapter.
 """
 from contextlib import contextmanager
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from app.services.analyst_recommendation import (
     AnalystRec,
@@ -33,22 +34,18 @@ def _make_info(**kwargs):
 
 
 @contextmanager
-def _patch_yf(info_dict):
+def _stub_info(info_dict):
     """
-    Patch the data sources used by get_analyst_recommendation.
+    Patch the one live source get_analyst_recommendation reads.
 
-    `.info` now comes from the shared stock_service cache (get_ticker_info),
-    while the ETF price-zone path still builds a yf.Ticker for history — so we
-    stub both to keep the test fully offline.
+    `.info` comes from the shared stock_service cache (get_ticker_info). The ETF
+    price-zone path asks the market-data seam for a year of closes, and the
+    suite's fake reports that as unavailable unless a test preloads it — so
+    stubbing `.info` is enough to keep this fully offline.
     """
-    mock_ticker = MagicMock()
-    mock_ticker.info = info_dict
     with patch(
         "app.services.analyst_recommendation.get_ticker_info",
         return_value=info_dict,
-    ), patch(
-        "app.services.analyst_recommendation.yf.Ticker",
-        return_value=mock_ticker,
     ):
         yield
 
@@ -101,7 +98,7 @@ class TestRecommendationKeyMapping:
     def _rec(self, key):
         info = _make_info(recommendationKey=key, numberOfAnalystOpinions=10,
                           targetMeanPrice=120.0)
-        with _patch_yf(info):
+        with _stub_info(info):
             return get_analyst_recommendation("NOW")
 
     def test_strong_buy_maps_to_buy(self):
@@ -135,19 +132,19 @@ class TestMeanFallback:
     def test_mean_1_5_gives_buy(self):
         info = _make_info(recommendationMean=1.5, numberOfAnalystOpinions=8,
                           targetMeanPrice=115.0)
-        with _patch_yf(info):
+        with _stub_info(info):
             rec = get_analyst_recommendation("NOW")
         assert rec.action == "buy"
 
     def test_mean_3_0_gives_hold(self):
         info = _make_info(recommendationMean=3.0, numberOfAnalystOpinions=12)
-        with _patch_yf(info):
+        with _stub_info(info):
             rec = get_analyst_recommendation("NOW")
         assert rec.action == "hold"
 
     def test_mean_4_5_gives_sell(self):
         info = _make_info(recommendationMean=4.5, numberOfAnalystOpinions=6)
-        with _patch_yf(info):
+        with _stub_info(info):
             rec = get_analyst_recommendation("NOW")
         assert rec.action == "sell"
 
@@ -158,7 +155,7 @@ class TestNotRatedFallbacks:
     def test_etf_gets_quality_rating(self):
         info = _make_info(quoteType="ETF", recommendationKey="buy",
                           numberOfAnalystOpinions=5)
-        with _patch_yf(info):
+        with _stub_info(info):
             rec = get_analyst_recommendation("VOO")
         assert rec.action == "etf-quality"
         assert rec.rating_type == "etf_quality"
@@ -169,19 +166,19 @@ class TestNotRatedFallbacks:
 
     def test_mutualfund_is_not_rated(self):
         info = _make_info(quoteType="MUTUALFUND")
-        with _patch_yf(info):
+        with _stub_info(info):
             rec = get_analyst_recommendation("VTSAX")
         assert rec.action == "etf-quality"
 
     def test_cryptocurrency_is_not_rated(self):
         info = _make_info(quoteType="CRYPTOCURRENCY")
-        with _patch_yf(info):
+        with _stub_info(info):
             rec = get_analyst_recommendation("BTC-USD")
         assert rec.action == "unavailable"
 
     def test_missing_key_and_mean_is_not_rated(self):
         info = _make_info(recommendationKey=None, recommendationMean=None)
-        with _patch_yf(info):
+        with _stub_info(info):
             rec = get_analyst_recommendation("NOW")
         assert rec.action == "unavailable"
         assert rec.label == "Unavailable"
@@ -211,7 +208,7 @@ class TestTargetUpside:
             targetMeanPrice=115.0,
             currentPrice=100.0,
         )
-        with _patch_yf(info):
+        with _stub_info(info):
             rec = get_analyst_recommendation("NOW")
         assert rec.target_upside_pct == 15.0
         assert rec.target_price == 115.0
@@ -223,14 +220,14 @@ class TestTargetUpside:
             targetMeanPrice=90.0,
             currentPrice=100.0,
         )
-        with _patch_yf(info):
+        with _stub_info(info):
             rec = get_analyst_recommendation("NOW")
         assert rec.target_upside_pct == -10.0
 
     def test_no_target_price_omits_upside(self):
         info = _make_info(recommendationKey="buy", targetMeanPrice=None,
                           targetMedianPrice=None, numberOfAnalystOpinions=5)
-        with _patch_yf(info):
+        with _stub_info(info):
             rec = get_analyst_recommendation("NOW")
         assert rec.target_price is None
         assert rec.target_upside_pct is None
@@ -242,7 +239,7 @@ class TestTargetUpside:
             targetMeanPrice=120.0,
             currentPrice=100.0,
         )
-        with _patch_yf(info):
+        with _stub_info(info):
             rec = get_analyst_recommendation("NOW")
         assert "15 analysts" in rec.subtext
         assert "PT +20%" in rec.subtext
@@ -254,7 +251,7 @@ class TestTargetUpside:
             targetMedianPrice=110.0,
             currentPrice=100.0,
         )
-        with _patch_yf(info):
+        with _stub_info(info):
             rec = get_analyst_recommendation("NOW")
         assert rec.target_price == 110.0
         assert rec.target_upside_pct == 10.0
@@ -318,13 +315,13 @@ class TestTickerNormalization:
     def test_lowercase_ticker_normalized(self):
         info = _make_info(recommendationKey="buy", numberOfAnalystOpinions=5,
                           targetMeanPrice=110.0)
-        with _patch_yf(info):
+        with _stub_info(info):
             rec = get_analyst_recommendation("now")
         assert rec.ticker == "NOW"
 
     def test_mixed_case_normalized(self):
         info = _make_info(quoteType="ETF")
-        with _patch_yf(info):
+        with _stub_info(info):
             rec = get_analyst_recommendation("Voo")
         assert rec.ticker == "VOO"
         assert rec.action == "etf-quality"

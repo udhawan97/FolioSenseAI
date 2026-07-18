@@ -16,7 +16,8 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models import Holding, PortfolioSnapshot, RealizedTrade
+from app.models import PortfolioSnapshot, RealizedTrade
+from app.services import holdings_repository
 from app.services.stock_service import get_portfolio_quotes
 
 QuoteLoader = Callable[[list[str]], list[dict]]
@@ -163,11 +164,7 @@ def evaluate(
     record_snapshot: bool = False,
 ) -> PortfolioValuation:
     """Build one Portfolio valuation and optionally record safe daily history."""
-    holdings = (
-        db.query(Holding)
-        .filter(Holding.portfolio_id == portfolio_id, Holding.is_active.is_(True))
-        .all()
-    )
+    holdings = holdings_repository.active(db, portfolio_id)
     by_ticker = {str(holding.ticker): holding for holding in holdings}
     quotes = (quote_loader or get_portfolio_quotes)(list(by_ticker))
     realized_stats = _realized_stats(db, portfolio_id)

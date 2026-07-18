@@ -11,7 +11,6 @@ Fully useful without any AI dependency; this is deterministic on-device data.
 from __future__ import annotations
 
 import logging
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 
@@ -23,6 +22,7 @@ from app.services.stock_service import (
     normalize_ticker,
     ticker_shape_is_safe,
 )
+from app.services.ttl_cache import ttl_cache
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +30,6 @@ _MAX_WORKERS = 8
 _FETCH_TIMEOUT = 15.0             # seconds for the concurrent fan-out
 _RADAR_TTL = 6 * 60 * 60         # 6 h — earnings dates move quarterly, not intraday
 _DEFAULT_WINDOW_DAYS = 30
-
-# symbol → (expiry_monotonic, iso_date_str | None). We cache the *date*, not the
-# days-until, so an entry stays correct as the calendar advances.
-_RADAR_CACHE: dict[str, tuple[float, str | None]] = {}
 
 
 def _label(days_until: int) -> str:
@@ -45,22 +41,19 @@ def _label(days_until: int) -> str:
     return f"In {days_until} days"
 
 
+@ttl_cache(ttl=_RADAR_TTL)
 def _resolve_earnings(symbol: str) -> dict | None:
     """Next earnings date and consensus estimate for one normalized symbol.
 
     Cached for ``_RADAR_TTL`` as one record — the date and the estimate come
     from different yfinance calls but are useless apart, and resolving them
-    together keeps the fan-out to a single pass.
+    together keeps the fan-out to a single pass. The record holds the *date*,
+    not the days-until, so an entry stays correct as the calendar advances.
 
-    Non-stocks (ETFs/funds/cash/crypto) and tickers with no known date cache as
-    None, so a flaky or irrelevant ticker isn't re-classified or re-scraped on
-    every call.
+    Non-stocks (ETFs/funds/cash/crypto) and tickers with no known date resolve
+    to None, which is remembered like any other answer so a flaky or irrelevant
+    ticker isn't re-classified or re-scraped on every call.
     """
-    now = time.monotonic()
-    cached = _RADAR_CACHE.get(symbol)
-    if cached and cached[0] > now:
-        return cached[1]
-
     resolved: dict | None = None
     try:
         info = get_ticker_info(symbol)
@@ -73,13 +66,13 @@ def _resolve_earnings(symbol: str) -> dict | None:
                     "estimate": fetch_earnings_estimate(symbol, earnings),
                 }
     except Exception as exc:  # pylint: disable=broad-except
-        # One bad ticker must never break the fan-out. Cache None below so it
-        # isn't retried on every call until the TTL lapses.
+        # One bad ticker must never break the fan-out. Swallowing it here also
+        # means None is *returned*, so it gets remembered and isn't retried on
+        # every call until the TTL lapses.
         logger.debug(
             "earnings_radar: resolve failed; ticker=%s exception_type=%s",
             sanitize_for_log(symbol), type(exc).__name__,
         )
-    _RADAR_CACHE[symbol] = (now + _RADAR_TTL, resolved)
     return resolved
 
 

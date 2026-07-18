@@ -4,9 +4,6 @@ AI-powered summary endpoints using Claude, plus move-explanation endpoints.
 """
 # pylint: disable=too-many-lines
 import logging
-import os
-import re
-import stat
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -15,12 +12,10 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models import AISummary, Holding, VerdictSnapshot
-from app.paths import data_dir
+from app.models import AISummary, VerdictSnapshot
 from app.services.ai_service import (
     MODEL,
     ACTION_PLAN_MODEL,
-    claude_api_heartbeat,
     get_cached_claude_heartbeat,
     get_accumulated_usage,
     generate_etf_profile_seed,
@@ -28,8 +23,6 @@ from app.services.ai_service import (
     generate_analytics_insights,
     generate_action_plan,
     generate_stock_summary,
-    next_briefing_canned_quote,
-    reinitialize_client,
 )
 from app.services.move_explainer import (
     HoldingMoveSummary,
@@ -47,7 +40,6 @@ from app.services.analyst_recommendation import (
     rec_to_dict,
 )
 from app.services.stock_service import (
-    DEFAULT_HOLDINGS,
     QUOTE_FETCH_ERROR,
     get_all_quotes,
     get_stock_data,
@@ -55,58 +47,26 @@ from app.services.stock_service import (
 )
 from app.services.insider_activity import get_insider_activity
 from app.services.fundamentals import get_fundamentals
-from app.services.investment_signal import (
-    build_investment_signal,
-    signal_to_dict,
-)
 from app.services.timing_signal import (
-    build_timing_signal,
     get_batched_history_closes,
     get_cached_history_closes,
-    timing_bucket,
 )
-from app.services.ai_service import fallback_quip, generate_verdict_ai_bundles
-from app.services.verdict_scan_cache import attach_since_last_scan
-from app.services.verdict_ai_enhancement import (
-    apply_ai_enhancement,
-    compact_signal_mix,
-)
-from app.services.portfolio_exposure import (
-    build_portfolio_exposure,
-    exposure_context_for_ticker,
-)
-from app.services.market_regime import get_market_regime
 from app.services.peer_relative import compute_peer_relative
 from app.services.event_calendar import build_event_context
-from app.services.portfolio_state import portfolio_state_signature
-from app.services.verdict_calibration import (
-    calibration_footnote,
-    calibration_summary,
-    compute_calibration_buckets,
-    log_verdict_snapshot,
-)
+from app.services.verdict_calibration import calibration_summary
 from app.services.verdict_report import build_verdict_report
-from app.services import narrative_cache, portfolio_valuation
+from app.services import (
+    action_plan,
+    ai_narrative,
+    api_key_store,
+    holdings_repository,
+    narrative_cache,
+    portfolio_briefing,
+    verdict_pipeline,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/ai", tags=["ai"])
-
-
-def _log_claude_call_result(label: str, exc: Exception) -> None:
-    """Warn on a genuine Claude-call failure; debug-log the common no-key case.
-
-    An unconfigured API key surfaces as a client-side TypeError from the
-    Anthropic SDK before any request is made — the default, key-optional
-    state, not a failure. Warning about it on every load would cry wolf.
-    """
-    if settings.ANTHROPIC_API_KEY.strip():
-        logger.warning("%s failed; exception_type=%s", label, type(exc).__name__)
-    else:
-        logger.debug("%s skipped; no Claude API key configured", label)
-
-# Only accept the canonical Anthropic key format: sk-ant-<variant>-<chars>
-# This guards against prompt injection via the key field and nonsense values.
-_API_KEY_RE = re.compile(r"^sk-ant-[A-Za-z0-9_\-]{20,300}$")
 
 CACHE_TTL = timedelta(hours=24)
 PRICE_DRIFT_THRESHOLD = 0.08  # stock summaries only; verdicts key off action + market mood
@@ -290,55 +250,6 @@ def _enrich_intelligence_dict(intel_dict: dict, stock_data: dict | None) -> dict
     return intel_dict
 
 
-def _recent_add_count(db: Session, ticker: str, days: int = 30, portfolio_id: int = 1) -> int:
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    return (
-        db.query(VerdictSnapshot)
-        .filter(
-            VerdictSnapshot.portfolio_id == portfolio_id,
-            VerdictSnapshot.ticker == ticker.upper(),
-            VerdictSnapshot.action == "add",
-            VerdictSnapshot.generated_at >= cutoff,
-        )
-        .count()
-    )
-
-
-def _user_context(
-    meta: dict, quote_data: dict | None, db: Session, ticker: str, portfolio_id: int = 1
-) -> dict:
-    quote = quote_data or {}
-    return {
-        "shares": meta.get("shares"),
-        "avg_cost": meta.get("avg_cost"),
-        "current_price": quote.get("current_price"),
-        "recent_add_count": _recent_add_count(db, ticker, portfolio_id=portfolio_id),
-    }
-
-
-def _holdings_for_exposure(holding_meta: dict, alloc_map: dict) -> list[dict]:
-    return [
-        {
-            "ticker": ticker,
-            "allocation_pct": alloc_map.get(ticker, 0),
-            "is_watchlist": meta.get("is_watchlist", False),
-        }
-        for ticker, meta in holding_meta.items()
-    ]
-
-
-def _active_portfolio_tickers(db: Session, portfolio_id: int = 1) -> list[str]:
-    tickers = [
-        row[0]
-        for row in (
-            db.query(Holding.ticker)
-            .filter(Holding.portfolio_id == portfolio_id, Holding.is_active.is_(True))
-            .all()
-        )
-    ]
-    return [str(t).upper() for t in tickers] or DEFAULT_HOLDINGS
-
-
 @router.get("/cache/stats")
 async def get_ai_cache_stats(db: Session = Depends(get_db)):
     """
@@ -425,54 +336,15 @@ class _ApiKeyBody(BaseModel):
     api_key: str
 
 
-def _update_env_file(key: str, value: str) -> None:
-    """Write or overwrite a single KEY=value line in the local .env file.
-
-    The file holds secrets (e.g. ANTHROPIC_API_KEY), so it's restricted to
-    owner-only read/write (0600) on every write, including first creation —
-    other local accounts on the machine can't read it even though it's
-    plaintext, which is the standard mitigation for local secret files (same
-    approach used by ~/.netrc, ~/.aws/credentials, etc). This is intentional,
-    local-only storage: FolioOrb is a single-user, local-first app with no
-    server-side secrets store, so the key never leaves the user's machine.
-    """
-    env_path = data_dir() / ".env"
-    if env_path.exists():
-        lines = env_path.read_text(encoding="utf-8").splitlines(keepends=True)
-    else:
-        lines = []
-
-    new_line = f"{key}={value}\n"
-    pattern = re.compile(rf"^\s*{re.escape(key)}\s*=")
-    replaced = False
-    for i, line in enumerate(lines):
-        if pattern.match(line):
-            lines[i] = new_line
-            replaced = True
-            break
-
-    if not replaced:
-        # A hand-edited .env may not end in a newline. splitlines() can't tell us
-        # that, so without this the appended line is concatenated onto the last
-        # entry and both are destroyed.
-        if lines and not lines[-1].endswith("\n"):
-            lines[-1] += "\n"
-        lines.append(new_line)
-
-    env_path.write_text("".join(lines), encoding="utf-8")
-    os.chmod(env_path, stat.S_IRUSR | stat.S_IWUSR)
-
-
 @router.post("/configure-key")
 def configure_api_key(body: _ApiKeyBody):
     """
     Validate, persist, and hot-reload a new Anthropic API key.
     The key is written to the local .env file only — never returned or logged.
     """
-    raw = body.api_key.strip()
-
-    # Reject anything that doesn't look like a real Anthropic key
-    if not _API_KEY_RE.match(raw):
+    try:
+        connected = api_key_store.save(body.api_key)
+    except api_key_store.InvalidKeyError as exc:
         raise HTTPException(
             status_code=422,
             detail=(
@@ -480,24 +352,11 @@ def configure_api_key(body: _ApiKeyBody):
                 "Keys start with sk-ant- and are fairly long. "
                 "Double-check you copied the whole thing."
             ),
-        )
-
-    try:
-        _update_env_file("ANTHROPIC_API_KEY", raw)
-    except OSError as exc:
-        logger.error("Failed to write API key to .env: %s", type(exc).__name__)
+        ) from exc
+    except api_key_store.KeyStorageError as exc:
         raise HTTPException(status_code=500, detail="Could not save key to disk.") from exc
 
-    # Swap the live client so AI endpoints work immediately (no restart needed)
-    reinitialize_client(raw)
-
-    logger.info("Anthropic API key updated via dashboard (key not logged)")
-
-    # A well-formed key can still be revoked, mistyped, or unreachable. Verify it
-    # actually reaches Anthropic before claiming "connected" — otherwise the user
-    # is told AI is live while every panel silently serves local fallbacks.
-    heartbeat = claude_api_heartbeat()
-    if heartbeat.get("live"):
+    if connected:
         return {
             "success": True,
             "connected": True,
@@ -518,13 +377,9 @@ def configure_api_key(body: _ApiKeyBody):
 def remove_api_key():
     """Remove the stored Anthropic key and fall back to Local Intelligence only."""
     try:
-        _update_env_file("ANTHROPIC_API_KEY", "")
-    except OSError as exc:
-        logger.error("Failed to clear API key in .env: %s", type(exc).__name__)
+        api_key_store.clear()
+    except api_key_store.KeyStorageError as exc:
         raise HTTPException(status_code=500, detail="Could not update key on disk.") from exc
-
-    reinitialize_client("")
-    logger.info("Anthropic API key removed via dashboard")
     return {
         "success": True,
         "message": "Claude disconnected. Local Intelligence is still running.",
@@ -598,7 +453,7 @@ async def get_all_summaries(
     """
     results = {}
 
-    active_tickers = _active_portfolio_tickers(db, portfolio_id)
+    active_tickers = holdings_repository.active_tickers_or_default(db, portfolio_id)
     quotes = {q["ticker"]: q for q in get_all_quotes(active_tickers)}
     cache = narrative_cache.NarrativeCache(
         db,
@@ -760,10 +615,8 @@ async def get_all_move_explanations(
     """
     benchmarks = get_benchmark_data()
     benchmark_cache: dict = {}  # shared cache for per-holding primary benchmarks
-    quotes = {
-        q["ticker"]: q
-        for q in get_all_quotes(_active_portfolio_tickers(db, portfolio_id))
-    }
+    active_tickers = holdings_repository.active_tickers_or_default(db, portfolio_id)
+    quotes = {q["ticker"]: q for q in get_all_quotes(active_tickers)}
     results: dict[str, dict] = {}
 
     for ticker, stock_data in quotes.items():
@@ -865,7 +718,7 @@ async def get_all_intelligence(
     Return holding intelligence for all portfolio holdings.
     Combines structured coverage data (sectors, countries, benchmarks) for every holding.
     """
-    active_tickers = _active_portfolio_tickers(db, portfolio_id)
+    active_tickers = holdings_repository.active_tickers_or_default(db, portfolio_id)
     quotes = {q["ticker"]: q for q in get_all_quotes(active_tickers)}
 
     # Phase 1: build all intel dicts (existing behaviour)
@@ -915,14 +768,7 @@ async def get_all_intelligence(
 
 # ── Analyst Recommendation endpoints ─────────────────────────────────────────
 
-VERDICT_BRAND_KICKER = "FolioOrb \u00d7 Claude"
-VERDICT_BRAND_KICKER_LOCAL = "FolioOrb Intelligence"
-VERDICT_FEELS_PREFIX = "FolioOrb feels"
-_VERDICT_DISCLAIMER = (
-    "FolioOrb Intelligence \u2014 a signal read, not "
-    "financial advice. Verify before you trade."
-)
-_AI_VERDICT_DISCLAIMER = _VERDICT_DISCLAIMER
+
 def _portfolio_cache_ticker(portfolio_id: int = 1) -> str:
     """
     AISummary.ticker sentinel for portfolio-LEVEL AI caches (briefing, action
@@ -937,155 +783,6 @@ def _portfolio_cache_ticker(portfolio_id: int = 1) -> str:
     return narrative_cache.portfolio_scope(portfolio_id)
 
 
-_ACTION_CACHE_CODE = {"add": "a", "hold": "h", "trim": "t", "needs-data": "n"}
-_MOOD_CACHE_CODE = {
-    "hot": "hot", "warm": "warm", "neutral": "neut", "cooling": "cool", "cold": "cold"
-}
-_HOLD_CLASS_CACHE_CODE = {"auto": "auto", "anchor": "anch", "trade": "trd", "core": "core"}
-
-VERDICT_BRAND_COPY = {
-    "kicker": VERDICT_BRAND_KICKER,
-    "feels_prefix": VERDICT_FEELS_PREFIX,
-}
-
-_NEEDS_DATA_SIGNAL = {
-    "action": "needs-data",
-    "label": "Needs Data",
-    "confidence": 0,
-    "market_mood": "neutral",
-    "reasons": [],
-    "risks": ["Insufficient data to form a view"],
-    "data_quality": "low",
-    "source_fields": [],
-    "flip_triggers": None,
-    "signal_mix": [],
-    "freshness": None,
-    "since_last_scan": None,
-    "hold_class": "auto",
-    "instrument_role": "tactical",
-    "timing": None,
-}
-
-
-def _holding_meta(db: Session, portfolio_id: int = 1) -> dict[str, dict]:
-    """Return ticker → holding context for active holdings."""
-    rows = (
-        db.query(
-            Holding.ticker,
-            Holding.shares,
-            Holding.avg_cost,
-            Holding.is_watchlist,
-            Holding.hold_class,
-        )
-        .filter(Holding.portfolio_id == portfolio_id, Holding.is_active.is_(True))
-        .all()
-    )
-    return {
-        str(r[0]).upper(): {
-            "shares": float(r[1] or 0),
-            "avg_cost": float(r[2] or 0),
-            "is_watchlist": bool(r[3]),
-            "hold_class": str(r[4] or "auto"),
-        }
-        for r in rows
-    }
-
-
-def _compute_allocation_pcts(holding_meta: dict, quotes: dict) -> dict[str, float]:
-    """Compute allocation_pct for every non-watchlist holding."""
-    total_value = sum(
-        meta["shares"] * (quotes.get(ticker, {}).get("current_price") or 0)
-        for ticker, meta in holding_meta.items()
-        if not meta["is_watchlist"]
-    )
-    if total_value <= 0:
-        return {}
-    result: dict[str, float] = {}
-    for ticker, meta in holding_meta.items():
-        if meta["is_watchlist"]:
-            continue
-        price = (quotes.get(ticker, {}).get("current_price") or 0)
-        value = meta["shares"] * price
-        result[ticker] = round(value / total_value * 100, 1)
-    return result
-
-
-def _verdict_summary_type(
-    action: str,
-    market_mood: str,
-    hold_class: str = "auto",
-    timing_key: str = "none",
-) -> str:
-    """Compact cache namespace for ticker verdict quips."""
-    action_code = _ACTION_CACHE_CODE.get(action, "n")
-    mood_code = _MOOD_CACHE_CODE.get(market_mood, "neut")
-    hold_code = _HOLD_CLASS_CACHE_CODE.get(hold_class, "auto")
-    return f"v:{action_code}:{mood_code}:{hold_code}:{timing_key}"
-
-
-def _timing_for_quote(quote_data: dict | None, closes: list[float]) -> dict:
-    quote = quote_data or {}
-    return build_timing_signal(
-        closes,
-        current_price=quote.get("current_price"),
-        high_52w=quote.get("fifty_two_week_high"),
-        low_52w=quote.get("fifty_two_week_low"),
-        fallback_ma50=quote.get("fifty_day_average"),
-        fallback_ma200=quote.get("two_hundred_day_average"),
-    )
-
-
-def _portfolio_state_signature(signals: dict[str, dict], alloc_map: dict[str, float]) -> dict:
-    """Backward-compatible alias for portfolio_state_signature."""
-    return portfolio_state_signature(signals, alloc_map)
-
-
-def _portfolio_fallback_quip(dominant_action: str, concentration_band: str) -> str:
-    if concentration_band == "high":
-        return (
-            "Claude sees the book leaning concentrated; "
-            "FolioOrb is politely raising one eyebrow."
-        )
-    if dominant_action == "add":
-        return (
-            "FolioOrb sees more green lights than red flags, "
-            "with Claude keeping the caveats close."
-        )
-    if dominant_action == "trim":
-        return (
-            "Claude thinks the portfolio has had a run; "
-            "FolioOrb is checking the exits calmly."
-        )
-    if dominant_action == "needs-data":
-        return (
-            "FolioOrb wants more receipts before turning this portfolio read into a headline."
-        )
-    return (
-        "Claude calls the portfolio balanced enough to be interesting, "
-        "not boring enough to ignore."
-    )
-
-
-def _brand_payload(*, ai_mode: bool = False) -> dict:
-    return {
-        "kicker": VERDICT_BRAND_KICKER if ai_mode else VERDICT_BRAND_KICKER_LOCAL,
-        "feels_prefix": VERDICT_FEELS_PREFIX,
-        "disclaimer": _AI_VERDICT_DISCLAIMER if ai_mode else _VERDICT_DISCLAIMER,
-    }
-
-
-def _hydrate_cached_verdict(sig_dict: dict, decoded: dict) -> bool:
-    """Apply cached quip + AI bundle to sig_dict. Returns True when AI layer present."""
-    quip = decoded.get("quip") or ""
-    if quip:
-        sig_dict["quip"] = quip
-    ai_raw = decoded.get("ai")
-    if ai_raw and sig_dict.get("action") != "needs-data":
-        apply_ai_enhancement(sig_dict, ai_raw)
-        return True
-    return False
-
-
 @router.get("/investment-signal/{ticker}")
 async def get_investment_signal_single(
     ticker: str,
@@ -1095,150 +792,11 @@ async def get_investment_signal_single(
     """
     Return deterministic investment signal + quip for a single ticker.
     """
-    ticker = ticker.upper()
-    meta = _holding_meta(db, portfolio_id)
-    holding = meta.get(ticker, {})
-    is_watchlist = holding.get("is_watchlist", False)
-    hold_class = holding.get("hold_class", "auto")
-
-    # Allocation pct needs portfolio total — fetch quote for this ticker only
-    allocation_pct: float | None = None
-    quote_data = get_stock_data(ticker)
-    if not quote_data.get("error"):
-        all_tickers = list(meta.keys())
-        quotes = {q["ticker"]: q for q in get_all_quotes(all_tickers)}
-        alloc_map = _compute_allocation_pcts(meta, quotes)
-        allocation_pct = alloc_map.get(ticker)
-
-    closes = get_cached_history_closes(ticker)
-    timing = _timing_for_quote(
-        quote_data if not quote_data.get("error") else None,
-        closes,
-    )
-    rec = get_analyst_recommendation(ticker, closes=closes)
-    regime = get_market_regime()
-    peer = compute_peer_relative(
-        ticker,
-        stock_data=quote_data if not quote_data.get("error") else None,
-        closes=closes,
-    )
-    event_ctx = build_event_context(
-        ticker,
-        security_type=rec.security_type,
-    )
-    sig = build_investment_signal(
-        rec,
-        allocation_pct=allocation_pct,
-        is_watchlist=is_watchlist,
-        stock_data=quote_data if not quote_data.get("error") else None,
-        hold_class=hold_class,
-        timing=timing,
-        regime=regime,
-        peer_relative=peer,
-        event_context=event_ctx,
-        user_context=_user_context(holding, quote_data, db, ticker, portfolio_id),
-    )
-    sig_dict = signal_to_dict(sig)
-    scan_snapshot_changed = attach_since_last_scan(db, ticker, sig_dict)
-
-    quip = fallback_quip(sig.action)
-    sig_dict["quip"] = quip
-    sig_dict["disclaimer"] = _VERDICT_DISCLAIMER
-    sig_dict["brand"] = _brand_payload()
-    if scan_snapshot_changed:
-        db.commit()
-    return sig_dict
-
-
-def _collect_portfolio_signals_core(
-    db: Session, portfolio_id: int = 1
-) -> dict:  # pylint: disable=too-many-locals
-    """
-    Shared signal pipeline: active tickers → per-ticker deterministic signal dicts.
-
-    Runs the full verdict pipeline (analyst rec, timing, peer, events, exposure,
-    investment-signal build → signal_to_dict) for every active holding.
-    Returns raw sig_dicts plus the shared portfolio metadata so that both
-    ``get_all_investment_signals`` and ``get_action_plan`` can consume it without
-    duplicating the loop.
-
-    Error tickers carry ``{"_signal_error": True, **_NEEDS_DATA_SIGNAL}`` so the
-    callers can distinguish build failures from legitimate needs-data verdicts.
-    """
-    active_tickers = _active_portfolio_tickers(db, portfolio_id)
-    holding_meta = _holding_meta(db, portfolio_id)
-    quotes = {q["ticker"]: q for q in get_all_quotes(active_tickers)}
-    history_map = get_batched_history_closes(active_tickers)
-    alloc_map = _compute_allocation_pcts(holding_meta, quotes)
-
-    portfolio_exposure = build_portfolio_exposure(
-        _holdings_for_exposure(holding_meta, alloc_map),
-        quotes=quotes,
-    )
-    regime = get_market_regime()
-
-    signals: dict[str, dict] = {}
-    for ticker in active_tickers:
-        try:
-            meta = holding_meta.get(ticker, {})
-            is_watchlist = meta.get("is_watchlist", False)
-            hold_class = meta.get("hold_class", "auto")
-            allocation_pct = alloc_map.get(ticker)
-
-            quote_data = quotes.get(ticker) or {}
-            closes = history_map.get(ticker, [])
-            timing = _timing_for_quote(
-                quote_data if not quote_data.get("error") else None,
-                closes,
-            )
-            rec = get_analyst_recommendation(ticker, closes=closes)
-            peer = compute_peer_relative(
-                ticker,
-                own_percentile=(rec.price_signal or {}).get("percentile"),
-                zone=(rec.price_signal or {}).get("priceZoneLabel"),
-                stock_data=quote_data if not quote_data.get("error") else None,
-                closes=closes,
-            )
-            event_ctx = build_event_context(
-                ticker,
-                security_type=rec.security_type,
-            )
-            exp_ctx = exposure_context_for_ticker(portfolio_exposure, ticker)
-            sig = build_investment_signal(
-                rec,
-                allocation_pct=allocation_pct,
-                is_watchlist=is_watchlist,
-                stock_data=quote_data if not quote_data.get("error") else None,
-                hold_class=hold_class,
-                timing=timing,
-                regime=regime,
-                peer_relative=peer,
-                exposure_context=exp_ctx,
-                event_context=event_ctx,
-                user_context=_user_context(meta, quote_data, db, ticker, portfolio_id),
-            )
-            signals[ticker] = signal_to_dict(sig)
-        except Exception as exc:  # pylint: disable=broad-except
-            logger.error(
-                "Signal build failed for %s; exception_type=%s",
-                ticker, type(exc).__name__,
-            )
-            signals[ticker] = {**_NEEDS_DATA_SIGNAL, "ticker": ticker, "_signal_error": True}
-
-    return {
-        "active_tickers": active_tickers,
-        "signals": signals,
-        "alloc_map": alloc_map,
-        "holding_meta": holding_meta,
-        "portfolio_exposure": portfolio_exposure,
-        "regime": regime,
-        "quotes": quotes,
-        "history_map": history_map,
-    }
+    return verdict_pipeline.scan_ticker(db, ticker, portfolio_id)
 
 
 @router.get("/investment-signals/all")
-async def get_all_investment_signals(  # pylint: disable=too-many-statements,too-many-branches
+async def get_all_investment_signals(
     db: Session = Depends(get_db),
     force_local: bool = False,
     portfolio_id: int = 1,
@@ -1249,255 +807,15 @@ async def get_all_investment_signals(  # pylint: disable=too-many-statements,too
     (summary_type='verdict') with price-drift invalidation.
     Pass force_local=true to skip Claude quip generation and use deterministic fallbacks.
     """
-    core = _collect_portfolio_signals_core(db, portfolio_id)
-    book_ticker = _portfolio_cache_ticker(portfolio_id)
-    active_tickers = core["active_tickers"]
-    holding_meta = core["holding_meta"]
-    portfolio_exposure = core["portfolio_exposure"]
-    regime = core["regime"]
-    quotes = core["quotes"]
-    alloc_map = core["alloc_map"]
-
-    signals: dict[str, dict] = {}
-    missing_quip_tickers: list[str] = []
-    scan_snapshot_changed = False
-    cache = narrative_cache.NarrativeCache(db, ttl=CACHE_TTL)
-    # Calibration buckets are portfolio-wide (not ticker-specific), so compute them
-    # once here instead of re-querying/re-aggregating on every loop iteration below.
-    calibration_buckets = compute_calibration_buckets(db, window="1m", portfolio_id=portfolio_id)
-
-    for ticker in active_tickers:
-        try:
-            raw = core["signals"].get(ticker) or {}
-            sig_dict = dict(raw)
-            # Tickers that failed signal-building in the core helper get an immediate
-            # fallback quip — matching original behaviour (exceptions skip AI pipeline).
-            if sig_dict.pop("_signal_error", False):
-                sig_dict["quip"] = fallback_quip("needs-data")
-                sig_dict["ai_enhanced"] = False
-                sig_dict["disclaimer"] = _VERDICT_DISCLAIMER
-                sig_dict["brand"] = _brand_payload()
-                sig_dict.setdefault("generated_at", "")
-                signals[ticker] = sig_dict
-                continue
-
-            meta = holding_meta.get(ticker, {})
-            hold_class = meta.get("hold_class", "auto")
-            action = sig_dict.get("action", "needs-data")
-            confidence = sig_dict.get("confidence", 0)
-            quote_data = quotes.get(ticker) or {}
-
-            footnote = calibration_footnote(
-                db, action=action, confidence=confidence,
-                buckets=calibration_buckets, portfolio_id=portfolio_id,
-            )
-            if footnote:
-                sig_dict["calibration_footnote"] = footnote
-            log_verdict_snapshot(
-                db,
-                ticker=ticker,
-                action=action,
-                confidence=confidence,
-                local_score=confidence,
-                ai_score=None,
-                price_at_scan=quote_data.get("current_price"),
-                hold_class=hold_class,
-                portfolio_id=portfolio_id,
-            )
-            scan_snapshot_changed = (
-                attach_since_last_scan(db, ticker, sig_dict) or scan_snapshot_changed
-            )
-            sig_dict["disclaimer"] = _VERDICT_DISCLAIMER
-            sig_dict["brand"] = _brand_payload()
-
-            # Check cache for quip + AI bundle
-            summary_type = _verdict_summary_type(
-                sig_dict.get("action", "needs-data"),
-                sig_dict.get("market_mood", "neutral"),
-                sig_dict.get("hold_class", "auto"),
-                timing_bucket(sig_dict.get("timing")),
-            )
-            cached = cache.get_verdict(
-                ticker,
-                summary_type,
-                current_price=quote_data.get("current_price"),
-            )
-            if cached is not None:
-                sig_dict["ai_enhanced"] = _hydrate_cached_verdict(sig_dict, cached)
-            else:
-                sig_dict["quip"] = None  # will be filled by batch call
-                missing_quip_tickers.append(ticker)
-
-            signals[ticker] = sig_dict
-
-        except Exception as exc:  # pylint: disable=broad-except
-            logger.error(
-                "Investment signal failed for %s; exception_type=%s",
-                ticker, type(exc).__name__,
-            )
-            signals[ticker] = {
-                **_NEEDS_DATA_SIGNAL,
-                "ticker": ticker,
-                "quip": fallback_quip("needs-data"),
-                "disclaimer": _VERDICT_DISCLAIMER,
-                "brand": _brand_payload(),
-                "generated_at": "",
-            }
-
-    portfolio_state = _portfolio_state_signature(signals, alloc_map)
-    portfolio_cached = cache.get_verdict(
-        book_ticker,
-        portfolio_state["summary_type"],
-    )
-    portfolio_quip: str | None = None
-    include_portfolio_quip = False
-    if portfolio_cached is not None:
-        portfolio_quip = portfolio_cached.get("quip") or None
-    else:
-        include_portfolio_quip = True
-
-    # Batch-generate quips for stale/missing tickers
-    if force_local:
-        for ticker in missing_quip_tickers:
-            signals[ticker]["quip"] = fallback_quip(signals[ticker].get("action", "needs-data"))
-            signals[ticker]["ai_enhanced"] = False
-        if include_portfolio_quip:
-            portfolio_quip = _portfolio_fallback_quip(
-                portfolio_state["dominant_action"],
-                portfolio_state["concentration_band"],
-            )
-        missing_quip_tickers = []
-        include_portfolio_quip = False
-
-    claude_live: bool | None = None
-    if missing_quip_tickers or include_portfolio_quip:
-        quip_inputs = [
-            {
-                "ticker": t,
-                "action": signals[t].get("action", "needs-data"),
-                "confidence": signals[t].get("confidence", 0),
-                "market_mood": signals[t].get("market_mood", "neutral"),
-                "reason": (signals[t].get("reasons") or [""])[0],
-                "mix": compact_signal_mix(signals[t].get("signal_mix")),
-            }
-            for t in missing_quip_tickers
-        ]
-        if include_portfolio_quip:
-            quip_inputs.append(
-                {
-                    "ticker": book_ticker,
-                    "action": portfolio_state["dominant_action"],
-                    "confidence": 60,
-                    "market_mood": "neutral",
-                    "reason": portfolio_state["reason"],
-                    "mix": "",
-                }
-            )
-        new_bundles = generate_verdict_ai_bundles(quip_inputs)
-        claude_live = bool(new_bundles)
-
-        for ticker in missing_quip_tickers:
-            fallback_action = signals[ticker].get("action", "needs-data")
-            bundle = new_bundles.get(ticker) or {}
-            quip = bundle.get("quip") or fallback_quip(fallback_action)
-            signals[ticker]["quip"] = quip
-            ai_raw = bundle.get("ai")
-            if ai_raw and claude_live:
-                apply_ai_enhancement(signals[ticker], ai_raw)
-                signals[ticker]["ai_enhanced"] = True
-            else:
-                signals[ticker]["ai_enhanced"] = False
-
-            # Persist to cache
-            current_price = (quotes.get(ticker) or {}).get("current_price")
-            summary_type = _verdict_summary_type(
-                signals[ticker].get("action", "needs-data"),
-                signals[ticker].get("market_mood", "neutral"),
-                signals[ticker].get("hold_class", "auto"),
-                timing_bucket(signals[ticker].get("timing")),
-            )
-            try:
-                cache.store_verdict(
-                    ticker,
-                    summary_type,
-                    quip,
-                    ai_raw if claude_live else None,
-                    MODEL if bundle.get("quip") and claude_live else "fallback",
-                    price_when_generated=current_price,
-                    commit=False,
-                )
-            except Exception as exc:  # pylint: disable=broad-except
-                logger.debug(
-                    "Failed to cache quip for %s; exception_type=%s",
-                    ticker, type(exc).__name__,
-                )
-        if include_portfolio_quip:
-            book_bundle = new_bundles.get(book_ticker) or {}
-            portfolio_quip = book_bundle.get("quip") or _portfolio_fallback_quip(
-                portfolio_state["dominant_action"],
-                portfolio_state["concentration_band"],
-            )
-            try:
-                cache.store_verdict(
-                    book_ticker,
-                    portfolio_state["summary_type"],
-                    portfolio_quip,
-                    None,
-                    MODEL if book_bundle.get("quip") and claude_live else "fallback",
-                    commit=False,
-                )
-            except Exception as exc:  # pylint: disable=broad-except
-                logger.debug(
-                    "Failed to cache portfolio quip; exception_type=%s",
-                    type(exc).__name__,
-                )
-        db.commit()
-    elif scan_snapshot_changed:
-        db.commit()
-
-    if force_local:
-        local_brand = _brand_payload(ai_mode=False)
-        for sig in signals.values():
-            sig["brand"] = local_brand
-            sig["disclaimer"] = _VERDICT_DISCLAIMER
-    elif claude_live:
-        ai_brand = _brand_payload(ai_mode=True)
-        for sig in signals.values():
-            sig["brand"] = ai_brand
-            sig["disclaimer"] = _AI_VERDICT_DISCLAIMER
-    else:
-        any_ai = any(sig.get("ai_enhanced") for sig in signals.values())
-        if any_ai:
-            ai_brand = _brand_payload(ai_mode=True)
-            for sig in signals.values():
-                if sig.get("ai_enhanced"):
-                    sig["brand"] = ai_brand
-                    sig["disclaimer"] = _AI_VERDICT_DISCLAIMER
-
-    portfolio_health = {
-        "quip": portfolio_quip or _portfolio_fallback_quip(
-            portfolio_state["dominant_action"],
-            portfolio_state["concentration_band"],
-        ),
-        "dominant_action": portfolio_state["dominant_action"],
-        "concentration_band": portfolio_state["concentration_band"],
-        "signature": portfolio_state["summary_type"],
-        "brand": _brand_payload(ai_mode=bool(claude_live) and not force_local),
-        "disclaimer": (
-            _VERDICT_DISCLAIMER
-            if force_local
-            else (_AI_VERDICT_DISCLAIMER if claude_live else _VERDICT_DISCLAIMER)
-        ),
-    }
-
+    scan = verdict_pipeline.scan_portfolio(db, portfolio_id, force_local=force_local)
     return {
-        "signals": signals,
-        "count": len(signals),
-        "portfolio_exposure": portfolio_exposure,
-        "portfolio_health": portfolio_health,
-        "calibration_summary": calibration_summary(db, portfolio_id),
-        "regime": regime,
-        "claude_live": claude_live,
+        "signals": scan.signals,
+        "count": scan.count,
+        "portfolio_exposure": scan.exposure,
+        "portfolio_health": scan.health,
+        "calibration_summary": scan.calibration,
+        "regime": scan.regime,
+        "claude_live": scan.claude_live,
     }
 
 
@@ -1507,15 +825,7 @@ async def get_portfolio_exposure(
     db: Session = Depends(get_db),
 ):
     """Look-through sector, country, and theme exposure for the active portfolio."""
-    holding_meta = _holding_meta(db, portfolio_id)
-    tickers = list(holding_meta.keys())
-    quotes = {q["ticker"]: q for q in get_all_quotes(tickers)}
-    alloc_map = _compute_allocation_pcts(holding_meta, quotes)
-    exposure = build_portfolio_exposure(
-        _holdings_for_exposure(holding_meta, alloc_map),
-        quotes=quotes,
-    )
-    return exposure
+    return verdict_pipeline.book_exposure(db, portfolio_id)
 
 
 @router.get("/verdict-calibration")
@@ -1612,7 +922,7 @@ async def get_all_analyst_recommendations(
     Return analyst consensus for all portfolio holdings.
     Iterates active portfolio holdings; ETFs resolve to ETF quality.
     """
-    active_tickers = _active_portfolio_tickers(db, portfolio_id)
+    active_tickers = holdings_repository.active_tickers_or_default(db, portfolio_id)
     # Pre-fetch history in one batched/parallel call so per-ticker ETF price-signal
     # lookups (below) reuse it instead of each issuing its own yfinance history call.
     history_map = get_batched_history_closes(active_tickers)
@@ -1647,430 +957,6 @@ async def get_all_analyst_recommendations(
 
 # ── Portfolio Briefing endpoint ───────────────────────────────────────────────
 
-_BRIEFING_CACHE_TYPE = "briefing"
-
-# Dashboard time ranges the briefing can narrate. "day" keeps the legacy
-# live-quote path and the legacy "briefing" cache type; longer ranges compute
-# from daily closes and cache under "briefing_<range>" so each range gets its
-# own 24 h entry.
-_BRIEFING_RANGES: dict[str, dict] = {
-    "day":        {"phrase": "today",                  "calendar_days": None},
-    "week":       {"phrase": "over the past week",     "calendar_days": 7},
-    "month":      {"phrase": "over the past month",    "calendar_days": 30},
-    "threeMonth": {"phrase": "over the past 3 months", "calendar_days": 90},
-    "sixMonth":   {"phrase": "over the past 6 months", "calendar_days": 180},
-    "year":       {"phrase": "over the past year",     "calendar_days": 365},
-}
-
-
-def _normalize_briefing_range(range_key: str | None) -> str:
-    return range_key if range_key in _BRIEFING_RANGES else "day"
-
-
-def _briefing_cache_type(range_key: str) -> str:
-    if range_key == "day":
-        return _BRIEFING_CACHE_TYPE
-    return f"{_BRIEFING_CACHE_TYPE}_{range_key}"
-
-
-def _period_portfolio_pl(
-    db: Session, total_value: float, calendar_days: int, portfolio_id: int = 1
-) -> dict | None:
-    """
-    Portfolio P&L over the range, from daily snapshot history — the same
-    semantics the hero P&L card uses (closest snapshot at/after the cutoff,
-    else the earliest available).
-    """
-    rows = [
-        r for r in portfolio_valuation.snapshot_history(db, portfolio_id)
-        if r.get("date") and r.get("total_value") is not None
-    ]
-    if not rows:
-        return None
-    last = datetime.strptime(rows[-1]["date"], "%Y-%m-%d")
-    cutoff = last - timedelta(days=calendar_days)
-    start_row = next(
-        (r for r in rows if datetime.strptime(r["date"], "%Y-%m-%d") >= cutoff),
-        rows[0],
-    )
-    start_value = float(start_row["total_value"] or 0)
-    if start_value <= 0:
-        return None
-    change = total_value - start_value
-    return {"dollar": round(change, 2), "pct": round(change / start_value * 100, 2)}
-
-
-def _briefing_snapshot(db: Session, portfolio_id: int = 1) -> tuple[dict, list[dict]]:
-    """
-    Build the compact portfolio snapshot fed to Haiku (and used for the local
-    briefing lead line).  Returns (snapshot_dict, non_watchlist_holdings).
-    """
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    valuation = portfolio_valuation.evaluate(db, portfolio_id)
-    holdings_rows = valuation.holdings
-    total_value = valuation.total_value
-    total_daily_change = valuation.total_daily_change
-    non_watchlist = [h for h in holdings_rows if not h.get("is_watchlist")]
-
-    total_unrealized = valuation.total_unrealized_gain
-    realized = valuation.realized_gain
-    total_return_dollar = valuation.total_return
-    total_return_pct = valuation.total_return_pct
-    prev_value = total_value - total_daily_change
-    today_pnl_pct = round(total_daily_change / prev_value * 100, 2) if abs(prev_value) > 0 else 0.0
-
-    sorted_by_day = sorted(
-        [h for h in non_watchlist if h.get("day_change_pct") is not None],
-        key=lambda h: float(h.get("day_change_pct") or 0),
-    )
-    best = sorted_by_day[-1] if sorted_by_day else {}
-    worst = sorted_by_day[0] if sorted_by_day else {}
-
-    top_by_alloc = sorted(
-        [h for h in non_watchlist if h.get("allocation_pct")],
-        key=lambda h: float(h.get("allocation_pct") or 0),
-        reverse=True,
-    )[:6]
-
-    top_contributors = sorted(
-        non_watchlist,
-        key=lambda h: abs(float(h.get("daily_value_change") or 0)),
-        reverse=True,
-    )[:4]
-
-    regime = get_market_regime()
-
-    snapshot = {
-        "as_of": today,
-        "valuation": {
-            "data_quality": valuation.data_quality,
-            "missing_tickers": list(valuation.missing_tickers),
-            "priced_position_count": valuation.priced_position_count,
-            "expected_position_count": valuation.expected_position_count,
-        },
-        "total_value": round(total_value, 2),
-        "today_pl": {
-            "dollar": round(total_daily_change, 2),
-            "pct": today_pnl_pct,
-        },
-        "total_return": {
-            "dollar": total_return_dollar,
-            "pct": total_return_pct,
-            "unrealized": round(total_unrealized, 2),
-            "realized": round(realized, 2),
-        },
-        "best_today": {
-            "ticker": best.get("ticker", ""),
-            "day_change_pct": float(best.get("day_change_pct") or 0),
-        },
-        "worst_today": {
-            "ticker": worst.get("ticker", ""),
-            "day_change_pct": float(worst.get("day_change_pct") or 0),
-        },
-        "top_holdings": [
-            {
-                "ticker": h["ticker"],
-                "allocation_pct": float(h.get("allocation_pct") or 0),
-                "day_change_pct": float(h.get("day_change_pct") or 0),
-                "total_return_pct": float(h.get("total_return_pct") or 0),
-            }
-            for h in top_by_alloc
-        ],
-        "today_contributors": [
-            {
-                "ticker": h["ticker"],
-                "contribution_dollar": round(float(h.get("daily_value_change") or 0), 2),
-            }
-            for h in top_contributors
-        ],
-        "market_regime": {
-            "label": regime.get("label", ""),
-            "mood": regime.get("mood", ""),
-        },
-    }
-    return snapshot, non_watchlist
-
-
-def _briefing_period_snapshot(
-    db: Session, range_key: str, portfolio_id: int = 1
-) -> tuple[dict, list[dict]]:
-    """
-    Range-aware snapshot variant: swaps the day-scoped fields for period ones
-    (daily-close lookbacks for movers, snapshot history for portfolio P&L) so
-    Haiku narrates the selected window instead of today's tape.
-    """
-    from app.services.portfolio_analytics import compute_range_rows
-
-    snapshot, non_watchlist = _briefing_snapshot(db, portfolio_id)
-    cfg = _BRIEFING_RANGES[range_key]
-    period = compute_range_rows(non_watchlist, range_key)
-    rows = period.get("holdings") or {}
-
-    ranked = sorted(rows.items(), key=lambda kv: kv[1]["change_pct"])
-    best = ranked[-1] if ranked else None
-    worst = ranked[0] if ranked else None
-    contributors = sorted(
-        rows.items(), key=lambda kv: abs(kv[1]["value_change"]), reverse=True
-    )[:4]
-
-    snapshot["period_label"] = cfg["phrase"]
-    snapshot["period_pl"] = (
-        _period_portfolio_pl(
-            db, snapshot["total_value"], cfg["calendar_days"], portfolio_id
-        )
-        or {"dollar": period.get("net_change"), "pct": period.get("net_change_pct")}
-    )
-    snapshot["best_period"] = (
-        {"ticker": best[0], "change_pct": best[1]["change_pct"]} if best else {}
-    )
-    snapshot["worst_period"] = (
-        {"ticker": worst[0], "change_pct": worst[1]["change_pct"]} if worst else {}
-    )
-    snapshot["period_contributors"] = [
-        {"ticker": ticker, "contribution_dollar": vals["value_change"]}
-        for ticker, vals in contributors
-    ]
-    for h in snapshot["top_holdings"]:
-        row = rows.get(h["ticker"])
-        h["period_change_pct"] = row["change_pct"] if row else None
-        h.pop("day_change_pct", None)
-    for key in ("today_pl", "best_today", "worst_today", "today_contributors"):
-        snapshot.pop(key, None)
-    return snapshot, non_watchlist
-
-
-def _briefing_local_period(db: Session, range_key: str, portfolio_id: int = 1) -> dict:
-    """
-    Local briefing over a non-day range: deterministic period digest from daily
-    closes. Move explainers are day-scoped, so period movers carry no
-    explanation text.
-    """
-    from app.services.portfolio_analytics import compute_range_rows
-
-    cfg = _BRIEFING_RANGES[range_key]
-    phrase = cfg["phrase"]
-    snapshot, non_watchlist = _briefing_snapshot(db, portfolio_id)
-    quality = snapshot.get("valuation") or {}
-    if quality.get("data_quality") != "complete":
-        return _briefing_local_quality_response(snapshot, period_label=phrase)
-    period = compute_range_rows(non_watchlist, range_key)
-    rows = period.get("holdings") or {}
-
-    movers: list[dict] = []
-    for h in non_watchlist:
-        row = rows.get(h["ticker"])
-        if not row:
-            continue
-        movers.append({
-            "ticker": h["ticker"],
-            # Field names match the day payload so the card renderer is shared.
-            "day_change_pct": row["change_pct"],
-            "day_change_dollar": row["value_change"],
-            "icon": "bi-graph-up-arrow" if row["change_pct"] >= 0 else "bi-graph-down-arrow",
-            "explanation": "",
-        })
-    movers.sort(key=lambda m: abs(m["day_change_dollar"]), reverse=True)
-    movers = movers[:6]
-
-    rose = sum(1 for r in rows.values() if r["change_pct"] > 0)
-    fell = sum(1 for r in rows.values() if r["change_pct"] < 0)
-    total = len(rows)
-
-    if not total:
-        lead = f"Not enough price history yet to read your portfolio {phrase}."
-    elif rose > 0:
-        best_ticker, best_vals = max(rows.items(), key=lambda kv: kv[1]["change_pct"])
-        lead = (
-            f"{rose} of {total} holdings rose {phrase}, "
-            f"led by {best_ticker} ({best_vals['change_pct']:+.1f}%)."
-        )
-    elif fell == total:
-        worst_ticker, worst_vals = min(rows.items(), key=lambda kv: kv[1]["change_pct"])
-        lead = (
-            f"All {total} holdings fell {phrase}; "
-            f"{worst_ticker} pulled back the most ({worst_vals['change_pct']:+.1f}%)."
-        )
-    else:
-        lead = f"Holdings were flat {phrase} — no clear directional trend."
-
-    return {
-        "mode": "local",
-        "lead": lead,
-        "movers": movers,
-        "period_label": phrase,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-    }
-
-
-def _briefing_local(db: Session, portfolio_id: int = 1) -> dict:
-    """Compute local briefing using move_explainer. Never calls Claude."""
-    snapshot, non_watchlist = _briefing_snapshot(db, portfolio_id)
-    if (snapshot.get("valuation") or {}).get("data_quality") != "complete":
-        return _briefing_local_quality_response(snapshot)
-    active_tickers = [h["ticker"] for h in non_watchlist]
-    quotes = {q["ticker"]: q for q in get_all_quotes(active_tickers)}
-    benchmarks = get_benchmark_data()
-    benchmark_cache: dict = {}
-
-    movers: list[dict] = []
-    rose = fell = 0
-    for h in non_watchlist:
-        ticker = h["ticker"]
-        stock_data = quotes.get(ticker) or {}
-        if stock_data.get("error") or not stock_data:
-            shares = float(h.get("shares") or 1)
-            stock_data = {
-                "ticker": ticker,
-                "day_change_pct": h.get("day_change_pct", 0),
-                "day_change": round(float(h.get("daily_value_change") or 0) / shares, 4),
-            }
-
-        day_chg = float(h.get("day_change_pct") or 0)
-        if day_chg > 0:
-            rose += 1
-        elif day_chg < 0:
-            fell += 1
-
-        try:
-            summary = explain_move(
-                stock_data,
-                shared_benchmarks=benchmarks,
-                _benchmark_cache=benchmark_cache,
-            )
-            icon = summary.drivers[0].icon if summary.drivers else "bi-question-circle"
-            explanation = (summary.explanation_text or "")[:240]
-        except Exception as exc:
-            logger.debug("Briefing explain_move failed; exception_type=%s", type(exc).__name__)
-            icon = "bi-question-circle"
-            explanation = ""
-
-        movers.append({
-            "ticker": ticker,
-            "day_change_pct": day_chg,
-            "day_change_dollar": round(float(h.get("daily_value_change") or 0), 2),
-            "icon": icon,
-            "explanation": explanation,
-        })
-
-    movers.sort(key=lambda m: abs(m["day_change_dollar"]), reverse=True)
-    movers = movers[:6]
-
-    total = rose + fell
-    best = snapshot.get("best_today") or {}
-    best_t = best.get("ticker", "")
-    best_pct = float(best.get("day_change_pct") or 0)
-    worst_snap = snapshot.get("worst_today") or {}
-
-    if rose > 0 and best_t and total > 0:
-        lead = f"{rose} of {total} holdings rose today, led by {best_t} ({best_pct:+.1f}%)."
-    elif fell == total and total > 0:
-        w_t = worst_snap.get("ticker", "")
-        w_pct = float(worst_snap.get("day_change_pct") or 0)
-        lead = (
-            f"All {total} holdings fell today; "
-            f"{w_t} pulled back the most ({w_pct:+.1f}%)." if w_t
-            else f"All {total} holdings fell today."
-        )
-    else:
-        lead = "Holdings were mixed today — no clear directional trend."
-
-    return {
-        "mode": "local",
-        "lead": lead,
-        "movers": movers,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-    }
-
-
-def _briefing_fallback(snapshot: dict) -> dict:
-    """Deterministic AI-mode response when Claude is unavailable."""
-    quality = snapshot.get("valuation") or {}
-    data_quality = quality.get("data_quality", "complete")
-    missing = list(quality.get("missing_tickers") or [])
-    if data_quality != "complete":
-        missing_text = ", ".join(missing) if missing else "current positions"
-        return {
-            "mode": "ai",
-            "source": "data-unavailable" if data_quality == "unavailable" else "partial-data",
-            "health": (
-                "Live valuation is unavailable; no return narrative was generated."
-                if data_quality == "unavailable"
-                else "Live valuation is partial; return figures omit unpriced positions."
-            ),
-            "drivers": [f"Missing current prices for: {missing_text}."],
-            "adjustments": ["Retry when market data is available before acting on this read."],
-            "quote": next_briefing_canned_quote(),
-            "data_quality": data_quality,
-            "missing_tickers": missing,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-        }
-    phrase = snapshot.get("period_label") or "today"
-    pl = snapshot.get("today_pl") or snapshot.get("period_pl") or {}
-    tr = snapshot.get("total_return") or {}
-    best = snapshot.get("best_today") or snapshot.get("best_period") or {}
-    worst = snapshot.get("worst_today") or snapshot.get("worst_period") or {}
-
-    def _mover_pct(entry: dict) -> float:
-        value = entry.get("day_change_pct")
-        if value is None:
-            value = entry.get("change_pct")
-        return float(value or 0)
-
-    direction = "up" if float(pl.get("dollar") or 0) >= 0 else "down"
-    pct = abs(float(pl.get("pct") or 0))
-    ret_pct = float(tr.get("pct") or 0)
-    health = (
-        f"Your portfolio is {direction} {pct:.2f}% {phrase}. "
-        f"Total return stands at {ret_pct:+.2f}% overall."
-    )
-    drivers: list[str] = []
-    if best.get("ticker"):
-        drivers.append(
-            f"{best['ticker']} was your best mover {phrase} "
-            f"({_mover_pct(best):+.1f}%)."
-        )
-    if worst.get("ticker") and worst.get("ticker") != best.get("ticker"):
-        drivers.append(
-            f"{worst['ticker']} pulled back "
-            f"({_mover_pct(worst):+.1f}%)."
-        )
-    if not drivers:
-        drivers = [f"No standout movers {phrase}."]
-
-    return {
-        "mode": "ai",
-        "source": "local-fallback",
-        "health": health,
-        "drivers": drivers,
-        "adjustments": ["No changes needed — the book looks balanced."],
-        "quote": next_briefing_canned_quote(),
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-    }
-
-
-def _briefing_local_quality_response(
-    snapshot: dict,
-    *,
-    period_label: str | None = None,
-) -> dict:
-    """Return an honest local briefing when live valuation is incomplete."""
-    quality = snapshot.get("valuation") or {}
-    data_quality = quality.get("data_quality", "unavailable")
-    missing = list(quality.get("missing_tickers") or [])
-    scope = f" {period_label}" if period_label else ""
-    return {
-        "mode": "local",
-        "source": "data-unavailable" if data_quality == "unavailable" else "partial-data",
-        "lead": (
-            f"Live valuation is {data_quality}{scope}; "
-            "unpriced positions are not being narrated as a complete Portfolio."
-        ),
-        "movers": [],
-        "data_quality": data_quality,
-        "missing_tickers": missing,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-    }
-
 
 @router.get("/portfolio-summary")
 async def get_portfolio_summary(
@@ -2091,64 +977,46 @@ async def get_portfolio_summary(
     """
     if mode not in ("ai", "local"):
         mode = "ai"
-    range_key = _normalize_briefing_range(time_range)
-    book_ticker = _portfolio_cache_ticker(portfolio_id)
 
     if mode == "local":
         try:
-            if range_key == "day":
-                return _briefing_local(db, portfolio_id)
-            return _briefing_local_period(db, range_key, portfolio_id)
+            return portfolio_briefing.build_local(db, time_range, portfolio_id)
         except Exception as exc:
             logger.error("Local briefing failed; exception_type=%s", type(exc).__name__)
             raise HTTPException(
                 status_code=500, detail="Briefing temporarily unavailable."
             ) from exc
 
-    # AI mode — check 24 h cache first (one entry per range)
-    cache_type = _briefing_cache_type(range_key)
-    cache = narrative_cache.NarrativeCache(db, ttl=CACHE_TTL)
-    if not force_refresh:
-        stored = cache.get_json(book_ticker, cache_type)
-        if stored is not None:
-            stored["from_cache"] = True
-            return stored
+    def _fallback(snapshot: dict | None) -> dict:
+        # Without a snapshot the card has nothing honest to show, so it errors
+        # rather than narrating a book it could not read.
+        if snapshot is None:
+            raise HTTPException(
+                status_code=500, detail="Briefing temporarily unavailable."
+            )
+        return portfolio_briefing.build_fallback(snapshot)
 
-    # Build snapshot; surface 500 so the card can show a clear error
-    try:
-        if range_key == "day":
-            snapshot, _ = _briefing_snapshot(db, portfolio_id)
-        else:
-            snapshot, _ = _briefing_period_snapshot(db, range_key, portfolio_id)
-    except Exception as exc:
-        logger.error("Briefing snapshot failed; exception_type=%s", type(exc).__name__)
-        raise HTTPException(
-            status_code=500, detail="Briefing temporarily unavailable."
-        ) from exc
-
-    if (snapshot.get("valuation") or {}).get("data_quality") != "complete":
-        return _briefing_fallback(snapshot)
-
-    # Call Haiku; fall back deterministically on any failure
-    try:
-        parsed = generate_portfolio_briefing(snapshot)
-        payload: dict = {
-            "mode": "ai",
-            "source": "claude",
-            **parsed,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-        }
-        try:
-            cache.store_json(book_ticker, cache_type, payload, MODEL)
-        except Exception as exc:
-            logger.debug("Failed to cache briefing; exception_type=%s", type(exc).__name__)
-        return payload
-
-    except Exception as exc:
-        _log_claude_call_result("AI briefing", exc)
-        return _briefing_fallback(snapshot)
+    return ai_narrative.narrative(
+        db,
+        _portfolio_cache_ticker(portfolio_id),
+        portfolio_briefing.cache_type(time_range),
+        build_snapshot=lambda: portfolio_briefing.build_snapshot(
+            db, time_range, portfolio_id
+        ),
+        generate=lambda snapshot: portfolio_briefing.build_briefing(
+            generate_portfolio_briefing(snapshot)
+        ),
+        fallback=_fallback,
+        model=MODEL,
+        label="AI briefing",
+        force_refresh=force_refresh,
+        ttl=CACHE_TTL,
+    )
 
 
+# This narrative's AISummary namespace belongs beside its snapshot and fallback
+# builders in app/services/analytics_insights.py, which is outside this change's
+# scope; the briefing and action-plan namespaces already moved to theirs.
 _ANALYTICS_INSIGHTS_CACHE_TYPE = "analytics_insights"
 _ANALYTICS_WIDGET_INSIGHTS_VERSION = 2
 
@@ -2189,21 +1057,6 @@ def _merge_ai_widget_insights(local_widgets: dict, ai_widgets: dict) -> dict:
     return merged
 
 
-def _cache_analytics_insights(db: Session, payload: dict, portfolio_id: int = 1) -> None:
-    try:
-        narrative_cache.NarrativeCache(db, ttl=CACHE_TTL).store_json(
-            _portfolio_cache_ticker(portfolio_id),
-            _ANALYTICS_INSIGHTS_CACHE_TYPE,
-            payload,
-            MODEL,
-        )
-    except Exception as exc:
-        logger.debug(
-            "Failed to cache analytics insights; exception_type=%s",
-            type(exc).__name__,
-        )
-
-
 @router.get("/analytics-insights")
 async def get_analytics_insights(
     mode: str = "ai",
@@ -2240,37 +1093,14 @@ async def get_analytics_insights(
                 detail="Analytics insights temporarily unavailable.",
             ) from exc
 
-    if not force_refresh:
-        stored = narrative_cache.NarrativeCache(db, ttl=CACHE_TTL).get_json(
-            _portfolio_cache_ticker(portfolio_id),
-            _ANALYTICS_INSIGHTS_CACHE_TYPE,
-            validator=lambda payload: not _analytics_cache_needs_regeneration(payload),
-        )
-        if stored is not None:
-            stored["from_cache"] = True
-            return stored
-
-    try:
-        snapshot = build_analytics_snapshot(db, portfolio_id)
-    except Exception as exc:
-        logger.error("Analytics snapshot failed; exception_type=%s", type(exc).__name__)
-        raise HTTPException(
-            status_code=500,
-            detail="Analytics insights temporarily unavailable.",
-        ) from exc
-
-    valuation_state = snapshot.get("valuation") or {}
-    if valuation_state.get("data_quality") != "complete":
-        return build_analytics_fallback(snapshot)
-
-    try:
+    def _generate(snapshot: dict) -> dict:
         parsed = generate_analytics_insights(snapshot)
         local_widgets = build_local_widget_insights(snapshot)
         merged_widgets = _merge_ai_widget_insights(
             local_widgets,
             parsed.get("widget_insights") or {},
         )
-        payload: dict = {
+        return {
             "mode": "ai",
             "source": "claude",
             "insights": parsed.get("insights") or {},
@@ -2278,280 +1108,33 @@ async def get_analytics_insights(
             "widget_insights_version": _ANALYTICS_WIDGET_INSIGHTS_VERSION,
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
-        _cache_analytics_insights(db, payload, portfolio_id)
-        return payload
 
-    except Exception as exc:
-        _log_claude_call_result("AI analytics insights", exc)
+    def _fallback(snapshot: dict | None) -> dict:
+        # Without a snapshot the bar has nothing honest to show, so it errors
+        # rather than narrating tabs it could not read.
+        if snapshot is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Analytics insights temporarily unavailable.",
+            )
         return build_analytics_fallback(snapshot)
+
+    return ai_narrative.narrative(
+        db,
+        _portfolio_cache_ticker(portfolio_id),
+        _ANALYTICS_INSIGHTS_CACHE_TYPE,
+        build_snapshot=lambda: build_analytics_snapshot(db, portfolio_id),
+        generate=_generate,
+        fallback=_fallback,
+        model=MODEL,
+        label="AI analytics insights",
+        force_refresh=force_refresh,
+        validator=lambda payload: not _analytics_cache_needs_regeneration(payload),
+        ttl=CACHE_TTL,
+    )
 
 
 # ── Portfolio Action Plan endpoint ────────────────────────────────────────────
-
-# Bumped v2 → v3: portfolio_state_signature now folds in the secondary action
-# (fixing a cache collision between e.g. "2 hold, 1 add" and "2 hold, 1 trim"
-# books). Bumping the version cleanly orphans any pre-fix cached rows instead
-# of risking a stale, collision-prone entry being read under the old key.
-_ACTION_PLAN_CACHE_TYPE = "action_plan_v3"
-
-_GAP_TYPE_LABEL: dict[str, str] = {
-    "heavy_hold":    "large position on hold",
-    "large_trim":    "oversized position flagged for trim",
-    "small_add":     "undersized position with buy signal",
-    "uncertain_hold": "low-confidence hold",
-}
-
-
-def _action_plan_snapshot(
-    db: Session, core: dict, portfolio_id: int = 1
-) -> dict:  # pylint: disable=too-many-locals
-    """
-    Build the compact snapshot sent to Claude for the action plan.
-    Fuses per-ticker signal data, portfolio exposure, risk metrics, regime,
-    and performance vs benchmark into a token-lean JSON.
-    """
-    from app.services.portfolio_analytics import (
-        compute_portfolio_beta,
-        compute_rolling_volatility,
-        compute_sector_tilt,
-        compute_conviction_gaps,
-    )
-
-    signals = core["signals"]
-    alloc_map = core["alloc_map"]
-    holding_meta = core["holding_meta"]
-    portfolio_exposure = core["portfolio_exposure"]
-    regime = core["regime"]
-    active_tickers = core["active_tickers"]
-
-    # Portfolio value + per-holding total_return_pct from the valuation module.
-    try:
-        valuation = portfolio_valuation.evaluate(db, portfolio_id)
-        holdings_rows = valuation.holdings
-        total_value = valuation.total_value
-        valuation_quality = {
-            "data_quality": valuation.data_quality,
-            "missing_tickers": list(valuation.missing_tickers),
-            "priced_position_count": valuation.priced_position_count,
-            "expected_position_count": valuation.expected_position_count,
-        }
-    except Exception as exc:
-        logger.warning(
-            "Action plan Portfolio valuation failed; exception_type=%s",
-            type(exc).__name__,
-        )
-        holdings_rows, total_value = [], 0.0
-        valuation_quality = {
-            "data_quality": "unavailable",
-            "missing_tickers": list(active_tickers),
-            "priced_position_count": 0,
-            "expected_position_count": len(active_tickers),
-        }
-
-    return_map = {
-        h["ticker"]: float(h.get("total_return_pct") or 0)
-        for h in holdings_rows
-    }
-
-    # Per-holding compact entries
-    holdings_data = []
-    for ticker in active_tickers:
-        sig = {k: v for k, v in (signals.get(ticker) or {}).items()
-               if not k.startswith("_")}
-        meta = holding_meta.get(ticker, {})
-        entry: dict = {
-            "t": ticker,
-            "action": sig.get("action", "needs-data"),
-            "conf": sig.get("confidence", 0),
-            "alloc_pct": alloc_map.get(ticker, 0),
-            "ret_pct": return_map.get(ticker, 0),
-            "reason": (sig.get("reasons") or [""])[0][:80],
-            "risk": (sig.get("risks") or [""])[0][:60],
-            "flip": sig.get("flip_triggers"),
-            "hold_class": sig.get("hold_class", "auto"),
-            "watchlist": meta.get("is_watchlist", False),
-            "timing": timing_bucket(sig.get("timing")),
-            "events": bool(sig.get("events")),
-        }
-        peer = sig.get("peer_relative") or {}
-        if peer:
-            entry["peer"] = (peer.get("summary") or peer.get("zone") or "")[:60]
-        holdings_data.append(entry)
-
-    # Risk metrics
-    beta_data: dict = {}
-    vol_data: dict = {}
-    sector_tilt_data: dict = {}
-    conviction_data: dict = {}
-    try:
-        if holdings_rows:
-            beta_data = compute_portfolio_beta(holdings_rows) or {}
-            vol_data = compute_rolling_volatility(holdings_rows) or {}
-            sector_tilt_data = compute_sector_tilt(holdings_rows) or {}
-            conviction_data = compute_conviction_gaps(holdings_rows, signals) or {}
-    except Exception as exc:
-        logger.debug(
-            "Action plan risk metrics failed; exception_type=%s",
-            type(exc).__name__,
-        )
-
-    # Exposure summary — top 4 sectors + top 3 countries
-    sectors = (portfolio_exposure.get("sectors") or [])[:4]
-    countries = (portfolio_exposure.get("countries") or [])[:3]
-    hhi = float(portfolio_exposure.get("concentration_hhi") or 0)
-
-    # Conviction gaps summary
-    gap_items = (conviction_data.get("gaps") or [])[:3]
-
-    snapshot: dict = {
-        "as_of": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-        "valuation": valuation_quality,
-        "total_value": round(total_value, 0),
-        "regime": {
-            "label": regime.get("label", ""),
-            "mood": regime.get("mood", ""),
-        },
-        "concentration_hhi": round(hhi, 3),
-        "hhi_band": (
-            "high" if hhi >= 0.25 else "medium" if hhi >= 0.10 else "low"
-        ),
-        "holdings": holdings_data,
-        "exposure": {
-            "top_sectors": [
-                {
-                    "s": s.get("sector") or s.get("name", ""),
-                    "w": round(float(s.get("weight_pct") or 0), 1),
-                }
-                for s in sectors
-            ],
-            "top_countries": [
-                {
-                    "c": c.get("country") or c.get("name", ""),
-                    "w": round(float(c.get("weight_pct") or 0), 1),
-                }
-                for c in countries
-            ],
-        },
-        "risk": {
-            "beta": beta_data.get("beta"),
-            "beta_label": beta_data.get("label"),
-            "vol_pct": vol_data.get("current_vol_pct"),
-        },
-        "tilt": [
-            {"s": t.get("sector", ""), "vs_spy": round(float(t.get("overweight_pct") or 0), 1)}
-            for t in (sector_tilt_data.get("tilt") or [])[:3]
-        ],
-        "conviction_gaps": [
-            {
-                "t": g["ticker"],
-                "type": _GAP_TYPE_LABEL.get(g["gap_type"], g["gap_type"].replace("_", " ")),
-            }
-            for g in gap_items
-        ],
-    }
-    return snapshot
-
-
-def _action_plan_fallback(core: dict) -> dict:
-    """
-    Deterministic fallback when Claude is unavailable or force_local=True.
-    Buckets holdings purely from their existing verdict actions.
-    """
-    signals = core["signals"]
-    alloc_map = core["alloc_map"]
-    holding_meta = core["holding_meta"]
-    active_tickers = core["active_tickers"]
-    regime = core["regime"]
-
-    buckets: dict[str, list[dict]] = {"hold": [], "add": [], "trim": [], "exit": []}
-    for ticker in active_tickers:
-        sig = signals.get(ticker) or {}
-        action = str(sig.get("action") or "hold").lower()
-        meta = holding_meta.get(ticker, {})
-        reason = (sig.get("reasons") or [""])[0][:80]
-
-        # Map verdict actions: watchlist "trim" or needs-data → exit bucket
-        if meta.get("is_watchlist") and action in ("trim", "needs-data"):
-            bucket_key = "exit"
-        elif action in ("hold", "add", "trim"):
-            bucket_key = action
-        else:
-            bucket_key = "hold"
-
-        buckets[bucket_key].append({"ticker": ticker, "reason": reason})
-
-    n_hold = len(buckets["hold"])
-    n_add  = len(buckets["add"])
-    n_trim = len(buckets["trim"])
-    n_exit = len(buckets["exit"])
-    mood = (regime.get("mood") or "neutral").title()
-    regime_label = regime.get("label") or mood
-
-    # Build a plain-language headline from the dominant signal
-    if n_trim or n_exit:
-        headline = (
-            f"{n_trim + n_exit} position{'s' if n_trim + n_exit != 1 else ''} flagged for "
-            f"trim/exit — {n_hold} anchors steady"
-        )
-    elif n_add:
-        headline = (
-            f"{n_add} add signal{'s' if n_add != 1 else ''} surfaced — "
-            f"{n_hold} core position{'s' if n_hold != 1 else ''} holding"
-        )
-    else:
-        headline = (
-            f"All {n_hold} position{'s' if n_hold != 1 else ''} on hold — "
-            "no urgent action from local signals"
-        )
-
-    thesis = (
-        f"FolioOrb local signals: {n_hold} hold · {n_add} add · "
-        f"{n_trim} trim · {n_exit} exit. "
-        f"Market: {regime_label}. "
-        "Enable Claude AI in Settings for a cross-holding, risk-adjusted plan."
-    )
-
-    alloc_sorted = sorted(
-        [(t, alloc_map.get(t, 0)) for t in active_tickers],
-        key=lambda x: x[1],
-        reverse=True,
-    )
-    largest_ticker = alloc_sorted[0][0] if alloc_sorted else ""
-    largest_alloc = alloc_sorted[0][1] if alloc_sorted else 0
-
-    priority: list[str] = []
-    if buckets["trim"]:
-        first_trim = buckets["trim"][0]["ticker"]
-        priority.append(
-            f"Review {first_trim} — local signal suggests trimming the position."
-        )
-    if buckets["exit"]:
-        first_exit = buckets["exit"][0]["ticker"]
-        priority.append(
-            f"Evaluate {first_exit} for exit — watchlist flag or deteriorating signal."
-        )
-    if buckets["add"]:
-        first_add = buckets["add"][0]["ticker"]
-        priority.append(
-            f"Consider building into {first_add} — local signal rates it a buy."
-        )
-
-    return {
-        "source": "local-fallback",
-        "headline": headline,
-        "thesis": thesis[:300],
-        "buckets": buckets,
-        "priority_moves": priority[:3],
-        "best_return_note": (
-            f"{largest_ticker} is your largest position at {largest_alloc:.0f}% — "
-            "right-sizing concentration is the highest-impact lever."
-            if largest_ticker else
-            "Diversify concentration to close the gap to the optimal mix."
-        ),
-        "regime": regime,
-        "disclaimer": _VERDICT_DISCLAIMER,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-    }
 
 
 @router.get("/action-plan")
@@ -2569,84 +1152,25 @@ async def get_action_plan(
     Invalidated on portfolio-state drift (dominant action + concentration shift).
     Falls back deterministically when Claude is unavailable or force_local=True.
     """
-    # Build portfolio state signature for cache invalidation
-    core = _collect_portfolio_signals_core(db, portfolio_id)
-    book_ticker = _portfolio_cache_ticker(portfolio_id)
+    # Verdicts as raw material: the plan reads them, it does not serve them, so
+    # it skips narration (quips, cache traffic, scan history, Claude).
+    scan = verdict_pipeline.scan_portfolio(db, portfolio_id, narrate=False)
 
     # Local-only path: skip Claude entirely — return deterministic buckets instantly
     if force_local:
-        return _action_plan_fallback(core)
+        return action_plan.build_fallback(scan)
 
-    alloc_map = core["alloc_map"]
-    raw_signals = core["signals"]
-    # Strip internal flags before portfolio_state_signature
-    clean_signals = {
-        t: {k: v for k, v in sig.items() if not k.startswith("_")}
-        for t, sig in raw_signals.items()
-    }
-    port_state = _portfolio_state_signature(clean_signals, alloc_map)
-    cache_summary_type = f"{_ACTION_PLAN_CACHE_TYPE}:{port_state['summary_type']}"
-    cache = narrative_cache.NarrativeCache(db, ttl=CACHE_TTL)
-
-    if not force_refresh:
-        stored = cache.get_json(book_ticker, cache_summary_type)
-        if stored is not None:
-            stored["from_cache"] = True
-            return stored
-
-    # Build compact snapshot for Claude
-    try:
-        snapshot = _action_plan_snapshot(db, core, portfolio_id)
-    except Exception as exc:
-        logger.warning(
-            "Action plan snapshot failed; exception_type=%s",
-            type(exc).__name__,
-        )
-        return _action_plan_fallback(core)
-
-    valuation_state = snapshot.get("valuation") or {}
-    if valuation_state.get("data_quality") != "complete":
-        fallback = _action_plan_fallback(core)
-        quality = valuation_state.get("data_quality", "unavailable")
-        missing = list(valuation_state.get("missing_tickers") or [])
-        fallback.update(
-            {
-                "source": "data-unavailable" if quality == "unavailable" else "partial-data",
-                "data_quality": quality,
-                "missing_tickers": missing,
-                "headline": f"Live Portfolio valuation is {quality}",
-                "thesis": (
-                    "No Claude plan was generated because unpriced positions would make "
-                    "Portfolio-level totals incomplete."
-                ),
-            }
-        )
-        return fallback
-
-    # Call Claude — fall back deterministically on any failure
-    try:
-        parsed = generate_action_plan(snapshot)
-        payload: dict = {
-            "source": "claude",
-            **parsed,
-            "regime": core["regime"],
-            "disclaimer": _VERDICT_DISCLAIMER,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-        }
-        try:
-            cache.store_json(
-                book_ticker,
-                cache_summary_type,
-                payload,
-                ACTION_PLAN_MODEL,
-            )
-        except Exception as exc:
-            logger.debug(
-                "Failed to cache action plan; exception_type=%s",
-                type(exc).__name__,
-            )
-        return payload
-
-    except Exception as exc:
-        _log_claude_call_result("Action plan Claude call", exc)
-        return _action_plan_fallback(core)
+    return ai_narrative.narrative(
+        db,
+        _portfolio_cache_ticker(portfolio_id),
+        action_plan.cache_type(scan),
+        build_snapshot=lambda: action_plan.build_snapshot(db, scan, portfolio_id),
+        generate=lambda snapshot: action_plan.build_plan(
+            scan, generate_action_plan(snapshot)
+        ),
+        fallback=lambda snapshot: action_plan.build_fallback(scan, snapshot),
+        model=ACTION_PLAN_MODEL,
+        label="Action plan",
+        force_refresh=force_refresh,
+        ttl=CACHE_TTL,
+    )

@@ -15,11 +15,14 @@ import logging
 import xml.etree.ElementTree as ET
 from datetime import date, datetime, timezone
 
+from app.services.ttl_cache import ttl_cache
 from app.version import __version__
 
 logger = logging.getLogger(__name__)
 
-_CURVE_CACHE: dict = {"date": None, "curve": None}
+# The calendar date is the key, so the curve is refetched once a day whatever
+# the clock says. The TTL is only what stops yesterday's entry from lingering.
+_CURVE_TTL = 24 * 3600
 
 _FEED_URL = (
     "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/"
@@ -158,25 +161,24 @@ def _unavailable() -> dict:
     }
 
 
-def get_yield_curve(*, force_refresh: bool = False) -> dict:
+@ttl_cache(
+    ttl=_CURVE_TTL,
+    key=lambda: date.today().isoformat(),
+    # An offline morning shouldn't blank the curve all day, so only a live
+    # curve is remembered.
+    cache_when=lambda curve: curve["data_quality"] == "live",
+    copy=dict,
+)
+def get_yield_curve() -> dict:
     """Return today's par yield curve, its spreads, and its shape."""
-    today = date.today().isoformat()
-    if (
-        not force_refresh
-        and _CURVE_CACHE.get("date") == today
-        and _CURVE_CACHE.get("curve")
-    ):
-        return dict(_CURVE_CACHE["curve"])
-
     xml_text = _fetch_curve_xml()
     parsed = _parse_curve_xml(xml_text) if xml_text else None
     if not parsed:
-        # Never cached: an offline morning shouldn't blank the curve all day.
         return _unavailable()
 
     spreads = _compute_spreads(parsed["tenors"])
     curve_state = _classify_curve(spreads["spread_2s10s"])
-    curve = {
+    return {
         "as_of": parsed["as_of"],
         "tenors": parsed["tenors"],
         "spread_2s10s": spreads["spread_2s10s"],
@@ -187,6 +189,3 @@ def get_yield_curve(*, force_refresh: bool = False) -> dict:
         "data_quality": "live",
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
-    _CURVE_CACHE["date"] = today
-    _CURVE_CACHE["curve"] = curve
-    return curve

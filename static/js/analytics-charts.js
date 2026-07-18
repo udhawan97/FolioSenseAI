@@ -37,33 +37,38 @@ const AnalyticsCharts = (() => {
     let _moduleInsightsCache = { ai: null, local: null };
     let _moduleInsightsLoading = false;
     let _portfolioExposureCache = null;
-    let _portfolioExposurePromise = null;
 
     // Sector tilt live-selection state
     let _sectorTiltFull = [];
     let _sectorHoldingContribs = {};
     let _sectorTiltSelectedTicker = null;
 
+    // The URL dashboard.js declares, because apiGetCached keys on the string and
+    // the snapshot strip over there reads the same endpoint — one spelling is
+    // what keeps the two files to one request. Falls back to the literal so this
+    // file still works if dashboard.js is not on the page.
+    function exposureUrl() {
+        return typeof PORTFOLIO_EXPOSURE_URL === "string"
+            ? PORTFOLIO_EXPOSURE_URL
+            : "/api/ai/portfolio-exposure";
+    }
+
+    // Three panes here want this payload and so does the dashboard snapshot.
+    // apiGetCached is the shared layer: concurrent callers await one in-flight
+    // request and later ones get the settled payload. The local copy above it
+    // stays because the dashboard may have already put a fresher payload in
+    // cachedPortfolioExposure (it arrives on the verdict response too), and that
+    // one wins over a fetch of our own.
     async function fetchPortfolioExposure({ refresh = false } = {}) {
         if (!refresh && _portfolioExposureCache) return _portfolioExposureCache;
         if (!refresh && typeof cachedPortfolioExposure !== "undefined" && cachedPortfolioExposure) {
             _portfolioExposureCache = cachedPortfolioExposure;
             return cachedPortfolioExposure;
         }
-        if (!refresh && _portfolioExposurePromise) return _portfolioExposurePromise;
-        _portfolioExposurePromise = fetch("/api/ai/portfolio-exposure")
-            .then((res) => {
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                return res.json();
-            })
-            .then((data) => {
-                _portfolioExposureCache = data;
-                return data;
-            })
-            .finally(() => {
-                _portfolioExposurePromise = null;
-            });
-        return _portfolioExposurePromise;
+        const url = exposureUrl();
+        if (refresh) apiGetCached.invalidate(url);
+        _portfolioExposureCache = await apiGetCached(url);
+        return _portfolioExposureCache;
     }
     const MODULE_LABELS = {
         performance: "Performance",
@@ -349,9 +354,7 @@ const AnalyticsCharts = (() => {
 
         _moduleInsightsLoading = true;
         try {
-            const res = await fetch("/api/ai/analytics-insights?mode=local");
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            _moduleInsightsCache.local = await res.json();
+            _moduleInsightsCache.local = await apiGet("/api/ai/analytics-insights?mode=local");
             applyWidgetInsights();
             if (widgetInsightMode() === "ai") {
                 void loadAiWidgetInsights(false);
@@ -373,9 +376,7 @@ const AnalyticsCharts = (() => {
         try {
             const params = new URLSearchParams({ mode: "ai" });
             if (forceRefresh) params.set("force_refresh", "true");
-            const res = await fetch(`/api/ai/analytics-insights?${params}`);
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const payload = await res.json();
+            const payload = await apiGet(`/api/ai/analytics-insights?${params}`);
             if (payload?.source === "claude") {
                 _moduleInsightsCache.ai = payload;
             } else {
@@ -524,9 +525,7 @@ const AnalyticsCharts = (() => {
         showEmpty("portfolio-outlook-empty", false);
 
         try {
-            const res = await fetch(analyticsSignalsUrl());
-            if (!res.ok) throw new Error("signals unavailable");
-            const data = await res.json();
+            const data = await apiGet(analyticsSignalsUrl());
             renderSignalBoard(data);
             renderPortfolioOutlook(data);
         } catch (err) {
@@ -2053,9 +2052,9 @@ const AnalyticsCharts = (() => {
                 : g.confidence >= 60
                     ? token("--accent-yellow", "#ffd60a")
                     : token("--text-tertiary", "#636366");
-            return `<div class="conviction-gap-row">
+            return html`<div class="conviction-gap-row">
                 <div class="conviction-gap-top">
-                    <span class="conviction-gap-ticker">${escapeHtml(g.ticker)}</span>
+                    <span class="conviction-gap-ticker">${g.ticker}</span>
                     <span class="conviction-gap-badge" style="color:${col};border-color:${col}">
                         <i class="bi ${cfg.icon}"></i>${cfg.badge}
                     </span>
@@ -2128,29 +2127,29 @@ const AnalyticsCharts = (() => {
             const c = colors[b.key] || colors.mid;
             const tickers = grouped[b.key] || [];
             const tickerHtml = tickers.length
-                ? `<div class="cs-band-tickers">${
+                ? html`<div class="cs-band-tickers">${
                     tickers.slice(0, 6).map(t =>
-                        `<span class="cs-ticker-pill" title="${t.ticker}: ${t.confidence}% confidence · ${t.allocation_pct}% of portfolio">${escapeHtml(t.ticker)}</span>`
-                    ).join("")}${tickers.length > 6 ? `<span class="cs-ticker-more">+${tickers.length - 6}</span>` : ""}</div>`
+                        html`<span class="cs-ticker-pill" title="${t.ticker}: ${t.confidence}% confidence · ${t.allocation_pct}% of portfolio">${t.ticker}</span>`
+                    )}${tickers.length > 6 ? html`<span class="cs-ticker-more">+${tickers.length - 6}</span>` : ""}</div>`
                 : "";
-            return `<div class="cs-band${b.weight_pct === 0 ? " cs-band-empty" : ""}">
+            return html`<div class="cs-band${b.weight_pct === 0 ? " cs-band-empty" : ""}">
                 <div class="cs-band-header">
                     <span class="cs-band-dot" style="background:${c};box-shadow:0 0 0 4px color-mix(in srgb, ${c} 16%, transparent)"></span>
-                    <span class="cs-band-range">${escapeHtml(b.band)}</span>
+                    <span class="cs-band-range">${b.band}</span>
                     <span class="cs-band-name">${meta.label}</span>
                     <span class="cs-band-pct">${b.weight_pct}%</span>
                 </div>
-                ${b.weight_pct > 0 ? `<div class="cs-band-hint">${meta.hint}</div>` : ""}
+                ${b.weight_pct > 0 ? html`<div class="cs-band-hint">${meta.hint}</div>` : ""}
                 ${tickerHtml}
             </div>`;
-        }).join("");
+        });
 
-        root.innerHTML = `
+        root.innerHTML = html`
             <div class="confidence-spectrum-bar" role="img" aria-label="Confidence distribution">
                 ${buckets.filter(b => b.weight_pct > 0).map(b => {
                     const w = Math.min(100, Math.max(0, b.weight_pct));
-                    return `<div class="confidence-spectrum-seg" style="width:${w}%;background:${colors[b.key] || colors.mid}" title="${escapeHtml(b.band)}: ${b.weight_pct}%"></div>`;
-                }).join("")}
+                    return html`<div class="confidence-spectrum-seg" style="width:${w}%;background:${colors[b.key] || colors.mid}" title="${b.band}: ${b.weight_pct}%"></div>`;
+                })}
             </div>
             <div class="cs-bands">${bandRows}</div>
             <div class="cs-avg-row">
@@ -2696,33 +2695,33 @@ const AnalyticsCharts = (() => {
             const name = h.name && h.name !== h.ticker ? h.name : "";
             const title = [h.ticker, name, weightStr, shareStr].filter(Boolean).join(" · ");
 
-            return `<div class="portfolio-contrib-row ${tone}" style="--contrib-delay:${idx * 0.05}s">
+            return html`<div class="portfolio-contrib-row ${tone}" style="--contrib-delay:${idx * 0.05}s">
                 <div class="portfolio-contrib-meta">
-                    <span class="portfolio-contrib-ticker" title="${escapeHtml(title)}">${escapeHtml(h.ticker)}</span>
-                    ${name ? `<span class="portfolio-contrib-name">${escapeHtml(name)}</span>` : ""}
-                    <span class="portfolio-contrib-weight">${escapeHtml(weightStr)}</span>
+                    <span class="portfolio-contrib-ticker" title="${title}">${h.ticker}</span>
+                    ${name ? html`<span class="portfolio-contrib-name">${name}</span>` : ""}
+                    <span class="portfolio-contrib-weight">${weightStr}</span>
                 </div>
-                <span class="portfolio-contrib-chg ${tone}">${escapeHtml(chgStr)}</span>
+                <span class="portfolio-contrib-chg ${tone}">${chgStr}</span>
                 <div class="portfolio-contrib-bar-track" aria-hidden="true">
                     <div class="portfolio-contrib-bar-fill ${tone}" style="width:${barPct}%"></div>
                 </div>
                 <div class="portfolio-contrib-impact ${tone}">
-                    <span class="portfolio-contrib-dollar">${escapeHtml(dollarStr)}</span>
-                    ${shareStr ? `<span class="portfolio-contrib-share">${escapeHtml(shareStr)}</span>` : ""}
+                    <span class="portfolio-contrib-dollar">${dollarStr}</span>
+                    ${shareStr ? html`<span class="portfolio-contrib-share">${shareStr}</span>` : ""}
                 </div>
             </div>`;
         };
 
         const renderGroup = (title, tone, items, baseIdx) => {
             if (!items.length) {
-                return `<div class="portfolio-contrib-group ${tone}">
-                    <div class="portfolio-contrib-group-title">${escapeHtml(title)}</div>
+                return html`<div class="portfolio-contrib-group ${tone}">
+                    <div class="portfolio-contrib-group-title">${title}</div>
                     <div class="portfolio-contrib-empty">No ${tone === "positive" ? "gainers" : "losers"}</div>
                 </div>`;
             }
-            return `<div class="portfolio-contrib-group ${tone}">
-                <div class="portfolio-contrib-group-title">${escapeHtml(title)}</div>
-                ${items.map((h, i) => renderRow(h, baseIdx + i)).join("")}
+            return html`<div class="portfolio-contrib-group ${tone}">
+                <div class="portfolio-contrib-group-title">${title}</div>
+                ${items.map((h, i) => renderRow(h, baseIdx + i))}
             </div>`;
         };
 
@@ -2732,18 +2731,18 @@ const AnalyticsCharts = (() => {
         const losersHtml = renderGroup("Top drag", "negative", losers, rowIdx);
         rowIdx += losers.length;
         const othersHtml = others
-            ? `<div class="portfolio-contrib-group neutral">
+            ? html`<div class="portfolio-contrib-group neutral">
                 <div class="portfolio-contrib-group-title">Rest of portfolio</div>
                 ${renderRow(others, rowIdx)}
                </div>`
             : "";
 
-        root.innerHTML = `
+        root.innerHTML = html`
             <div class="portfolio-contrib-summary">
                 <div class="portfolio-contrib-summary-main">
-                    <span class="portfolio-contrib-summary-label">Portfolio ${escapeHtml(periodLabel)}</span>
-                    <span class="portfolio-contrib-summary-total ${totalCls}">${totalSign}${escapeHtml(totalDollar)}</span>
-                    <span class="portfolio-contrib-summary-pct ${totalCls}">${escapeHtml(totalPctStr)}</span>
+                    <span class="portfolio-contrib-summary-label">Portfolio ${periodLabel}</span>
+                    <span class="portfolio-contrib-summary-total ${totalCls}">${totalSign}${totalDollar}</span>
+                    <span class="portfolio-contrib-summary-pct ${totalCls}">${totalPctStr}</span>
                 </div>
                 <span class="portfolio-contrib-summary-meta">${holdingsCount} holding${holdingsCount === 1 ? "" : "s"} · dollar impact by weight</span>
             </div>
@@ -2777,9 +2776,9 @@ const AnalyticsCharts = (() => {
             const conf = Math.max(0, Math.min(100, s.confidence ?? 50));
             const bg = actionColor(action);
             const alpha = 0.25 + (conf / 100) * 0.55;
-            return `<div class="signal-board-tile" role="listitem" title="${escapeHtml(ticker)} · ${escapeHtml(action)} · ${conf}% confidence" style="--sig-color:${bg};background: color-mix(in srgb, ${bg} ${Math.round(alpha * 100)}%, var(--surface))">
-                <span class="signal-board-ticker">${escapeHtml(ticker)}</span>
-                <span class="signal-board-action">${escapeHtml(action)}</span>
+            return html`<div class="signal-board-tile" role="listitem" title="${ticker} · ${action} · ${conf}% confidence" style="--sig-color:${bg};background: color-mix(in srgb, ${bg} ${Math.round(alpha * 100)}%, var(--surface))">
+                <span class="signal-board-ticker">${ticker}</span>
+                <span class="signal-board-action">${action}</span>
                 <span class="signal-board-conf" style="--sig-conf:${conf}%" aria-hidden="true"></span>
             </div>`;
         }).join("");
@@ -2853,11 +2852,11 @@ const AnalyticsCharts = (() => {
         const dominantColor = actionColor(health.dominant_action || "hold");
         const conc = concentrationPlain(health.concentration_band || "medium");
 
-        stats.innerHTML = `
+        stats.innerHTML = html`
             <div class="verdict-mix-stat verdict-mix-stat--accent" style="--vm-accent:${dominantColor}">
                 <span class="verdict-mix-stat-label">Overall tone</span>
                 <span class="verdict-mix-stat-value verdict-mix-stat-value--accent">
-                    <i class="verdict-mix-stat-dot" aria-hidden="true"></i>${escapeHtml(dominant)}
+                    <i class="verdict-mix-stat-dot" aria-hidden="true"></i>${dominant}
                 </span>
             </div>
             <div class="verdict-mix-stat">
@@ -2866,7 +2865,7 @@ const AnalyticsCharts = (() => {
             </div>
             <div class="verdict-mix-stat">
                 <span class="verdict-mix-stat-label">Concentration</span>
-                <span class="verdict-mix-stat-value">${escapeHtml(conc)}</span>
+                <span class="verdict-mix-stat-value">${conc}</span>
             </div>`;
 
         if (quipEl) {
@@ -2881,9 +2880,9 @@ const AnalyticsCharts = (() => {
         const cls = up ? "tape-chg-up" : "tape-chg-down";
         const sign = up ? "+" : "";
         const price = typeof _marketPrice === "function" ? _marketPrice(m.price) : m.price;
-        return `<span class="markets-tape-item">
+        return html`<span class="markets-tape-item">
             <span class="tape-flag">${m.flag || ""}</span>
-            <span class="tape-name">${escapeHtml(m.name)}</span>
+            <span class="tape-name">${m.name}</span>
             <span class="tape-price">${price}</span>
             <span class="${cls}">${sign}${(m.day_change_pct ?? 0).toFixed(2)}%</span>
         </span>`;
@@ -2952,13 +2951,13 @@ const AnalyticsCharts = (() => {
             const barColor = corrBarColor(corr);
             const geo = Number(m.geo_weight_pct) || 0;
             const geoLine = geo >= 5
-                ? `<span class="markets-portfolio-geo">~${geo}% look-through exposure</span>`
+                ? html`<span class="markets-portfolio-geo">~${geo}% look-through exposure</span>`
                 : "";
 
-            return `<article class="markets-portfolio-tile">
+            return html`<article class="markets-portfolio-tile">
                 <div class="markets-portfolio-tile-head">
                     <span class="markets-portfolio-flag">${m.flag || ""}</span>
-                    <span class="markets-portfolio-name">${escapeHtml(m.name)}</span>
+                    <span class="markets-portfolio-name">${m.name}</span>
                     <span class="markets-portfolio-chg ${chgCls}">${sign}${(m.day_change_pct ?? 0).toFixed(2)}%</span>
                 </div>
                 <div class="markets-portfolio-price">${price}</div>
@@ -2970,7 +2969,7 @@ const AnalyticsCharts = (() => {
                     <span class="markets-portfolio-corr-val">${corr >= 0 ? "" : "−"}${corrPct}%</span>
                 </div>
                 ${geoLine}
-                <p class="markets-portfolio-insight">${escapeHtml(m.insight || "")}</p>
+                <p class="markets-portfolio-insight">${m.insight || ""}</p>
             </article>`;
         }).join("");
     }
@@ -2994,10 +2993,7 @@ const AnalyticsCharts = (() => {
 
     async function refreshMarketsFromApi() {
         try {
-            const res = await fetch("/api/portfolio/market-context");
-            if (!res.ok) return;
-            const data = await res.json();
-            renderMarketsContext(data);
+            renderMarketsContext(await apiGet("/api/portfolio/market-context"));
         } catch (err) {
             console.warn("Markets context failed:", err);
         }
@@ -3073,7 +3069,11 @@ const AnalyticsCharts = (() => {
     }
 
     function onRefresh() {
+        // Dropping the local copy is not enough now that the payload is shared —
+        // without this the next read would be served the old one from the
+        // endpoint cache and "refresh" would quietly stop refetching.
         _portfolioExposureCache = null;
+        apiGetCached.invalidate(exposureUrl());
         loadWidgetInsights(true);
         if (activePane === "performance" && rendered.has("performance")) loadPerformancePane();
         if (activePane === "risk" && rendered.has("risk")) loadRiskPane();

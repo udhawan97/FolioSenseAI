@@ -1,8 +1,9 @@
 """
 Tests for app/services/holding_intelligence.py and move attribution logic.
-No real network calls — yfinance is mocked where needed.
+No real network calls — live enrichment is mocked where needed, and the
+market-data seam answers from the suite's fake adapter everywhere else.
 """
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from app.services.holding_intelligence import (
     get_holding_intelligence,
@@ -161,16 +162,16 @@ class TestGetHoldingIntelligence:
             TopHolding(ticker=f"H{i}", name=f"Holding {i}", weight=1.0)
             for i in range(8)
         ]
-        with patch("app.services.holding_intelligence._try_yfinance_enrichment") as mock_yf:
-            mock_yf.return_value = ([], [], live_holdings)
+        with patch("app.services.holding_intelligence._try_yfinance_enrichment") as mock_enrich:
+            mock_enrich.return_value = ([], [], live_holdings)
             intel = get_holding_intelligence("IEMG", None)
 
         assert len(intel.top_holdings) == 8
         assert intel.top_holdings[-1].ticker == "H7"
 
     def test_unknown_ticker_returns_derived_intelligence(self):
-        with patch("app.services.holding_intelligence._try_yfinance_enrichment") as mock_yf:
-            mock_yf.return_value = ([], [], [])
+        with patch("app.services.holding_intelligence._try_yfinance_enrichment") as mock_enrich:
+            mock_enrich.return_value = ([], [], [])
             intel = get_holding_intelligence("XYZ", UNKNOWN_STOCK_DATA)
         assert intel.ticker == "XYZ"
         assert intel.coverage_type in ("equity", "etf-sector")
@@ -184,7 +185,7 @@ class TestGetHoldingIntelligence:
         assert intel.coverage_label in COVERAGE_TYPE_LABELS.values()
         assert intel.coverage_label != "etf-crypto"
 
-    def test_data_quality_is_static_without_yfinance(self):
+    def test_data_quality_is_static_without_live_enrichment(self):
         intel = get_holding_intelligence("NOW", NOW_STOCK_DATA)
         assert intel.data_quality in ("static", "partial", "live")
         assert "static_metadata" in intel.data_sources
@@ -255,19 +256,6 @@ class TestIntelligenceToDict:
 
 class TestMoveExplainerBenchmarks:
     """Verify that per-holding benchmarks are selected correctly."""
-
-    def _mock_yf_ticker(self, chg_pct):
-        info = MagicMock()
-        info.get = lambda key, default=None: {
-            "currentPrice": 100.0,
-            "regularMarketPrice": 100.0,
-            "previousClose": 100.0 / (1 + chg_pct / 100),
-            "regularMarketPreviousClose": 100.0 / (1 + chg_pct / 100),
-        }.get(key, default)
-        ticker_mock = MagicMock()
-        ticker_mock.info = info
-        ticker_mock.calendar = None
-        return ticker_mock
 
     def test_ibit_uses_btc_benchmark(self):
         from app.services.move_explainer import _TICKER_BENCHMARKS
@@ -354,12 +342,8 @@ class TestMoveExplainerBenchmarks:
         }
         benchmarks = {"SPY": 0.3, "QQQ": 0.4}
 
-        with patch("yfinance.Ticker") as mock_yf:
-            mock_instance = MagicMock()
-            mock_instance.calendar = None
-            mock_yf.return_value = mock_instance
-            with patch("app.services.move_explainer._day_change_pct", return_value=2.0):
-                result = explain_move(now_data, shared_benchmarks=benchmarks)
+        with patch("app.services.move_explainer._day_change_pct", return_value=2.0):
+            result = explain_move(now_data, shared_benchmarks=benchmarks)
 
         # For NOW, the primary benchmark is IGV — the explanation should be company-specific
         # given high alpha vs IGV, not just "S&P 500 moved"
@@ -381,12 +365,8 @@ class TestMoveExplainerBenchmarks:
         }
         benchmarks = {"SPY": -0.31, "QQQ": -0.36}
 
-        with patch("yfinance.Ticker") as mock_yf:
-            mock_instance = MagicMock()
-            mock_instance.calendar = None
-            mock_yf.return_value = mock_instance
-            with patch("app.services.move_explainer._day_change_pct", return_value=0.49):
-                result = explain_move(csco_data, shared_benchmarks=benchmarks)
+        with patch("app.services.move_explainer._day_change_pct", return_value=0.49):
+            result = explain_move(csco_data, shared_benchmarks=benchmarks)
 
         assert not hasattr(result, "news")
         assert all(driver.driver_type != "news" for driver in result.drivers)

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 
-import yfinance as yf
+from app.services import market_data
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +38,9 @@ def fetch_world_market(market: dict) -> dict:
     can't blank the strip or trip up market-context scoring.
     """
     try:
-        fi = yf.Ticker(market["ticker"]).fast_info
-        price = float(getattr(fi, "last_price", None) or 0)
-        prev = float(getattr(fi, "previous_close", None) or 0)
+        fast = market_data.get_fast_info(market["ticker"]) or {}
+        price = float(fast.get("last_price") or 0)
+        prev = float(fast.get("previous_close") or 0)
         if price > 0 and prev > 0:
             chg = price - prev
             chg_pct = chg / prev * 100

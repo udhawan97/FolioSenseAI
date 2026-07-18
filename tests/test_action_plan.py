@@ -15,6 +15,9 @@ from sqlalchemy.pool import StaticPool
 
 from app.models import Base, Holding, Portfolio
 from app.routers import ai as ai_router
+from app.services import verdict_pipeline
+from app.services.portfolio_state import portfolio_state_signature
+from app.services.verdict_pipeline import ScanResult
 
 
 # ── In-memory DB helpers ───────────────────────────────────────────────────────
@@ -64,29 +67,37 @@ _FAKE_SIGNAL = {
     "confidence_detail": None,
 }
 
-_CORE_RESULT = {
-    "active_tickers": _ACTIVE_TICKERS,
-    "signals": {
-        "AAPL": {**_FAKE_SIGNAL, "ticker": "AAPL", "action": "hold"},
-        "MSFT": {**_FAKE_SIGNAL, "ticker": "MSFT", "action": "add"},
-    },
-    "alloc_map": {"AAPL": 55.0, "MSFT": 45.0},
-    "holding_meta": {
-        "AAPL": {"shares": 10.0, "avg_cost": 100.0, "is_watchlist": False, "hold_class": "auto"},
-        "MSFT": {"shares": 10.0, "avg_cost": 100.0, "is_watchlist": False, "hold_class": "auto"},
-    },
-    "portfolio_exposure": {
-        "sectors": [{"sector": "Technology", "weight_pct": 80.0}],
-        "countries": [{"country": "US", "weight_pct": 100.0}],
-        "concentration_hhi": 0.50,
-    },
-    "regime": {"label": "Risk-on", "mood": "warm"},
-    "quotes": {
-        "AAPL": {"ticker": "AAPL", "current_price": 180.0},
-        "MSFT": {"ticker": "MSFT", "current_price": 320.0},
-    },
-    "history_map": {},
+_SCAN_SIGNALS = {
+    "AAPL": {**_FAKE_SIGNAL, "ticker": "AAPL", "action": "hold"},
+    "MSFT": {**_FAKE_SIGNAL, "ticker": "MSFT", "action": "add"},
 }
+_SCAN_ALLOCATION = {"AAPL": 55.0, "MSFT": 45.0}
+
+
+def _fake_scan():
+    """An un-narrated scan, shaped exactly as scan_portfolio(narrate=False) returns one."""
+    return ScanResult(
+        portfolio_id=1,
+        tickers=list(_ACTIVE_TICKERS),
+        signals={ticker: dict(sig) for ticker, sig in _SCAN_SIGNALS.items()},
+        allocation_pct=dict(_SCAN_ALLOCATION),
+        positions={
+            "AAPL": {
+                "shares": 10.0, "avg_cost": 100.0, "is_watchlist": False, "hold_class": "auto",
+            },
+            "MSFT": {
+                "shares": 10.0, "avg_cost": 100.0, "is_watchlist": False, "hold_class": "auto",
+            },
+        },
+        exposure={
+            "sectors": [{"sector": "Technology", "weight_pct": 80.0}],
+            "countries": [{"country": "US", "weight_pct": 100.0}],
+            "concentration_hhi": 0.50,
+        },
+        regime={"label": "Risk-on", "mood": "warm"},
+        state=portfolio_state_signature(_SCAN_SIGNALS, _SCAN_ALLOCATION),
+    )
+
 
 _AI_ACTION_PLAN_RESPONSE = {
     "headline": "Book holds steady with MSFT as the growth lever.",
@@ -102,11 +113,12 @@ _AI_ACTION_PLAN_RESPONSE = {
 }
 
 
-def _patch_core(monkeypatch):
+def _patch_scan(monkeypatch):
+    """Stub the verdict pipeline itself — the action plan is now its only caller."""
     monkeypatch.setattr(
-        ai_router,
-        "_collect_portfolio_signals_core",
-        lambda db, portfolio_id=1: dict(_CORE_RESULT),
+        verdict_pipeline,
+        "scan_portfolio",
+        lambda db, portfolio_id=1, **kwargs: _fake_scan(),
     )
 
 
@@ -171,7 +183,7 @@ def _patch_action_plan_ai(monkeypatch):
 class TestActionPlanShape:
     def test_returns_required_top_level_keys(self, monkeypatch):
         db = _make_db()
-        _patch_core(monkeypatch)
+        _patch_scan(monkeypatch)
         _patch_compute_portfolio(monkeypatch)
         _patch_action_plan_ai(monkeypatch)
 
@@ -181,7 +193,7 @@ class TestActionPlanShape:
 
     def test_buckets_has_four_keys(self, monkeypatch):
         db = _make_db()
-        _patch_core(monkeypatch)
+        _patch_scan(monkeypatch)
         _patch_compute_portfolio(monkeypatch)
         _patch_action_plan_ai(monkeypatch)
 
@@ -192,7 +204,7 @@ class TestActionPlanShape:
 
     def test_bucket_items_have_ticker_and_reason(self, monkeypatch):
         db = _make_db()
-        _patch_core(monkeypatch)
+        _patch_scan(monkeypatch)
         _patch_compute_portfolio(monkeypatch)
         _patch_action_plan_ai(monkeypatch)
 
@@ -204,7 +216,7 @@ class TestActionPlanShape:
 
     def test_priority_moves_is_list(self, monkeypatch):
         db = _make_db()
-        _patch_core(monkeypatch)
+        _patch_scan(monkeypatch)
         _patch_compute_portfolio(monkeypatch)
         _patch_action_plan_ai(monkeypatch)
 
@@ -214,7 +226,7 @@ class TestActionPlanShape:
 
     def test_includes_disclaimer(self, monkeypatch):
         db = _make_db()
-        _patch_core(monkeypatch)
+        _patch_scan(monkeypatch)
         _patch_compute_portfolio(monkeypatch)
         _patch_action_plan_ai(monkeypatch)
 
@@ -230,7 +242,7 @@ class TestActionPlanTickers:
     def test_ai_buckets_contain_only_active_tickers(self, monkeypatch):
         """Tickers returned by Claude must all belong to the active portfolio."""
         db = _make_db(tickers=("AAPL", "MSFT"))
-        _patch_core(monkeypatch)
+        _patch_scan(monkeypatch)
         _patch_compute_portfolio(monkeypatch)
         _patch_action_plan_ai(monkeypatch)
 
@@ -250,7 +262,7 @@ class TestActionPlanTickers:
     def test_fallback_buckets_contain_only_active_tickers(self, monkeypatch):
         """Deterministic fallback must also only reference active tickers."""
         db = _make_db(tickers=("AAPL", "MSFT"))
-        _patch_core(monkeypatch)
+        _patch_scan(monkeypatch)
         _patch_compute_portfolio(monkeypatch)
 
         monkeypatch.setattr(
@@ -279,7 +291,7 @@ class TestActionPlanTickers:
 class TestActionPlanFallback:
     def test_returns_fallback_on_claude_failure(self, monkeypatch):
         db = _make_db()
-        _patch_core(monkeypatch)
+        _patch_scan(monkeypatch)
         _patch_compute_portfolio(monkeypatch)
 
         monkeypatch.setattr(
@@ -295,7 +307,7 @@ class TestActionPlanFallback:
 
     def test_fallback_source_is_local_fallback(self, monkeypatch):
         db = _make_db()
-        _patch_core(monkeypatch)
+        _patch_scan(monkeypatch)
         _patch_compute_portfolio(monkeypatch)
 
         monkeypatch.setattr(
@@ -309,7 +321,7 @@ class TestActionPlanFallback:
 
     def test_fallback_has_all_four_bucket_keys(self, monkeypatch):
         db = _make_db()
-        _patch_core(monkeypatch)
+        _patch_scan(monkeypatch)
         _patch_compute_portfolio(monkeypatch)
 
         monkeypatch.setattr(
@@ -324,7 +336,7 @@ class TestActionPlanFallback:
 
     def test_fallback_never_raises(self, monkeypatch):
         db = _make_db()
-        _patch_core(monkeypatch)
+        _patch_scan(monkeypatch)
         _patch_compute_portfolio(monkeypatch)
 
         monkeypatch.setattr(
@@ -342,7 +354,7 @@ class TestActionPlanFallback:
 
     def test_partial_valuation_skips_claude_and_surfaces_missing_tickers(self, monkeypatch):
         db = _make_db()
-        _patch_core(monkeypatch)
+        _patch_scan(monkeypatch)
         _patch_partial_compute_portfolio(monkeypatch)
         _patch_analytics(monkeypatch)
         claude_calls = []
@@ -368,7 +380,7 @@ class TestActionPlanForceLocal:
 
     def test_force_local_returns_local_source(self, monkeypatch):
         db = _make_db()
-        _patch_core(monkeypatch)
+        _patch_scan(monkeypatch)
         _patch_compute_portfolio(monkeypatch)
 
         # Claude must NOT be called at all
@@ -387,7 +399,7 @@ class TestActionPlanForceLocal:
 
     def test_force_local_has_required_keys(self, monkeypatch):
         db = _make_db()
-        _patch_core(monkeypatch)
+        _patch_scan(monkeypatch)
         _patch_compute_portfolio(monkeypatch)
 
         result = asyncio.run(ai_router.get_action_plan(force_local=True, db=db))
@@ -397,7 +409,7 @@ class TestActionPlanForceLocal:
 
     def test_force_local_has_four_buckets(self, monkeypatch):
         db = _make_db()
-        _patch_core(monkeypatch)
+        _patch_scan(monkeypatch)
         _patch_compute_portfolio(monkeypatch)
 
         result = asyncio.run(ai_router.get_action_plan(force_local=True, db=db))
@@ -406,7 +418,7 @@ class TestActionPlanForceLocal:
 
     def test_force_local_only_active_tickers(self, monkeypatch):
         db = _make_db()
-        _patch_core(monkeypatch)
+        _patch_scan(monkeypatch)
         _patch_compute_portfolio(monkeypatch)
 
         result = asyncio.run(ai_router.get_action_plan(force_local=True, db=db))
@@ -421,7 +433,7 @@ class TestActionPlanForceLocal:
 
     def test_force_local_regime_included(self, monkeypatch):
         db = _make_db()
-        _patch_core(monkeypatch)
+        _patch_scan(monkeypatch)
         _patch_compute_portfolio(monkeypatch)
 
         result = asyncio.run(ai_router.get_action_plan(force_local=True, db=db))
@@ -434,7 +446,7 @@ class TestActionPlanForceLocal:
 class TestActionPlanCache:
     def test_cache_hit_skips_claude_on_second_call(self, monkeypatch):
         db = _make_db()
-        _patch_core(monkeypatch)
+        _patch_scan(monkeypatch)
         _patch_compute_portfolio(monkeypatch)
 
         call_count = []
@@ -454,7 +466,7 @@ class TestActionPlanCache:
 
     def test_force_refresh_bypasses_cache(self, monkeypatch):
         db = _make_db()
-        _patch_core(monkeypatch)
+        _patch_scan(monkeypatch)
         _patch_compute_portfolio(monkeypatch)
 
         call_count = []

@@ -4,10 +4,10 @@ Earnings & event calendar — cap confidence near earnings for stocks.
 from __future__ import annotations
 
 import logging
-import math
 from datetime import date, datetime, timezone
 from typing import Optional
 
+from app.services import market_data
 from app.services.log_safety import sanitize_for_log
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ def _parse_earnings_date(info: dict) -> Optional[date]:
 
 
 def fetch_next_earnings(ticker: str) -> Optional[date]:
-    """Fetch next earnings date from yfinance info (cached per call site)."""
+    """Fetch next earnings date out of the shared `.info` record (cached there)."""
     try:
         from app.services.stock_service import get_ticker_info
         info = get_ticker_info(ticker)
@@ -50,68 +50,40 @@ def fetch_next_earnings(ticker: str) -> Optional[date]:
         return None
 
 
-def _fetch_earnings_table(ticker: str):
-    """yfinance's earnings table: one row per quarter, estimate + surprise."""
-    import yfinance as yf
-
-    return yf.Ticker(ticker).get_earnings_dates(limit=_EARNINGS_TABLE_LIMIT)
+def _fetch_earnings_quarters(ticker: str) -> list[dict]:
+    """One row per reported/scheduled quarter, newest first: date, estimate, surprise."""
+    return market_data.get_earnings_estimates(ticker, limit=_EARNINGS_TABLE_LIMIT)
 
 
-def _parse_earnings_table(
-    table, on_date: date, *, lookback_quarters: int = _BEAT_LOOKBACK_QUARTERS
+def _parse_earnings_quarters(
+    quarters: list[dict], on_date: date, *, lookback_quarters: int = _BEAT_LOOKBACK_QUARTERS
 ) -> dict | None:
     """Estimate for ``on_date`` plus how often the last quarters beat.
 
-    Returns None unless the table actually carries a row for that date — an
-    estimate attached to the wrong quarter is worse than no estimate.
+    Returns None unless the rows actually carry that date — an estimate attached
+    to the wrong quarter is worse than no estimate. A quarter that has not
+    reported yet carries no surprise, which the seam already reads as None.
     """
-    if table is None or getattr(table, "empty", True):
+    matched = next((q for q in quarters or [] if q["date"] == on_date), None)
+    if matched is None:
         return None
 
-    estimate = None
-    matched = False
-    for stamp, row in table.iterrows():
-        try:
-            row_date = stamp.date()
-        except AttributeError:
-            continue
-        if row_date != on_date:
-            continue
-        matched = True
-        raw = row.get("EPS Estimate")
-        if raw is not None and not _is_nan(raw):
-            estimate = round(float(raw), 4)
-        break
-
-    if not matched:
-        return None
-
-    # Surprise is only populated once a quarter has actually reported.
+    estimate = matched["eps_estimate"]
     surprises = [
-        float(value)
-        for value in table.get("Surprise(%)", [])
-        if value is not None and not _is_nan(value)
+        q["surprise_pct"] for q in quarters if q["surprise_pct"] is not None
     ][:lookback_quarters]
 
     return {
-        "eps_estimate": estimate,
+        "eps_estimate": round(estimate, 4) if estimate is not None else None,
         "beats": sum(1 for s in surprises if s > 0),
         "quarters": len(surprises),
     }
 
 
-def _is_nan(value) -> bool:
-    """True for the NaN that yfinance leaves in not-yet-reported quarters."""
-    try:
-        return math.isnan(float(value))
-    except (TypeError, ValueError):
-        return False
-
-
 def fetch_earnings_estimate(ticker: str, on_date: date) -> dict | None:
     """EPS estimate and recent beat record for a ticker's ``on_date`` report."""
     try:
-        return _parse_earnings_table(_fetch_earnings_table(ticker), on_date)
+        return _parse_earnings_quarters(_fetch_earnings_quarters(ticker), on_date)
     except Exception as exc:  # pylint: disable=broad-except
         logger.debug(
             "Earnings estimate fetch failed for %s: %s",

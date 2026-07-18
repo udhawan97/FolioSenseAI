@@ -1,6 +1,8 @@
 """Tests for insider activity (SEC Form 4)."""
 from datetime import date, timedelta
 
+import pytest
+
 from app.services import insider_activity
 from app.services.insider_activity import (
     _classify,
@@ -9,6 +11,14 @@ from app.services.insider_activity import (
     _summarize,
     get_insider_activity,
 )
+
+
+@pytest.fixture(autouse=True)
+def _clear_cache():
+    """Each test starts and ends with an empty per-ticker activity cache."""
+    insider_activity.get_insider_activity.cache_clear()
+    yield
+    insider_activity.get_insider_activity.cache_clear()
 
 
 def _form4_xml(
@@ -207,7 +217,6 @@ def test_summary_of_nothing():
 
 
 def _wire(monkeypatch, *, filings, docs):
-    monkeypatch.setattr(insider_activity, "_ACTIVITY_CACHE", {})
     monkeypatch.setattr(
         insider_activity, "get_recent_filings", lambda t, **_k: filings
     )
@@ -252,8 +261,6 @@ def test_activity_for_a_non_filer_is_an_honest_empty(monkeypatch):
 
 
 def test_activity_when_edgar_is_unreachable(monkeypatch):
-    monkeypatch.setattr(insider_activity, "_ACTIVITY_CACHE", {})
-
     def _boom(t, **_k):
         raise RuntimeError("down")
 
@@ -270,7 +277,6 @@ def test_activity_is_served_from_cache(monkeypatch):
         calls.append(t)
         return [_FILING]
 
-    monkeypatch.setattr(insider_activity, "_ACTIVITY_CACHE", {})
     monkeypatch.setattr(insider_activity, "get_recent_filings", _counted)
     monkeypatch.setattr(
         insider_activity, "fetch_filing_document", lambda url: _form4_xml()

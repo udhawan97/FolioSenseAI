@@ -5,22 +5,24 @@ Every explanation is grounded in retrieved data — no invented reasons.
 Benchmarks are chosen per-holding, not defaulted to SPY/QQQ for everything.
 """
 import logging
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
-import yfinance as yf
-
+from app.services import market_data
 from app.services.edgar_service import get_recent_filings
 from app.services.security_type import SecurityType, classify_security
+from app.services.ttl_cache import ttl_cache
 
 logger = logging.getLogger(__name__)
 
 # A filing can only explain today's move if it's days old, not months. Five
 # calendar days covers a weekend plus the day either side of it.
 _FILING_LOOKBACK_DAYS = 5
+
+# An earnings report explains a move for a few days either side of the date.
+_EARNINGS_NEAR_DAYS = 3
 
 SECTOR_ETF_MAP: dict[str, str] = {
     "Technology": "XLK",
@@ -171,19 +173,15 @@ def _day_change_pct(ticker: str) -> float:
     return 0.0
 
 
-# Per-ticker daily-change cache so batch contribution fetches don't spam yfinance.
-_HOLDING_CHANGE_CACHE: dict[str, tuple[float, float]] = {}  # ticker → (pct, monotonic_ts)
 _HOLDING_CACHE_TTL = 300.0  # 5 minutes
 
 
+@ttl_cache(ttl=_HOLDING_CACHE_TTL)
 def _day_change_pct_cached(ticker: str) -> float:
-    now = time.monotonic()
-    entry = _HOLDING_CHANGE_CACHE.get(ticker)
-    if entry and now - entry[1] < _HOLDING_CACHE_TTL:
-        return entry[0]
-    pct = _day_change_pct(ticker)
-    _HOLDING_CHANGE_CACHE[ticker] = (pct, now)
-    return pct
+    """Today's change for one ticker, so batch contribution fetches don't spam
+    yfinance for the same names. A failed fetch reads 0.0 and is remembered as
+    such — the same answer the uncached call would keep giving."""
+    return _day_change_pct(ticker)
 
 
 def compute_contribution_breakdown(
@@ -289,43 +287,17 @@ def _sector_etf_change(sector: str) -> tuple[Optional[str], Optional[float]]:
     return etf, _day_change_pct(etf)
 
 
-def _earnings_near(stock: yf.Ticker) -> tuple[bool, Optional[str]]:
-    try:
-        cal = stock.calendar
-        if cal is None:
-            return False, None
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
-        dates = []
+def _earnings_near(ticker: str) -> tuple[bool, Optional[str]]:
+    """Whether the ticker reports within three days either side of today, and when.
 
-        if hasattr(cal, "loc"):  # pandas DataFrame (older yfinance)
-            try:
-                val = cal.loc["Earnings Date"]
-                dates = list(val) if hasattr(val, "__iter__") else [val]
-            except (KeyError, Exception):
-                return False, None
-        elif isinstance(cal, dict):
-            raw = cal.get("Earnings Date", [])
-            dates = raw if isinstance(raw, list) else [raw]
-
-        for d in dates:
-            try:
-                if hasattr(d, "to_pydatetime"):
-                    d = d.to_pydatetime().replace(tzinfo=None)
-                elif not hasattr(d, "year"):
-                    continue
-                if abs((d - now).days) <= 3:
-                    return True, d.strftime("%b %d")
-            except Exception as exc:
-                logger.debug(
-                    "Earnings date parse failed; exception_type=%s",
-                    type(exc).__name__,
-                )
-                continue
-    except Exception as exc:
-        logger.debug(
-            "Earnings calendar fetch failed; exception_type=%s",
-            type(exc).__name__,
-        )
+    The several shapes Yahoo has published its calendar in — a frame, a dict, a
+    Timestamp, a plain date — are the seam's problem now; what arrives here is a
+    list of dates, so the window is plain calendar arithmetic.
+    """
+    today = datetime.now(timezone.utc).date()
+    for day in market_data.get_earnings_calendar(ticker):
+        if abs((day - today).days) <= _EARNINGS_NEAR_DAYS:
+            return True, day.strftime("%b %d")
     return False, None
 
 
@@ -424,14 +396,7 @@ def explain_move(  # pylint: disable=too-many-branches,too-many-statements
     earnings_date_str: Optional[str] = None
 
     if not is_etf:
-        try:
-            yf_stock = yf.Ticker(ticker)
-            near_earnings, earnings_date_str = _earnings_near(yf_stock)
-        except Exception as exc:
-            logger.debug(
-                "Extra data fetch failed; exception_type=%s",
-                type(exc).__name__,
-            )
+        near_earnings, earnings_date_str = _earnings_near(ticker)
 
     drivers: list[MoveDriver] = []
     attribution_type = "unclear"

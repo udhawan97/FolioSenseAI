@@ -1,41 +1,19 @@
 """
 Regression test: get_fast_quote must cache its full-quote fallback under the fast key.
 
-When fast_info carries no usable price, get_fast_quote falls back to get_stock_data.
-Previously the fallback result was never stored under the ``fast:`` cache key, so every
-dashboard valuation refresh re-ran the fast_info network call for that ticker. The
+When the cheap snapshot carries no usable price, get_fast_quote falls back to
+get_stock_data. Previously the fallback result was never stored under the fast key, so
+every dashboard valuation refresh re-ran the snapshot network call for that ticker. The
 fallback must now be cached so a second call is a pure cache hit.
 
-No real network calls — yfinance's fast_info is faked.
+No real network calls — the snapshot comes from the market-data seam's fake adapter.
 """
-# pylint: disable=protected-access
 from app.services import stock_service
 
 
-class _NoPriceFastInfo:
-    """fast_info stand-in whose last_price is unusable, forcing the fallback path."""
-    last_price = 0.0
-    previous_close = 0.0
-
-
-class _FakeTicker:
-    calls = 0
-
-    def __init__(self, _symbol):
-        pass
-
-    @property
-    def fast_info(self):
-        type(self).calls += 1
-        return _NoPriceFastInfo()
-
-
-def test_fast_quote_fallback_is_cached(monkeypatch):
-    # Isolate the module caches so other tests aren't affected.
-    monkeypatch.setattr(stock_service, "_QUOTE_CACHE", {})
-    monkeypatch.setattr(stock_service, "_INFO_CACHE", {})
-    _FakeTicker.calls = 0
-    monkeypatch.setattr(stock_service.yf, "Ticker", _FakeTicker)
+def test_fast_quote_fallback_is_cached(monkeypatch, fake_market_data):
+    # A snapshot with no usable price is what forces the fallback path.
+    fake = fake_market_data(fast_info={"XYZ": {"last_price": 0.0, "previous_close": 0.0}})
 
     stock_calls = {"n": 0}
 
@@ -52,4 +30,4 @@ def test_fast_quote_fallback_is_cached(monkeypatch):
     assert second == first
     # Fallback fetch happened once; the second call was served from the fast cache.
     assert stock_calls["n"] == 1
-    assert _FakeTicker.calls == 1
+    assert fake.calls.count(("get_fast_info", "XYZ")) == 1

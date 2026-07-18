@@ -14,6 +14,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.models import AISummary, Base, Holding, Portfolio
 from app.routers import ai as ai_router
+from app.services import verdict_pipeline
 from app.services.analyst_recommendation import AnalystRec
 from app.services.investment_signal import (
     _derive_etf_market_mood,
@@ -605,10 +606,12 @@ def test_verdict_quip_cache_uses_action_and_market_mood(monkeypatch):
     quote_state = {"quote": _stock_quote(price=100, low=50, high=120, day_change_pct=0.1)}
     calls = []
 
-    monkeypatch.setattr(ai_router, "get_all_quotes", lambda _tickers: [quote_state["quote"]])
-    monkeypatch.setattr(ai_router, "get_batched_history_closes", lambda _tickers: {})
     monkeypatch.setattr(
-        ai_router,
+        verdict_pipeline, "get_all_quotes", lambda _tickers: [quote_state["quote"]]
+    )
+    monkeypatch.setattr(verdict_pipeline, "get_batched_history_closes", lambda _tickers: {})
+    monkeypatch.setattr(
+        verdict_pipeline,
         "get_analyst_recommendation",
         lambda _ticker, closes=None: _stock_rec("buy"),
     )
@@ -623,7 +626,7 @@ def test_verdict_quip_cache_uses_action_and_market_mood(monkeypatch):
             for item in inputs
         }
 
-    monkeypatch.setattr(ai_router, "generate_verdict_ai_bundles", fake_generate)
+    monkeypatch.setattr(verdict_pipeline, "generate_verdict_ai_bundles", fake_generate)
 
     first = asyncio.run(ai_router.get_all_investment_signals(db))
     assert first["signals"]["NOW"]["market_mood"] == "warm"
@@ -642,9 +645,10 @@ def test_verdict_quip_cache_uses_action_and_market_mood(monkeypatch):
 
 
 def test_verdict_quip_key_includes_hold_class_and_timing_bucket():
-    auto_key = ai_router._verdict_summary_type("hold", "neutral", "auto", "trend_intact")
-    anchor_key = ai_router._verdict_summary_type("hold", "neutral", "anchor", "trend_intact")
-    timing_key = ai_router._verdict_summary_type("hold", "neutral", "auto", "death-recent")
+    key = verdict_pipeline._verdict_summary_type
+    auto_key = key("hold", "neutral", "auto", "trend_intact")
+    anchor_key = key("hold", "neutral", "anchor", "trend_intact")
+    timing_key = key("hold", "neutral", "auto", "death-recent")
 
     assert auto_key != anchor_key
     assert auto_key != timing_key
@@ -656,18 +660,20 @@ def test_all_signals_passes_batched_history_into_recommendation(monkeypatch):
     closes = [100] * 210 + [102, 104, 106, 108, 110]
 
     monkeypatch.setattr(
-        ai_router,
+        verdict_pipeline,
         "get_all_quotes",
         lambda _tickers: [_stock_quote(price=110, low=90, high=120, ticker="VOO")],
     )
-    monkeypatch.setattr(ai_router, "get_batched_history_closes", lambda _tickers: {"VOO": closes})
+    monkeypatch.setattr(
+        verdict_pipeline, "get_batched_history_closes", lambda _tickers: {"VOO": closes}
+    )
 
     def fake_rec(ticker, closes=None):
         received[ticker] = closes
         return _etf_rec("Fair")
 
-    monkeypatch.setattr(ai_router, "get_analyst_recommendation", fake_rec)
-    monkeypatch.setattr(ai_router, "generate_verdict_ai_bundles", lambda inputs: {})
+    monkeypatch.setattr(verdict_pipeline, "get_analyst_recommendation", fake_rec)
+    monkeypatch.setattr(verdict_pipeline, "generate_verdict_ai_bundles", lambda inputs: {})
 
     result = asyncio.run(ai_router.get_all_investment_signals(db))
 
@@ -684,16 +690,16 @@ def test_portfolio_quip_cache_and_fallback(monkeypatch):
     calls = []
 
     monkeypatch.setattr(
-        ai_router,
+        verdict_pipeline,
         "get_all_quotes",
         lambda _tickers: [
             _stock_quote(price=80, low=50, high=120, day_change_pct=0.0, ticker="AAA"),
             _stock_quote(price=80, low=50, high=120, day_change_pct=0.0, ticker="BBB"),
         ],
     )
-    monkeypatch.setattr(ai_router, "get_batched_history_closes", lambda _tickers: {})
+    monkeypatch.setattr(verdict_pipeline, "get_batched_history_closes", lambda _tickers: {})
     monkeypatch.setattr(
-        ai_router,
+        verdict_pipeline,
         "get_analyst_recommendation",
         lambda ticker, closes=None: recs[ticker],
     )
@@ -702,12 +708,14 @@ def test_portfolio_quip_cache_and_fallback(monkeypatch):
         calls.append(inputs)
         return {}
 
-    monkeypatch.setattr(ai_router, "generate_verdict_ai_bundles", fail_generate)
+    monkeypatch.setattr(verdict_pipeline, "generate_verdict_ai_bundles", fail_generate)
 
     first = asyncio.run(ai_router.get_all_investment_signals(db))
     assert "portfolio_health" in first
     assert first["portfolio_health"]["quip"]
-    assert first["portfolio_health"]["brand"]["kicker"] == ai_router.VERDICT_BRAND_KICKER_LOCAL
+    assert first["portfolio_health"]["brand"]["kicker"] == (
+        verdict_pipeline.VERDICT_BRAND_KICKER_LOCAL
+    )
     assert "FolioOrb" in first["signals"]["AAA"]["disclaimer"]
     assert len(calls) == 1
 

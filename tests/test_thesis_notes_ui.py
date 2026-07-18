@@ -20,14 +20,44 @@ def _render() -> str:
     return js.split("function renderThesisNotes")[1][:4000]
 
 
+def _panel_descriptor(sel: str) -> str:
+    """The registerHoldingPanel({...}) block registered for `sel`."""
+    js = _js()
+    marker = f'sel: "{sel}"'
+    assert marker in js, f"no holding panel registered for {sel}"
+    start = js.rindex("registerHoldingPanel({", 0, js.index(marker))
+    return js[start : js.index("});", start)]
+
+
+def _function_body(name: str) -> str:
+    js = _js()
+    start = js.index(f"function {name}(")
+    return js[start : js.index("\n}\n", start)]
+
+
+# The three places that repaint a holding's expand-row.
+ROW_RENDER_SITES = ("injectSummaryRows", "renderExpandedTicker", "_renderAllExpandedIntelRows")
+
+
 def test_expand_row_has_a_notes_section():
     assert "intel-notes-section" in _js()
 
 
-def test_notes_are_wired_into_every_render_site():
-    # Insider/fundamentals render at three sites; notes must ride along at each
-    # or they render stale or not at all. 4 = the definition + 3 call sites.
-    assert _js().count("renderThesisNotes(") >= 4
+def test_notes_are_registered_as_a_holding_panel():
+    # One descriptor is the whole wiring. Notes come from the holdings payload
+    # rather than a lazy endpoint, so this descriptor carries no fetch/cache —
+    # the intel loader skips it and it still paints at every site.
+    descriptor = _panel_descriptor(".intel-notes-section")
+    assert "renderThesisNotes(" in descriptor
+
+
+def test_notes_reach_every_site_that_repaints_a_row():
+    # Notes used to be rendered by hand at each of these three, so shipping the
+    # panel meant remembering all three. They go through renderHoldingPanels()
+    # now; drop the call from one site and that site silently stops updating
+    # every panel at once.
+    for site in ROW_RENDER_SITES:
+        assert "renderHoldingPanels(" in _function_body(site), site
 
 
 def test_notes_save_through_the_real_update_endpoint():

@@ -2,16 +2,17 @@
 app/services/analyst_recommendation.py
 
 Analyst consensus recommendation for portfolio holdings.
-Primary provider: yfinance (Yahoo Finance consensus data).
-Swap _fetch_from_yfinance() to replace the provider without touching callers.
+
+Reads Yahoo's consensus fields out of the shared `.info` record, and answers for
+ETFs — which carry no analyst coverage — with a quality score instead. The
+provider itself is swapped at the ``market_data`` seam, not here; what this
+module owns is which consensus fields to believe and how they become an action.
 """
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
 from typing import Optional
-
-import yfinance as yf
 
 from app.services.etf_price_signal import fetch_etf_price_signal
 from app.services.etf_quality import calculate_etf_quality_score
@@ -91,7 +92,6 @@ def _not_rated(ticker: str, info: Optional[dict] = None) -> AnalystRec:
 def _etf_quality_rec(
     ticker: str,
     info: dict,
-    stock,
     closes: list[float] | None = None,
 ) -> AnalystRec:
     static = get_static_holding_metadata(ticker)
@@ -120,7 +120,7 @@ def _etf_quality_rec(
         ),
     }
     quality = calculate_etf_quality_score(data)
-    price_signal = fetch_etf_price_signal(ticker, data, stock, closes=closes)
+    price_signal = fetch_etf_price_signal(ticker, data, closes=closes)
     label = f"ETF Quality: {quality['qualityLabel']}"
     subparts = []
     if quality["costLabel"] != "Unknown":
@@ -165,18 +165,18 @@ def _action_from_mean(mean: float) -> str:
     return "sell"
 
 
-def _fetch_from_yfinance(ticker: str, closes: list[float] | None = None) -> AnalystRec:
+def _fetch_consensus(ticker: str, closes: list[float] | None = None) -> AnalystRec:
     """
     Pull analyst consensus from Yahoo Finance.
     Returns ETF quality for ETFs and unavailable for missing stock analyst data.
     """
     # `.info` (the slow scrape) comes from the shared cache; the ETF price-zone
-    # path may still pull lightweight history off a lazily-built Ticker.
+    # path pulls its own lightweight history when the caller hasn't batched it.
     info = get_ticker_info(ticker)
 
     security_type = classify_security(ticker, info)
     if security_type == SecurityType.ETF:
-        return _etf_quality_rec(ticker, info, yf.Ticker(ticker), closes=closes)
+        return _etf_quality_rec(ticker, info, closes=closes)
 
     quote_type = str(info.get("quoteType") or "").lower()
     if quote_type in _NO_ANALYST_COVERAGE_TYPES or security_type in {
@@ -231,7 +231,7 @@ def get_analyst_recommendation(ticker: str, closes: list[float] | None = None) -
     """
     ticker = ticker.upper()
     try:
-        return _fetch_from_yfinance(ticker, closes=closes)
+        return _fetch_consensus(ticker, closes=closes)
     except Exception as exc:
         logger.warning(
             "Analyst rec fetch failed; exception_type=%s",

@@ -19,16 +19,15 @@ from __future__ import annotations
 import json
 import logging
 import re
-import time
 from datetime import datetime, timezone
 
 from app.services.edgar_service import fetch_company_facts, get_cik
+from app.services.ttl_cache import ttl_cache
 
 logger = logging.getLogger(__name__)
 
 _FUNDAMENTALS_TTL = 24 * 3600  # facts change quarterly at most
 _DEFAULT_YEARS = 6
-_FUNDAMENTALS_CACHE: dict[str, tuple[float, dict]] = {}
 
 # Legacy tag first only for backfill; the modern tag always wins a shared year.
 _REVENUE_TAGS = (
@@ -117,6 +116,16 @@ def _empty(ticker: str, quality: str) -> dict:
     }
 
 
+@ttl_cache(
+    ttl=_FUNDAMENTALS_TTL,
+    # ``years`` only trims a series we already hold, so it stays out of the key
+    # — the same company answers every window from one stored fetch.
+    key=lambda ticker, years: (ticker or "").strip().upper(),
+    # Only a real series is worth a day. Every empty answer here — not a filer,
+    # EDGAR down, unreadable facts — stays retryable.
+    cache_when=lambda result: bool(result["periods"]),
+    copy=dict,
+)
 def get_fundamentals(
     ticker: str, *, years: int = _DEFAULT_YEARS, force_refresh: bool = False
 ) -> dict:
@@ -124,10 +133,6 @@ def get_fundamentals(
     symbol = (ticker or "").strip().upper()
     if not symbol:
         return _empty(symbol, "live")
-
-    cached = _FUNDAMENTALS_CACHE.get(symbol)
-    if not force_refresh and cached and cached[0] > time.monotonic():
-        return dict(cached[1])
 
     cik = get_cik(symbol, force_refresh=force_refresh)
     if not cik:
@@ -142,11 +147,9 @@ def get_fundamentals(
     except (json.JSONDecodeError, KeyError, TypeError):
         return _empty(symbol, "unavailable")
 
-    result = {
+    return {
         "ticker": symbol,
         "periods": _build_periods(gaap, years=years),
         "data_quality": "live",
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
-    _FUNDAMENTALS_CACHE[symbol] = (time.monotonic() + _FUNDAMENTALS_TTL, result)
-    return dict(result)

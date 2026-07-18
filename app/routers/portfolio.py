@@ -10,12 +10,12 @@ from app.config import settings
 from app.services.stock_service import (
     get_all_quotes,
     get_stock_data,
-    normalize_ticker,
     ticker_shape_is_safe,
     validate_ticker_symbol,
 )
 from app.services import dividend_calendar
 from app.services import holdings_csv
+from app.services import holdings_repository
 from app.services import portfolio_lifecycle
 from app.services import portfolio_valuation
 from app.services.earnings_radar import get_earnings_events
@@ -169,11 +169,7 @@ async def delete_portfolio(portfolio_id: int, db: Session = Depends(get_db)):
 async def get_holdings(portfolio_id: int = 1, db: Session = Depends(get_db)):
     """Return all active holdings for a portfolio (defaults to portfolio 1)."""
     _require_portfolio(portfolio_id, db)
-    holdings = (
-        db.query(Holding)
-        .filter(Holding.portfolio_id == portfolio_id, Holding.is_active.is_(True))
-        .all()
-    )
+    holdings = holdings_repository.active(db, portfolio_id)
     return {
         "portfolio_id": portfolio_id,
         "holdings": [
@@ -205,13 +201,9 @@ async def get_earnings_radar(
     `window` days. ETFs, funds, and tickers without a known date are omitted.
     """
     _require_portfolio(portfolio_id, db)
-    holdings = (
-        db.query(Holding)
-        .filter(Holding.portfolio_id == portfolio_id, Holding.is_active.is_(True))
-        .all()
-    )
     watchlist_by_ticker = {
-        normalize_ticker(h.ticker): bool(h.is_watchlist) for h in holdings
+        ticker: meta["is_watchlist"]
+        for ticker, meta in holdings_repository.meta_map(db, portfolio_id).items()
     }
     events = get_earnings_events(list(watchlist_by_ticker.keys()), window_days=window)
     for event in events:
@@ -232,15 +224,7 @@ async def add_holding(
     _require_portfolio(portfolio_id, db)
 
     # Prevent adding the same ticker twice to the same portfolio
-    existing = (
-        db.query(Holding)
-        .filter(
-            Holding.portfolio_id == portfolio_id,
-            Holding.ticker == data.ticker,
-            Holding.is_active.is_(True),
-        )
-        .first()
-    )
+    existing = holdings_repository.active_by_ticker(db, portfolio_id, data.ticker)
     if existing:
         raise HTTPException(
             status_code=400, detail=f"{data.ticker} already in portfolio"
@@ -294,12 +278,9 @@ async def export_holdings(portfolio_id: int = 1, db: Session = Depends(get_db)):
     Every cell is neutralized against spreadsheet formula injection.
     """
     _require_portfolio(portfolio_id, db)
-    holdings = (
-        db.query(Holding)
-        .filter(Holding.portfolio_id == portfolio_id, Holding.is_active.is_(True))
-        .order_by(Holding.ticker.asc())
-        .all()
-    )
+    # Alphabetical is this endpoint's presentation choice, not part of what
+    # "active" means, so the repository's oldest-first rows are sorted here.
+    holdings = sorted(holdings_repository.active(db, portfolio_id), key=lambda h: h.ticker)
     filename = f"folioorb-holdings-p{portfolio_id}-{date.today().isoformat()}.csv"
     return StreamingResponse(
         holdings_csv.build_export_csv(holdings),
@@ -419,12 +400,9 @@ async def import_holdings(
 
     template_rows, mode, column_mapping = _resolve_import_mode(header, data_rows, force_local)
 
-    existing_tickers = {
-        normalize_ticker(t[0])
-        for t in db.query(Holding.ticker)
-        .filter(Holding.portfolio_id == portfolio_id, Holding.is_active.is_(True))
-        .all()
-    }
+    # process_import_rows requires an upper-cased set; active_tickers already
+    # normalizes, dedupes, and drops blanks.
+    existing_tickers = set(holdings_repository.active_tickers(db, portfolio_id))
 
     # Warm the quote cache once so per-row validation reads cache, not the network.
     # Shape-check first: an unsafe symbol must never reach yfinance (it's rejected in
@@ -735,18 +713,9 @@ async def get_portfolio_range_performance(
     the dashboard costs a single request that covers all ranges.
     """
     _require_portfolio(portfolio_id, db)
-    holdings = (
-        db.query(Holding)
-        .filter(Holding.portfolio_id == portfolio_id, Holding.is_active.is_(True))
-        .all()
-    )
     rows = [
-        {
-            "ticker": h.ticker,
-            "shares": h.shares,
-            "is_watchlist": bool(h.is_watchlist),
-        }
-        for h in holdings
+        {"ticker": ticker, "shares": meta["shares"], "is_watchlist": meta["is_watchlist"]}
+        for ticker, meta in holdings_repository.meta_map(db, portfolio_id).items()
     ]
     return compute_range_performance(rows)
 

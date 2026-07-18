@@ -7,6 +7,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+
 # Widgets that render the full AI tip card (headline + personalized insight).
 # All other widgets keep the plain-string one-liner format.
 KEY_TIP_WIDGETS: frozenset[str] = frozenset({

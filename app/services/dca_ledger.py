@@ -15,7 +15,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models import DcaContribution, DcaPlan, Holding
-from app.services import dca_service, portfolio_lifecycle
+from app.services import dca_service, holdings_repository, portfolio_lifecycle
 from app.services.stock_service import get_daily_closes, validate_ticker_symbol
 
 TickerValidator = Callable[[str], dict]
@@ -312,14 +312,8 @@ class DcaLedger:
 
     def _apply(self, contribution: DcaContribution) -> Holding:
         plan = contribution.plan
-        holding = (
-            self.db.query(Holding)
-            .filter(
-                Holding.portfolio_id == plan.portfolio_id,
-                Holding.ticker == plan.ticker,
-                Holding.is_active.is_(True),
-            )
-            .first()
+        holding = holdings_repository.active_by_ticker(
+            self.db, plan.portfolio_id, plan.ticker
         )
         if holding is None:
             holding = Holding(

@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Holding
+from app.services import holdings_repository
 from app.services.ai_service import generate_news_themes, get_cached_claude_heartbeat
 from app.services.edgar_service import get_cik, get_recent_filings
 from app.services.news_service import (
@@ -52,12 +53,13 @@ _FILINGS_WORKERS = 8
 # ── Shared helpers ─────────────────────────────────────────────────────────────
 
 def _get_active_holdings(db: Session, portfolio_id: int = 1) -> list[Holding]:
-    """Return all active holdings for a portfolio."""
-    return (
-        db.query(Holding)
-        .filter(Holding.portfolio_id == portfolio_id, Holding.is_active.is_(True))
-        .all()
-    )
+    """Return the portfolio's active holdings as ORM rows, oldest first.
+
+    What "active" means belongs to holdings_repository; this is only the name
+    the two row-shaped endpoints below share, so their tests stub one seam here
+    instead of reaching into the repository every module imports.
+    """
+    return holdings_repository.active(db, portfolio_id)
 
 
 def _holding_info_brief(ticker: str) -> dict:
@@ -143,19 +145,11 @@ async def get_news_themes(portfolio_id: int = 1, db: Session = Depends(get_db)):
             detail="Claude AI is not reachable; news themes unavailable.",
         )
 
-    holdings = _get_active_holdings(db, portfolio_id)
-    tickers  = [normalize_ticker(h.ticker) for h in holdings]
+    # meta_map already returns ticker → position context, which is the shape
+    # build_themes_snapshot reads, so this endpoint needs no ORM rows at all.
+    holding_meta = holdings_repository.meta_map(db, portfolio_id)
 
-    news_by_ticker = fetch_portfolio_news(tickers) if tickers else {}
-
-    holding_meta: dict[str, dict] = {
-        normalize_ticker(h.ticker): {
-            "is_watchlist": bool(h.is_watchlist),
-            "shares":       float(h.shares or 0),
-            "avg_cost":     float(h.avg_cost or 0),
-        }
-        for h in holdings
-    }
+    news_by_ticker = fetch_portfolio_news(list(holding_meta)) if holding_meta else {}
 
     sig   = _headlines_signature(news_by_ticker)
     now   = time.monotonic()
