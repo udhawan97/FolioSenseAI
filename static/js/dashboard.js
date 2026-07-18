@@ -3997,7 +3997,75 @@ function renderIncome(data) {
         </div>
         ${blended ? `<p class="income-blended">${escapeHtml(blended)}</p>` : ""}
         <div class="income-rows">${rows}</div>
-        ${nonPayerNote}`;
+        ${nonPayerNote}
+        <div id="income-calendar"></div>`;
+}
+
+// ── Dividend calendar strip ──────────────────────────────────────────────────
+//
+// WHEN the income lands, month by month — cadence read from each payer's real
+// ex-date history, amounts from the same forward rate as the rows above. The
+// months shown are ex-dividend months (cash usually follows days to weeks
+// later), and a payer whose cadence can't be read is named as unscheduled,
+// never smeared across invented months.
+const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function renderIncomeCalendar(data) {
+    const host = document.getElementById("income-calendar");
+    if (!host) return;
+
+    const months = Array.isArray(data?.months) ? data.months : [];
+    const unscheduled = Array.isArray(data?.unscheduled) ? data.unscheduled : [];
+
+    const unscheduledNote = unscheduled.length
+        ? `<p class="income-cal-note">${escapeHtml(`Schedule unreadable for ${unscheduled.map(u => u.ticker).join(", ")} — kept off the calendar rather than guessed.`)}</p>`
+        : "";
+
+    if (!data?.has_data || !months.length) {
+        // No scheduled months at all: the honesty note (if any) still shows.
+        host.innerHTML = unscheduledNote;
+        return;
+    }
+
+    const peak = Math.max(...months.map(m => Number(m.total) || 0), 0);
+    const bars = months.map(m => {
+        const total = Number(m.total) || 0;
+        const [year, monthNo] = String(m.month || "").split("-").map(Number);
+        const label = MONTH_SHORT[(monthNo || 1) - 1] || "";
+        const height = peak > 0 ? Math.max(total > 0 ? 8 : 0, Math.round(total / peak * 100)) : 0;
+        const who = (m.payers || []).map(p => `${p.ticker} ${formatCurrency(p.amount)}`).join(" · ");
+        const tip = total > 0 ? `${label} ${year} — ${formatCurrency(total)}${who ? `: ${who}` : ""}` : `${label} ${year} — no ex-dividend dates`;
+        return `<div class="income-cal-col" title="${escapeHtml(tip)}">
+            <div class="income-cal-bar"><div class="income-cal-fill" style="height:${height}%"></div></div>
+            <span class="income-cal-month">${escapeHtml(label[0])}</span>
+        </div>`;
+    }).join("");
+
+    host.innerHTML = `<div class="income-cal">
+        <div class="income-cal-head">
+            <span class="income-cal-title">Next 12 months</span>
+            <span class="income-cal-total">${escapeHtml(formatCurrency(data.total_next_12m))} projected</span>
+        </div>
+        <div class="income-cal-bars">${bars}</div>
+        <p class="income-cal-basis">Months are ex-dividend months — the cutoffs to own each payer; cash usually lands shortly after.</p>
+        ${unscheduledNote}
+    </div>`;
+}
+
+async function loadIncomeCalendar() {
+    const host = document.getElementById("income-calendar");
+    if (!host) return;
+    try {
+        const res = await fetch("/api/portfolio/income-calendar");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        renderIncomeCalendar(await res.json());
+    } catch (err) {
+        // The strip is a bonus on the income card — a calendar outage clears
+        // it quietly and leaves the card itself standing.
+        console.warn("Dividend calendar fetch failed:", err);
+        host.replaceChildren();
+    }
 }
 
 async function loadIncome() {
@@ -4008,6 +4076,8 @@ async function loadIncome() {
         render: renderIncome,
         warning: "Dividend income fetch failed:",
     });
+    // The when-does-it-land strip rides on top; it never gates the card.
+    if (_incomeLoaded) loadIncomeCalendar();
     _incomeLoadPromise = null;
 }
 
@@ -5488,6 +5558,129 @@ registerHoldingPanel({
     },
 });
 
+// ── Thesis notes ─────────────────────────────────────────────────────────────
+//
+// The "why do I own this?" box. Text lives on the holding itself
+// (Holding.notes), already round-trips through CSV import/export, and is yours
+// alone — no AI reads or writes it. Renders at every intel site but never
+// clobbers an open editor: refresh cycles re-run these renders mid-typing.
+function renderThesisNotes(section, ticker) {
+    if (!section) return;
+    if (section.classList.contains("is-editing")) return;
+
+    const holding = (latestHoldings || []).find(h => h.ticker === ticker);
+    // Holdings payload hasn't landed yet — stay blank rather than flash an
+    // empty state that a moment later fills in.
+    if (!holding || holding.id == null) { section.innerHTML = ""; return; }
+
+    const notes = String(holding.notes || "").trim();
+    const body = notes
+        ? `<p class="thesis-notes-text">${escapeHtml(notes).replace(/\n/g, "<br>")}</p>`
+        : `<p class="thesis-notes-empty">Why do you own this? Write it down now — future-you, mid-drawdown, will want the reason.</p>`;
+
+    section.innerHTML = `<div class="thesis-notes">
+        <div class="intel-label"><i class="bi bi-journal-text" aria-hidden="true"></i><span>Your thesis</span></div>
+        ${body}
+        <button type="button" class="thesis-notes-edit" aria-label="Edit your thesis for ${escapeHtml(ticker)}">
+            <i class="bi bi-pencil" aria-hidden="true"></i> ${notes ? "Edit" : "Write it"}
+        </button>
+    </div>`;
+
+    section.querySelector(".thesis-notes-edit").addEventListener("click", () => {
+        openThesisNotesEditor(section, ticker);
+    });
+}
+
+function openThesisNotesEditor(section, ticker) {
+    const holding = (latestHoldings || []).find(h => h.ticker === ticker);
+    if (!holding || holding.id == null) return;
+    section.classList.add("is-editing");
+
+    section.innerHTML = `<div class="thesis-notes is-editing">
+        <div class="intel-label"><i class="bi bi-journal-text" aria-hidden="true"></i><span>Your thesis</span>
+            <span class="thesis-notes-count"></span>
+        </div>
+        <textarea class="thesis-notes-input" maxlength="500" rows="4"
+            placeholder="Why you bought, what would make you sell — in your own words."></textarea>
+        <div class="thesis-notes-actions">
+            <button type="button" class="thesis-notes-save">Save</button>
+            <button type="button" class="thesis-notes-cancel">Cancel</button>
+            <span class="thesis-notes-error" role="alert" hidden></span>
+        </div>
+    </div>`;
+
+    // Assigned via .value, not markup — the text needs no escaping this way.
+    const input = section.querySelector(".thesis-notes-input");
+    input.value = String(holding.notes || "");
+    const count = section.querySelector(".thesis-notes-count");
+    const syncCount = () => { count.textContent = `${input.value.length}/500`; };
+    syncCount();
+    input.addEventListener("input", syncCount);
+    input.focus();
+    _syncThesisSectionHeight(section);
+
+    section.querySelector(".thesis-notes-cancel").addEventListener("click", () => {
+        section.classList.remove("is-editing");
+        renderThesisNotes(section, ticker);
+        _syncThesisSectionHeight(section);
+    });
+    section.querySelector(".thesis-notes-save").addEventListener("click", () => {
+        saveThesisNotes(section, ticker, input.value);
+    });
+}
+
+async function saveThesisNotes(section, ticker, text) {
+    const holding = (latestHoldings || []).find(h => h.ticker === ticker);
+    if (!holding || holding.id == null) return;
+    const saveBtn = section.querySelector(".thesis-notes-save");
+    const errorEl = section.querySelector(".thesis-notes-error");
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = "Saving…"; }
+    if (errorEl) errorEl.hidden = true;
+    const trimmed = String(text ?? "").slice(0, 500);
+    try {
+        const res = await fetch(`/api/portfolio/holdings/${holding.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ notes: trimmed }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (err) {
+        // Keep the editor open — never eat the user's words on a failed save.
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "Save"; }
+        if (errorEl) {
+            errorEl.textContent = "Couldn't save — your text is still here, try again.";
+            errorEl.hidden = false;
+        }
+        return;
+    }
+    holding.notes = trimmed;
+    section.classList.remove("is-editing");
+    renderThesisNotes(section, ticker);
+    _syncThesisSectionHeight(section);
+}
+
+// Entering/leaving the editor changes the section's height; an open summary
+// body animates via a fixed max-height, so re-measure or the box clips.
+function _syncThesisSectionHeight(section) {
+    const body = section.closest(".summary-body");
+    if (body && body.classList.contains("open")
+        && body.style.maxHeight && body.style.maxHeight !== "none") {
+        requestAnimationFrame(() => { body.style.maxHeight = body.scrollHeight + "px"; });
+    }
+}
+
+// Notes live on the holding itself rather than behind a lazy fetch, so this
+// descriptor carries no `fetch`/`cache` and the intel loader skips it — it
+// paints from latestHoldings at every site. renderThesisNotes bails out on its
+// own while an editor is open, so a refresh cycle mid-typing stays safe and the
+// panel needs nothing from ctx.
+registerHoldingPanel({
+    sel: ".intel-notes-section",
+    render(section, ticker) {
+        renderThesisNotes(section, ticker);
+    },
+});
+
 // ── Fundamentals over time (SEC XBRL) ────────────────────────────────────────
 //
 // Revenue, profit, and EPS from the numbers a company actually filed. Revenue
@@ -6493,6 +6686,7 @@ function injectSummaryRows(tbody) {
                 <div class="intel-move-section"></div>
                 <div class="intel-insider-section"></div>
                 <div class="intel-fundamentals-section"></div>
+                <div class="intel-notes-section"></div>
                 <div class="intel-verdict-section"></div>
                 <div class="intel-slow-hint" hidden>
                     <i class="bi bi-hourglass-split"></i>

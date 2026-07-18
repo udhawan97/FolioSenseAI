@@ -85,6 +85,8 @@ FolioOrb closes that gap: holdings, live prices, risk math, market regime, news,
 | 💸 Check what your funds cost | Each fund's expense ratio as real dollars per year — and what it compounds to over a decade. "Fee unknown" stays unknown; it never quietly becomes $0 |
 | 🧬 Compare your ETFs | Whether the funds you own are quietly the same bet — pairwise overlap across their top-10 holdings, labelled for exactly what it measures |
 | 💵 See what pays you | Annual dividend income at your position size, blended yield, and an ex-dividend heads-up. Non-payers are named, never counted as $0 |
+| 🗓️ See *when* it pays you | A twelve-month calendar of dividend income, built from each payer's real ex-dates — a monthly REIT and a quarterly stock land in their own months, never an assumed rhythm |
+| 📓 Write your thesis | The reason you own each holding, in your own words, on the holding itself — write it when conviction is easy to explain, read it back when it isn't. Claude never reads or writes it |
 | 🕵️ Watch the insiders | Recent open-market buys and sells by a company's own officers and directors (SEC Form 4) — grants and tax withholding shown but never counted as conviction |
 | 📊 Read the financials | Revenue, margin, and EPS by year from what a company actually filed (SEC XBRL) — missing numbers stay blank, never a fabricated zero |
 | 🗞️ Open News | Grouped headlines for everything you hold or watch, plus optional Claude themes |
