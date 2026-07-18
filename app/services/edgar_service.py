@@ -21,6 +21,7 @@ import os
 import threading
 import time
 
+from app.services.ttl_cache import ttl_cache
 from app.version import __version__
 
 logger = logging.getLogger(__name__)
@@ -63,8 +64,11 @@ _FORM_LABELS = {
 
 _lock = threading.Lock()
 _THROTTLE: dict = {"last_request_at": 0.0}
-_TICKER_MAP_CACHE: dict = {"fetched_at": 0.0, "raw": None}
-_FILINGS_CACHE: dict[str, tuple[float, list[dict]]] = {}
+
+# The last ticker map EDGAR handed over, kept deliberately past its TTL: when
+# SEC is unreachable at refresh time, yesterday's CIKs beat no CIKs at all.
+# The TTL cache below decides *when* to refetch; this holds *what* we last got.
+_LAST_TICKER_MAP: dict[str, str | None] = {"raw": None}
 
 
 def _user_agent() -> str:
@@ -240,6 +244,37 @@ def _parse_filings(
     return rows[:limit]
 
 
+@ttl_cache(
+    ttl=_FILINGS_TTL,
+    key=lambda ticker, limit, forms: f"{ticker}:{limit}:{forms or ''}",
+    # None is "EDGAR had nothing to give" — a non-filer or an outage. Only an
+    # answer EDGAR actually gave is remembered, so an offline moment is retried
+    # on the next call instead of blanking the timeline for half an hour.
+    cache_when=lambda filings: filings is not None,
+    copy=list,
+)
+def _cached_filings(
+    ticker: str,
+    *,
+    limit: int,
+    forms: tuple[str, ...] | None,
+    force_refresh: bool = False,
+) -> list[dict] | None:
+    """Parsed filings for one already-normalized symbol, or None when EDGAR is silent.
+
+    ``[]`` and ``None`` differ here: ``[]`` means EDGAR answered and nothing on
+    the list was material, which is worth remembering; ``None`` means we never
+    got an answer, which isn't.
+    """
+    cik = get_cik(ticker, force_refresh=force_refresh)
+    if not cik:
+        return None
+    raw = _fetch_submissions(cik)
+    if not raw:
+        return None
+    return _parse_filings(raw, cik=cik, forms=forms, limit=limit)
+
+
 def get_recent_filings(
     ticker: str,
     *,
@@ -251,22 +286,12 @@ def get_recent_filings(
     symbol = (ticker or "").strip().upper()
     if not symbol:
         return []
-
-    cache_key = f"{symbol}:{limit}:{forms or ''}"
-    cached = _FILINGS_CACHE.get(cache_key)
-    if not force_refresh and cached and cached[0] > time.monotonic():
-        return list(cached[1])
-
-    cik = get_cik(symbol, force_refresh=force_refresh)
-    if not cik:
-        return []
-    raw = _fetch_submissions(cik)
-    if not raw:
-        return []
-
-    filings = _parse_filings(raw, cik=cik, forms=forms, limit=limit)
-    _FILINGS_CACHE[cache_key] = (time.monotonic() + _FILINGS_TTL, filings)
-    return list(filings)
+    return (
+        _cached_filings(
+            symbol, limit=limit, forms=forms, force_refresh=force_refresh
+        )
+        or []
+    )
 
 
 def fetch_company_facts(cik: str) -> str | None:
@@ -287,18 +312,25 @@ def fetch_filing_document(url: str) -> str | None:
     return _get(url)
 
 
+@ttl_cache(ttl=_TICKER_MAP_TTL, cache_when=bool)
+def _refresh_ticker_map() -> str | None:
+    """Refetch the whole ticker→CIK map, at most once per TTL.
+
+    ``cache_when=bool`` keeps a failed fetch out of the store so the next call
+    tries again rather than waiting out the day. The map itself is parked in
+    ``_LAST_TICKER_MAP``, which is what ``get_cik`` reads — a fetch that fails
+    leaves the previous map standing.
+    """
+    raw = _fetch_ticker_map()
+    if raw:
+        _LAST_TICKER_MAP["raw"] = raw
+    return raw
+
+
 def get_cik(ticker: str, *, force_refresh: bool = False) -> str | None:
     """Resolve a ticker to its SEC CIK, or None if it isn't an SEC filer."""
-    now = time.monotonic()
-    fresh = (
-        _TICKER_MAP_CACHE["raw"]
-        and now - _TICKER_MAP_CACHE["fetched_at"] < _TICKER_MAP_TTL
-    )
-    if force_refresh or not fresh:
-        raw = _fetch_ticker_map()
-        if raw:
-            _TICKER_MAP_CACHE.update({"raw": raw, "fetched_at": now})
-    raw_map = _TICKER_MAP_CACHE["raw"]
+    _refresh_ticker_map(force_refresh=force_refresh)
+    raw_map = _LAST_TICKER_MAP["raw"]
     if not raw_map:
         return None
     return _cik_from_map(raw_map, ticker)

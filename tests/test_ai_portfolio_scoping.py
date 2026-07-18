@@ -26,7 +26,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.models import AISummary, Base, Holding, Portfolio
 from app.routers import ai as ai_router
-from app.services import analytics_insights, portfolio_valuation
+from app.services import analytics_insights, portfolio_briefing, portfolio_valuation
 
 
 def make_multi_portfolio_db():
@@ -90,7 +90,7 @@ def test_book_cache_is_namespaced_per_portfolio(monkeypatch):
         lambda tickers: [quotes[t] for t in tickers if t in quotes],
     )
     monkeypatch.setattr(
-        ai_router, "get_market_regime", lambda: {"label": "", "mood": ""}
+        portfolio_briefing, "get_market_regime", lambda: {"label": "", "mood": ""}
     )
 
     # Stub Haiku: echo which portfolio's snapshot it saw so cross-reads are visible.

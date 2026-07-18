@@ -7,12 +7,12 @@ import json
 import logging
 import re
 import threading
-import time
 from itertools import cycle
 from time import perf_counter
 
 import anthropic
 from app.config import settings
+from app.services.ttl_cache import ttl_cache
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,6 @@ client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
 
 MODEL = "claude-haiku-4-5-20251001"
 
-_HEARTBEAT_CACHE: tuple[float, dict] | None = None
 _HEARTBEAT_TTL = 120  # seconds — matches frontend poll interval
 
 # Lifetime token accumulator — reset on process restart, updated after every API call.
@@ -32,10 +31,10 @@ _USAGE_LOCK = threading.Lock()
 
 def reinitialize_client(new_key: str) -> None:
     """Swap in a new API key at runtime without restarting the server."""
-    global client, _HEARTBEAT_CACHE  # pylint: disable=global-statement
+    global client  # pylint: disable=global-statement
     setattr(settings, "ANTHROPIC_API_KEY", new_key)
     client = anthropic.Anthropic(api_key=new_key)
-    _HEARTBEAT_CACHE = None  # force next poll to do a live check
+    get_cached_claude_heartbeat.cache_clear()  # force next poll to do a live check
 
 
 def _track_usage(_model: str, usage) -> None:
@@ -98,16 +97,15 @@ def claude_api_heartbeat(timeout: float = 2.0) -> dict:
         }
 
 
+@ttl_cache(ttl=_HEARTBEAT_TTL, key=lambda timeout: None)
 def get_cached_claude_heartbeat(timeout: float = 2.0) -> dict:
-    """Return a cached Claude reachability check to avoid blocking every poll."""
-    global _HEARTBEAT_CACHE  # pylint: disable=global-statement
-    now = time.monotonic()
-    if _HEARTBEAT_CACHE and _HEARTBEAT_CACHE[0] > now:
-        return _HEARTBEAT_CACHE[1]
+    """Return a cached Claude reachability check to avoid blocking every poll.
 
-    result = claude_api_heartbeat(timeout=timeout)
-    _HEARTBEAT_CACHE = (now + _HEARTBEAT_TTL, result)
-    return result
+    One answer for the whole process, whatever timeout a caller asks for — the
+    question is "can we reach Anthropic", not "can we reach it in 2 seconds".
+    A failed heartbeat is remembered too: that *is* the reachability answer.
+    """
+    return claude_api_heartbeat(timeout=timeout)
 
 # Rotating fallback quips per action (no Claude required)
 _FALLBACK_QUIPS: dict[str, list[str]] = {

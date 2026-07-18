@@ -4,15 +4,15 @@ Cached daily; adjusts verdict component weights.
 """
 from __future__ import annotations
 
-import logging
-import math
 from datetime import date, datetime, timezone
 
+from app.services import market_data
 from app.services.treasury_yield_curve import get_yield_curve
+from app.services.ttl_cache import ttl_cache
 
-logger = logging.getLogger(__name__)
-
-_REGIME_CACHE: dict = {"date": None, "regime": None}
+# The calendar date is the key, so the regime is recomputed once a day whatever
+# the clock says. The TTL is only what stops yesterday's entry from lingering.
+_REGIME_TTL = 24 * 3600
 
 # Proxy tickers: SPY (risk), TLT (rates), ^VIX (vol), UUP (USD)
 _REGIME_TICKERS = {
@@ -45,15 +45,12 @@ def _trend_from_closes(closes: list[float], lookback: int = 20) -> str:
 
 
 def _fetch_closes(ticker: str, period: str = "3mo") -> list[float]:
-    try:
-        import yfinance as yf
-        hist = yf.Ticker(ticker).history(period=period, interval="1d")
-        if hist is None or hist.empty:
-            return []
-        return [float(c) for c in hist["Close"].tolist() if not math.isnan(c)]
-    except Exception as exc:
-        logger.debug("Regime fetch failed for %s: %s", ticker, type(exc).__name__)
-        return []
+    """Daily closes for one regime proxy; empty when Yahoo can't be reached.
+
+    Three months is enough for the 20-session trend the classifiers read; only
+    the VIX percentile asks for more.
+    """
+    return market_data.get_closes(ticker, period=period)
 
 
 def _classify_risk(trend: str) -> str:
@@ -164,16 +161,13 @@ def _regime_label(risk: str, rates: str, usd: str, curve_state: str = "unknown")
     return " · ".join(parts[:2])
 
 
-def get_market_regime(*, force_refresh: bool = False) -> dict:
-    """Return cached daily regime + component weight adjustments."""
-    today = date.today().isoformat()
-    if (
-        not force_refresh
-        and _REGIME_CACHE.get("date") == today
-        and _REGIME_CACHE.get("regime")
-    ):
-        return dict(_REGIME_CACHE["regime"])
+@ttl_cache(ttl=_REGIME_TTL, key=lambda: date.today().isoformat(), copy=dict)
+def get_market_regime() -> dict:
+    """Return cached daily regime + component weight adjustments.
 
+    A partial read — say SPY priced but the curve unreachable — is still the
+    day's answer and is remembered as one; `data_quality` says so honestly.
+    """
     spy = _fetch_closes(_REGIME_TICKERS["risk"])
     tlt = _fetch_closes(_REGIME_TICKERS["rates"])
     # A longer VIX window than the trend proxies need: percentile wants history.
@@ -213,8 +207,6 @@ def get_market_regime(*, force_refresh: bool = False) -> dict:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "data_quality": "live" if spy else "partial",
     }
-    _REGIME_CACHE["date"] = today
-    _REGIME_CACHE["regime"] = regime
     return regime
 
 

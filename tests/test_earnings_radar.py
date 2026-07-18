@@ -11,9 +11,9 @@ from app.services.security_type import SecurityType
 @pytest.fixture(autouse=True)
 def _clear_cache():
     """Each test starts with an empty per-ticker date cache."""
-    er._RADAR_CACHE.clear()
+    er._resolve_earnings.cache_clear()
     yield
-    er._RADAR_CACHE.clear()
+    er._resolve_earnings.cache_clear()
 
 
 def _patch(monkeypatch, *, dates, classify=None, info=None, estimates=None):
@@ -104,14 +104,19 @@ def test_sorted_soonest_first(monkeypatch):
     assert order == ["B", "C", "A"]
 
 
+def _expire_radar_cache():
+    """Age every stored record past its window.
+
+    ttl_cache reads ``time.monotonic`` directly, so a test moves the *entries*
+    rather than the clock.
+    """
+    store = er._resolve_earnings.cache
+    for key, (_expiry, record) in list(store.items()):
+        store[key] = (0.0, record)
+
+
 def test_caches_date_and_recomputes_days(monkeypatch):
     """Within TTL the date is cached (no refetch), yet days_until tracks 'today'."""
-    class _Clock:
-        t = 1000.0
-
-        def monotonic(self):
-            return self.t
-
     class _FakeDate(date):
         current = date(2026, 1, 1)
 
@@ -119,8 +124,6 @@ def test_caches_date_and_recomputes_days(monkeypatch):
         def today(cls):
             return cls.current
 
-    clock = _Clock()
-    monkeypatch.setattr(er, "time", clock)
     monkeypatch.setattr(er, "date", _FakeDate)
 
     calls = {"n": 0}
@@ -136,13 +139,13 @@ def test_caches_date_and_recomputes_days(monkeypatch):
     first = er.get_earnings_events(["MSFT"], window_days=30)
     assert first[0]["days_until"] == 5 and calls["n"] == 1
 
-    # Calendar advances two days; clock stays within TTL → cache hit, no refetch,
+    # Calendar advances two days; entry stays within TTL → cache hit, no refetch,
     # but the countdown recomputes from the cached date.
     _FakeDate.current = date(2026, 1, 3)
     second = er.get_earnings_events(["MSFT"], window_days=30)
     assert second[0]["days_until"] == 3 and calls["n"] == 1
 
     # Past the TTL → the ticker is resolved afresh.
-    clock.t += er._RADAR_TTL + 1
+    _expire_radar_cache()
     er.get_earnings_events(["MSFT"], window_days=30)
     assert calls["n"] == 2

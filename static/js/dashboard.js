@@ -95,19 +95,7 @@ const isFiniteNumber = (n) => n !== null && n !== "" && Number.isFinite(Number(n
 const formatOptionalPct = (n) => isFiniteNumber(n) ? formatPct(Number(n)) : "—";
 const formatAllocationPct = (n) => `${toNumber(n).toFixed(1)}%`;
 const TICKER_PATTERN = /^[A-Z0-9.^-]{1,10}$/;
-function apiErrorMessage(err, fallback = "Something went wrong") {
-    const detail = err?.detail ?? err?.message ?? err;
-    if (Array.isArray(detail)) {
-        return detail
-            .map(item => item?.msg || item?.message || String(item))
-            .filter(Boolean)
-            .join("; ") || fallback;
-    }
-    if (detail && typeof detail === "object") {
-        return detail.msg || detail.message || JSON.stringify(detail);
-    }
-    return detail ? String(detail) : fallback;
-}
+// apiErrorMessage lives in core.js, which loads first.
 const formatPercentilePct = (n) => {
     const v = Number(n);
     if (v < 1) return "< 1%";
@@ -735,6 +723,30 @@ let cachedInsider = {};        // ticker → insider-activity object (SEC Form 4
 let cachedFundamentals = {};   // ticker → fundamentals object (SEC XBRL facts)
 let intelligenceLoaded = false;
 let intelligenceLoading = false;
+
+// ── How those caches reach the screen ────────────────────────────────────────
+//
+// Every panel inside a holding's expand-row is one registerHoldingPanel()
+// descriptor sitting next to its render function, and renderHoldingPanels()
+// paints every registered panel a row contains (both live in core.js). The
+// three sites that repaint a row — injectSummaryRows while the table is built,
+// renderExpandedTicker when one ticker's data lands, and
+// _renderAllExpandedIntelRows when the portfolio-wide scan finishes — each make
+// exactly one such call, so a new panel is wired in once rather than at all
+// three, which is how they drifted apart before.
+//
+// Only injectSummaryRows paints mid-flight, so only it passes a ctx; the other
+// two omit it, which reads as "everything has landed, paint from cache". All
+// three fields are optional, and a panel with no loading state of its own (the
+// insider and fundamentals panels) ignores them:
+//   pending — this row's coverage/move data is in flight, from either the first
+//             batch or a targeted retry. Panels with a shimmer show it.
+//   idle    — nothing has loaded and no scan is running: the table's very first
+//             paint. Coverage and move stay untouched rather than claim "not
+//             available" a moment before the data arrives.
+//   loading — the portfolio-wide scan is running. The verdict shimmers on this
+//             rather than on `pending`, because it has a cache of its own: a row
+//             can hold coverage already and still be waiting on its signal.
 let _aiSummariesLoading = false;
 let intelligenceRetryState = {}; // ticker → number of retry attempts
 let intelligenceRetryingTickers = new Set();
@@ -836,6 +848,11 @@ let cachedVerdicts = {};         // ticker → verdict object from /api/ai/inves
 let cachedPortfolioExposure = null;
 let cachedMarketRegime = null;
 let portfolioSnapshotExposurePromise = null;
+// Read by the snapshot strip here and by the Analytics exposure pane in
+// analytics-charts.js. apiGetCached keys on the URL string, so the two files
+// sharing one request rests on them spelling it the same way — hence one const
+// rather than two literals.
+const PORTFOLIO_EXPOSURE_URL = "/api/ai/portfolio-exposure";
 const cachedDeepIntel = {};      // ticker → deep read payload
 const deepIntelLoadingTickers = new Set();
 let aiCheckInterval = null;
@@ -1332,7 +1349,7 @@ function renderPortfolioValueData(data) {
         const bestEl = document.getElementById("best-performer");
         if (data.best_performer) {
             bestEl.dataset.ticker = data.best_performer.ticker;
-            bestEl.innerHTML = `${escapeHtml(data.best_performer.ticker)} <span style="font-size:.85em;opacity:.8">${formatPct(data.best_performer.day_change_pct)}</span>`;
+            bestEl.innerHTML = html`${data.best_performer.ticker} <span style="font-size:.85em;opacity:.8">${formatPct(data.best_performer.day_change_pct)}</span>`;
         } else if (bestEl) {
             bestEl.dataset.ticker = "";
             bestEl.textContent = "--";
@@ -1340,7 +1357,7 @@ function renderPortfolioValueData(data) {
         const worstEl = document.getElementById("worst-performer");
         if (data.worst_performer) {
             worstEl.dataset.ticker = data.worst_performer.ticker;
-            worstEl.innerHTML = `${escapeHtml(data.worst_performer.ticker)} <span style="font-size:.85em;opacity:.8">${formatPct(data.worst_performer.day_change_pct)}</span>`;
+            worstEl.innerHTML = html`${data.worst_performer.ticker} <span style="font-size:.85em;opacity:.8">${formatPct(data.worst_performer.day_change_pct)}</span>`;
         } else if (worstEl) {
             worstEl.dataset.ticker = "";
             worstEl.textContent = "--";
@@ -1350,7 +1367,7 @@ function renderPortfolioValueData(data) {
             const largest = data.holdings.reduce((a, b) =>
                 a.current_value > b.current_value ? a : b);
             largestEl.dataset.ticker = largest.ticker;
-            largestEl.innerHTML = `${escapeHtml(largest.ticker)} <span style="font-size:.85em;opacity:.8">${formatCompact(largest.current_value)}</span>`;
+            largestEl.innerHTML = html`${largest.ticker} <span style="font-size:.85em;opacity:.8">${formatCompact(largest.current_value)}</span>`;
         } else if (largestEl) {
             largestEl.dataset.ticker = "";
             largestEl.textContent = "--";
@@ -1413,9 +1430,7 @@ async function loadPortfolioValue() {
     if (_portfolioValuePromise) return _portfolioValuePromise;
     _portfolioValuePromise = (async () => {
     try {
-        const res = await fetch("/api/portfolio/value");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        const data = await apiGet("/api/portfolio/value");
 
         if (data.degraded) {
             // The local server answered, but market data is unreachable, so the
@@ -1587,11 +1602,7 @@ function ensureRangePerformance() {
     _rangePerf.signature = signature;
     _rangePerf.data = null;
     _rangePerf.error = false;
-    _rangePerf.promise = fetch("/api/portfolio/range-performance")
-        .then(res => {
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            return res.json();
-        })
+    _rangePerf.promise = apiGet("/api/portfolio/range-performance")
         .then(data => {
             if (_rangePerf.signature === signature) {
                 _rangePerf.data = data;
@@ -2067,61 +2078,61 @@ function renderAllocationFocusPanel(ticker = null, sorted = null, options = {}) 
             : `${formatCompact(Math.abs(metrics.equalWeightDrift))} under equal-weight`)
         : "Allocation read";
 
-    panel.innerHTML = `<div class="alloc-focus-inner" data-ticker="${escapeHtml(activeTicker)}">
+    panel.innerHTML = html`<div class="alloc-focus-inner" data-ticker="${activeTicker}">
         <div class="alloc-focus-head">
             <div>
                 <span class="alloc-focus-kicker"><i class="bi bi-crosshair" aria-hidden="true"></i> Focus holding</span>
                 <div class="alloc-focus-title-row">
                     <span class="alloc-focus-dot" style="background:${color};color:${color}"></span>
-                    <span class="alloc-focus-ticker">${escapeHtml(activeTicker)}</span>
-                    <span class="alloc-focus-name">${escapeHtml(holding.name || intel?.coverage_label || "")}</span>
+                    <span class="alloc-focus-ticker">${activeTicker}</span>
+                    <span class="alloc-focus-name">${holding.name || intel?.coverage_label || ""}</span>
                 </div>
-                <p class="alloc-focus-sub">${escapeHtml(formatCurrency(holding.current_value))} · ${escapeHtml(formatAllocationPct(holding.allocation_pct))} of portfolio · ${escapeHtml(concentrationNote)}</p>
+                <p class="alloc-focus-sub">${formatCurrency(holding.current_value)} · ${formatAllocationPct(holding.allocation_pct)} of portfolio · ${concentrationNote}</p>
             </div>
             <div class="alloc-focus-day">
-                <span>${escapeHtml(timeRangeConfig().label)}</span>
-                <strong class="${dayTone}">${escapeHtml(dayText)}</strong>
+                <span>${timeRangeConfig().label}</span>
+                <strong class="${dayTone}">${dayText}</strong>
             </div>
         </div>
 
         <div class="alloc-focus-metrics">
             <div class="alloc-focus-metric">
                 <span>Size rank</span>
-                <strong>${escapeHtml(rank)}</strong>
+                <strong>${rank}</strong>
             </div>
             <div class="alloc-focus-metric">
                 <span>Your return</span>
-                <strong class="${returnTone}">${escapeHtml(returnText)}</strong>
+                <strong class="${returnTone}">${returnText}</strong>
             </div>
             <div class="alloc-focus-metric">
                 <span>If down 10%</span>
-                <strong class="text-danger">${escapeHtml(stress)}</strong>
+                <strong class="text-danger">${stress}</strong>
             </div>
         </div>
 
         <div class="alloc-focus-spark-card">
             <div>
-                <span class="alloc-focus-spark-label">${escapeHtml(trend.label)}</span>
-                <canvas class="allocation-focus-sparkline" data-ticker="${escapeHtml(activeTicker)}" width="360" height="58"
-                    aria-label="${escapeHtml(activeTicker)} ${escapeHtml(trend.note)}"></canvas>
+                <span class="alloc-focus-spark-label">${trend.label}</span>
+                <canvas class="allocation-focus-sparkline" data-ticker="${activeTicker}" width="360" height="58"
+                    aria-label="${activeTicker} ${trend.note}"></canvas>
             </div>
             <div class="alloc-focus-spark-meta">
-                <strong class="${trend.tone === "positive" ? "text-success" : trend.tone === "negative" ? "text-danger" : "text-secondary"}">${escapeHtml(trend.value)}</strong>
-                <span>${escapeHtml(trend.note)}</span>
+                <strong class="${trend.tone === "positive" ? "text-success" : trend.tone === "negative" ? "text-danger" : "text-secondary"}">${trend.value}</strong>
+                <span>${trend.note}</span>
             </div>
         </div>
 
         <div class="alloc-focus-section">
             <div class="alloc-focus-section-label"><i class="bi bi-info-circle-fill" aria-hidden="true"></i> What it is</div>
-            <p class="alloc-focus-copy">${escapeHtml(allocationFocusWhatItIs(holding, intel))}</p>
+            <p class="alloc-focus-copy">${allocationFocusWhatItIs(holding, intel)}</p>
         </div>
 
         <div class="alloc-focus-section">
             <div class="alloc-focus-section-label"><i class="bi bi-lightning-charge-fill" aria-hidden="true"></i> Why it moved</div>
-            <p class="alloc-focus-copy">${escapeHtml(allocationFocusMoveCopy(holding, metrics, explanation))}</p>
+            <p class="alloc-focus-copy">${allocationFocusMoveCopy(holding, metrics, explanation)}</p>
         </div>
 
-        ${verdictHtml}
+        ${raw(verdictHtml)}
     </div>`;
 
     requestAnimationFrame(() => paintAllocationFocusSparkline(activeTicker));
@@ -2138,7 +2149,7 @@ function renderAllocation() {
         row.dataset.ticker = h.ticker;
         row.style.setProperty("--row-index", i);
         if (selectedAllocationTicker === h.ticker) row.classList.add("alloc-selected");
-        row.innerHTML = `
+        row.innerHTML = html`
             <td><span class="badge" style="background:${chartColor(i)}">&nbsp;</span>
                 ${h.ticker}</td>
             <td>${h.shares}</td>
@@ -2329,15 +2340,23 @@ function renderSnapshotSectorEmpty(message, icon = "bi-hourglass-split") {
     }
 }
 
+// The snapshot strip and the Analytics exposure pane want the same payload.
+// apiGetCached is what keeps that to one request: whichever asks first pays for
+// it, the other reads the shared promise. Both still keep their own decoded
+// copy, because each renders from it on its own schedule.
 async function ensurePortfolioSnapshotExposure() {
     if (cachedPortfolioExposure?.sector_exposure?.length || portfolioSnapshotExposurePromise) return;
-    portfolioSnapshotExposurePromise = fetch("/api/ai/portfolio-exposure")
-        .then(res => {
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            return res.json();
-        })
+    portfolioSnapshotExposurePromise = apiGetCached(PORTFOLIO_EXPOSURE_URL)
         .then(data => {
             cachedPortfolioExposure = data || cachedPortfolioExposure;
+            // A payload with no sectors in it is worth asking about again — the
+            // prices behind it may still be settling. The hand-rolled cache this
+            // replaced retried on the next render because it kept nothing until
+            // the guard above was satisfied; dropping the shared entry keeps
+            // that, rather than pinning an empty answer for the session.
+            if (!cachedPortfolioExposure?.sector_exposure?.length) {
+                apiGetCached.invalidate(PORTFOLIO_EXPOSURE_URL);
+            }
             renderPortfolioSnapshot();
             return data;
         })
@@ -2384,10 +2403,10 @@ function renderSnapshotSectors(active) {
         const pct = Math.max(1.5, toNumber(s.weight_pct));
         const rawPct = toNumber(s.weight_pct);
         const showLabel = rawPct >= 8;
-        return `<span class="snapshot-sector-seg"
+        return html`<span class="snapshot-sector-seg"
             style="--snapshot-color:${theme.color};--snapshot-width:${pct}%;--snapshot-delay:${index * 35}ms"
-            title="${escapeHtml(s.name)} ${rawPct.toFixed(1)}%">${
-            showLabel ? `<span class="snapshot-seg-label" aria-hidden="true">${rawPct.toFixed(0)}%</span>` : ""
+            title="${s.name} ${rawPct.toFixed(1)}%">${
+            showLabel ? html`<span class="snapshot-seg-label" aria-hidden="true">${rawPct.toFixed(0)}%</span>` : ""
         }</span>`;
     }).join("");
 
@@ -2402,23 +2421,23 @@ function renderSnapshotSectors(active) {
         const tipHint = isOther
             ? "Industry-level breakdown coming soon"
             : "Industries this sector may include";
-        return `<div class="snapshot-sector-item tip-trigger" tabindex="0"
+        return html`<div class="snapshot-sector-item tip-trigger" tabindex="0"
             style="--snapshot-color:${theme.color};--snapshot-delay:${index * 35}ms"
-            data-tip-title="${escapeHtml(tipTitle)}"
-            data-tip-body="${escapeHtml(theme.blurb || "")}"
-            data-tip-hint="${escapeHtml(tipHint)}"
-            data-tip-icon="${escapeHtml(theme.icon)}">
+            data-tip-title="${tipTitle}"
+            data-tip-body="${theme.blurb || ""}"
+            data-tip-hint="${tipHint}"
+            data-tip-icon="${theme.icon}">
             <span class="snapshot-sector-dot" aria-hidden="true"></span>
-            <span class="snapshot-sector-name">${escapeHtml(s.name)}</span>
+            <span class="snapshot-sector-name">${s.name}</span>
             <div class="snapshot-sector-track" aria-hidden="true">
                 <div class="snapshot-sector-fill" style="--snapshot-fill:${fill}%"></div>
             </div>
             <span class="snapshot-sector-pct">${pct}%</span>
         </div>`;
-    }).join("") + (top ? `<div class="snapshot-sector-note"
+    }).join("") + (top ? html`<div class="snapshot-sector-note"
         style="--snapshot-tilt-color:${snapshotSectorTheme(top.name).color}">
         <i class="bi bi-crosshair2" aria-hidden="true"></i>
-        Biggest tilt&thinsp;·&thinsp;<strong>${escapeHtml(top.name)}</strong>
+        Biggest tilt&thinsp;·&thinsp;<strong>${top.name}</strong>
     </div>` : "");
 }
 
@@ -3045,9 +3064,7 @@ function renderHoldings() {
 
 async function loadEarningsRadar() {
     try {
-        const res = await fetch("/api/portfolio/earnings");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        const data = await apiGet("/api/portfolio/earnings");
         const map = {};
         (data.events || []).forEach(e => { if (e && e.ticker) map[e.ticker] = e; });
         cachedEarnings = map;
@@ -3092,7 +3109,7 @@ function earningsBadgeHtml(h) {
     const text = e.days_until === 0 ? "Today" : e.days_until === 1 ? "1d" : `${e.days_until}d`;
     const soon = e.days_until <= 3 ? " earnings-badge--soon" : "";
     const tip = `Earnings ~${formatEarnDate(e.date)} — ${String(e.label || "").toLowerCase()}${_earningsEstimateText(e)}`;
-    return `<span class="badge earnings-badge${soon} ms-1" title="${escapeHtml(tip)}"><i class="bi bi-calendar-event me-1"></i>${escapeHtml(text)}</span>`;
+    return html`<span class="badge earnings-badge${soon} ms-1" title="${tip}"><i class="bi bi-calendar-event me-1"></i>${text}</span>`;
 }
 
 function renderEarningsStrip() {
@@ -3111,14 +3128,14 @@ function renderEarningsStrip() {
     const overflow = events.length - shown.length;
     const chips = shown.map(e => {
         const soon = e.days_until <= 3 ? " earnings-chip--soon" : "";
-        const flask = e.is_watchlist ? '<i class="bi bi-flask" aria-hidden="true"></i> ' : "";
+        const flask = e.is_watchlist ? raw('<i class="bi bi-flask" aria-hidden="true"></i> ') : "";
         const when = e.days_until === 0 ? "today" : e.days_until === 1 ? "tomorrow" : `in ${e.days_until}d`;
         const tip = `${e.ticker} earnings ~${formatEarnDate(e.date)}${_earningsEstimateText(e)}`;
-        return `<span class="earnings-chip${soon}" title="${escapeHtml(tip)}">${flask}<strong>${escapeHtml(e.ticker)}</strong> · ${escapeHtml(when)}</span>`;
-    }).join("");
-    const more = overflow > 0 ? `<span class="earnings-chip earnings-chip--more">+${overflow} more</span>` : "";
+        return html`<span class="earnings-chip${soon}" title="${tip}">${flask}<strong>${e.ticker}</strong> · ${when}</span>`;
+    });
+    const more = overflow > 0 ? html`<span class="earnings-chip earnings-chip--more">+${overflow} more</span>` : "";
     strip.innerHTML =
-        `<span class="earnings-radar-label"><i class="bi bi-broadcast" aria-hidden="true"></i> Earnings radar</span>${chips}${more}`;
+        html`<span class="earnings-radar-label"><i class="bi bi-broadcast" aria-hidden="true"></i> Earnings radar</span>${chips}${more}`;
     strip.hidden = false;
 }
 
@@ -3313,9 +3330,7 @@ let latestPnlStaleDays = 0;
 
 async function loadPnl() {
     try {
-        const res = await fetch("/api/portfolio/pnl");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        const data = await apiGet("/api/portfolio/pnl");
         const history = data.history || [];
 
         // Decide if the user has meaningful portfolio data
@@ -3391,9 +3406,7 @@ async function loadMarketReferenceChart(rangeKey = performanceRange) {
     try {
         const config = PERFORMANCE_RANGES[normalizePerformanceRange(rangeKey)];
         const params = new URLSearchParams({ tickers: "SPY", period: config.marketPeriod });
-        const res = await fetch(`/api/stocks/history/batch?${params}`);
-        if (!res.ok) return;
-        const data = await res.json();
+        const data = await apiGet(`/api/stocks/history/batch?${params}`);
         const hist = filterHistoryForPerformanceRange(
             (data.data?.SPY || []).filter(h => h.close > 0),
             rangeKey,
@@ -3594,9 +3607,7 @@ async function loadRealizedRecap(year) {
     const active = year != null ? year : _realizedRecapYear;
     try {
         const qs = active != null ? `?year=${encodeURIComponent(active)}` : "";
-        const res = await fetch(`/api/portfolio/realized-summary${qs}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        renderRealizedRecap(await res.json());
+        renderRealizedRecap(await apiGet(`/api/portfolio/realized-summary${qs}`));
     } catch (err) {
         console.warn("Unable to load realized recap:", err);
         host.hidden = true;
@@ -3680,9 +3691,7 @@ async function loadVerdictReportCard() {
     const body = document.getElementById("verdict-report-body");
     if (!body) return;
     try {
-        const res = await fetch("/api/ai/verdict-report");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        renderVerdictReport(await res.json());
+        renderVerdictReport(await apiGet("/api/ai/verdict-report"));
         _verdictReportLoaded = true;
     } catch (err) {
         console.warn("Unable to load verdict report:", err);
@@ -3808,9 +3817,7 @@ function ensureProjectionLoaded() {
 
 async function loadProjection() {
     try {
-        const res = await fetch("/api/portfolio/projection");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        latestProjectionData = await res.json();
+        latestProjectionData = await apiGet("/api/portfolio/projection");
         projectionLoadPromise = null;
 
         const callout = document.getElementById("projection-empty-callout");
@@ -3872,6 +3879,42 @@ function _toggleAnalyticsCard(cardId, visible) {
     const column = card.parentElement;
     const target = column && column.className.includes("col-") ? column : card;
     target.style.display = visible ? "" : "none";
+}
+
+/**
+ * Fill one self-contained Analytics card from one endpoint.
+ *
+ * The whole lifecycle these cards share sits behind five fields: raise the
+ * shimmer, read the endpoint, paint it, reveal the card — or, on any failure,
+ * warn to the console and drop the card out of the grid rather than leave a
+ * half-painted one on screen. An earlier blip having pulled the card is not
+ * sticky: a good read brings it back.
+ *
+ * Deliberately never rejects. It resolves true when the card painted and false
+ * when it did not, which is the only thing a caller has to branch on — so the
+ * caller's own "have I loaded this yet" flag is a plain assignment rather than
+ * another try/catch.
+ *
+ *   card    — element id of the card to show or hide.
+ *   loading — element id of its shimmer.
+ *   url     — endpoint to read; goes through apiGet, so the portfolio-scoping
+ *             fetch patch and the ok-guard both still apply.
+ *   render  — (payload) => void. Paints the card body.
+ *   warning — console.warn prefix for a failed read.
+ */
+async function loadCard({ card, loading, url, render, warning }) {
+    _cardLoading(loading, true);
+    try {
+        render(await apiGet(url));
+        _toggleAnalyticsCard(card, true);
+        return true;
+    } catch (err) {
+        console.warn(warning, err);
+        _toggleAnalyticsCard(card, false);
+        return false;
+    } finally {
+        _cardLoading(loading, false);
+    }
 }
 
 function ensureFeeDragLoaded() {
@@ -3958,20 +4001,14 @@ function renderIncome(data) {
 }
 
 async function loadIncome() {
-    _cardLoading("income-loading", true);
-    try {
-        const res = await fetch("/api/portfolio/income");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        renderIncome(await res.json());
-        _incomeLoaded = true;
-        _toggleAnalyticsCard("income-card", true);
-    } catch (err) {
-        console.warn("Dividend income fetch failed:", err);
-        _toggleAnalyticsCard("income-card", false);
-    } finally {
-        _incomeLoadPromise = null;
-        _cardLoading("income-loading", false);
-    }
+    _incomeLoaded = await loadCard({
+        card: "income-card",
+        loading: "income-loading",
+        url: "/api/portfolio/income",
+        render: renderIncome,
+        warning: "Dividend income fetch failed:",
+    });
+    _incomeLoadPromise = null;
 }
 
 // An expense ratio is a fraction: 0.0003 is three basis points, i.e. "0.03%".
@@ -4058,23 +4095,17 @@ function renderFeeDrag(data) {
         ${notes.map(n => `<p class="fee-drag-note">${escapeHtml(n)}</p>`).join("")}`;
 }
 
+// A fee read we couldn't get is a quiet absence, not a broken zone — loadCard
+// drops the card rather than leaving a half-painted one.
 async function loadFeeDrag() {
-    _cardLoading("fee-drag-loading", true);
-    try {
-        const res = await fetch(`/api/portfolio/fee-drag?horizon_years=${FEE_DRAG_HORIZON_YEARS}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        renderFeeDrag(await res.json());
-        _feeDragLoaded = true;
-        // An earlier blip may have pulled the card; a good read brings it back.
-        _toggleAnalyticsCard("fee-drag-card", true);
-    } catch (err) {
-        // A fee read we couldn't get is a quiet absence, not a broken zone.
-        console.warn("Fee drag fetch failed:", err);
-        _toggleAnalyticsCard("fee-drag-card", false);
-    } finally {
-        _feeDragLoadPromise = null;
-        _cardLoading("fee-drag-loading", false);
-    }
+    _feeDragLoaded = await loadCard({
+        card: "fee-drag-card",
+        loading: "fee-drag-loading",
+        url: `/api/portfolio/fee-drag?horizon_years=${FEE_DRAG_HORIZON_YEARS}`,
+        render: renderFeeDrag,
+        warning: "Fee drag fetch failed:",
+    });
+    _feeDragLoadPromise = null;
 }
 
 // The service can only see each fund's top-10 published holdings and says so in
@@ -4138,22 +4169,16 @@ function renderEtfOverlap(data) {
         ${notes.map(n => `<p class="etf-overlap-note">${escapeHtml(n)}</p>`).join("")}`;
 }
 
+// Overlap leans on a live holdings scrape; losing it is survivable.
 async function loadEtfOverlap() {
-    _cardLoading("etf-overlap-loading", true);
-    try {
-        const res = await fetch("/api/portfolio/etf-overlap");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        renderEtfOverlap(await res.json());
-        _etfOverlapLoaded = true;
-        _toggleAnalyticsCard("etf-overlap-card", true);
-    } catch (err) {
-        // Overlap leans on a live holdings scrape; losing it is survivable.
-        console.warn("ETF overlap fetch failed:", err);
-        _toggleAnalyticsCard("etf-overlap-card", false);
-    } finally {
-        _etfOverlapLoadPromise = null;
-        _cardLoading("etf-overlap-loading", false);
-    }
+    _etfOverlapLoaded = await loadCard({
+        card: "etf-overlap-card",
+        loading: "etf-overlap-loading",
+        url: "/api/portfolio/etf-overlap",
+        render: renderEtfOverlap,
+        warning: "ETF overlap fetch failed:",
+    });
+    _etfOverlapLoadPromise = null;
 }
 
 function _projectionHorizonData(data) {
@@ -4411,9 +4436,7 @@ async function loadTrendData(tickers) {
             tickers: tickers.join(","),
             period: "1mo",
         });
-        const res = await fetch(`/api/stocks/history/batch?${params}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        const data = await apiGet(`/api/stocks/history/batch?${params}`);
         return data.data || {};
     } catch (err) {
         console.warn("Unable to load trend data:", err);
@@ -4491,8 +4514,14 @@ function observeTrendCell(cell) {
     if (_trendObserver && cell) _trendObserver.observe(cell);
 }
 
-function setCellHtml(cell, html) {
-    if (cell && cell.innerHTML !== html) cell.innerHTML = html;
+function setCellHtml(cell, markup) {
+    // String() first, and the parameter is not called `html`: the tag returns a
+    // marker object, so comparing one straight to the cell's innerHTML string
+    // would never match and would repaint every cell on every refresh. Coercing
+    // keeps the skip-if-unchanged guard working for a built template and a
+    // plain string alike.
+    const next = String(markup);
+    if (cell && cell.innerHTML !== next) cell.innerHTML = next;
 }
 
 function trendSignature(history = []) {
@@ -4502,7 +4531,7 @@ function trendSignature(history = []) {
 
 function holdingBadgeHtml(h) {
     return h.is_watchlist
-        ? `<span class="badge watchlist-badge ms-1" title="Research mode — excluded from P&L"><i class="bi bi-flask me-1"></i>Research</span>`
+        ? html`<span class="badge watchlist-badge ms-1" title="Research mode — excluded from P&L"><i class="bi bi-flask me-1"></i>Research</span>`
         : "";
 }
 
@@ -4510,15 +4539,15 @@ function moveBadgeHtml(ticker) {
     const exp = cachedExplanations[ticker];
     if (!exp) return "";
     const label = ATTRIBUTION_SHORT[exp.attribution_type] || "?";
-    return `<div class="move-badge ${escapeHtml(exp.attribution_type)}" title="${escapeHtml(String(exp.confidence))} confidence · ${escapeHtml(label)}">${escapeHtml(label)}</div>`;
+    return html`<div class="move-badge ${exp.attribution_type}" title="${exp.confidence} confidence · ${label}">${label}</div>`;
 }
 
 function dayChangeHtml(h) {
     if (!isFiniteNumber(h.day_change_pct)) {
-        return `<div class="today-cell-wrap"><span class="day-chg-cell text-secondary" title="Today's change unavailable">—</span></div>`;
+        return html`<div class="today-cell-wrap"><span class="day-chg-cell text-secondary" title="Today's change unavailable">—</span></div>`;
     }
     const up = h.day_change_pct >= 0;
-    return `
+    return html`
         <div class="today-cell-wrap">
             <div class="day-chg-cell ${colorClass(h.day_change_pct)}">
                 <i class="bi ${up ? "bi-caret-up-fill" : "bi-caret-down-fill"}"></i>${formatPct(h.day_change_pct)}
@@ -4531,7 +4560,7 @@ function dayChangeHtml(h) {
 function createHoldingRow(h) {
     const row = document.createElement("tr");
     row.dataset.ticker = h.ticker;
-    row.innerHTML = `
+    row.innerHTML = html`
         <td class="fw-bold holding-ticker-cell" data-field="ticker"></td>
         <td class="d-none d-md-table-cell holding-name-cell" data-field="name"></td>
         <td class="text-end" data-field="price"></td>
@@ -4555,10 +4584,10 @@ function updateHoldingRow(row, h, index, trendData = {}) {
     row.classList.toggle("research-holding-row", !!h.is_watchlist);
 
     const rec = cachedRecommendations[h.ticker];
-    const tickerHtml = `
+    const tickerHtml = html`
         <span class="holding-ticker-wrap">
             <span class="ticker-dot" style="background:${chartColor(index)}"></span>
-            <span class="holding-ticker-symbol">${escapeHtml(h.ticker)}</span>${holdingBadgeHtml(h)}${earningsBadgeHtml(h)}
+            <span class="holding-ticker-symbol">${h.ticker}</span>${holdingBadgeHtml(h)}${earningsBadgeHtml(h)}
             <i class="bi bi-chevron-right row-chevron"></i>
         </span>
     `;
@@ -4915,18 +4944,11 @@ function toggleSummaryRow(mainRow) {
     }
 }
 
-function escapeHtml(str) {
-    return String(str)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
-
-function inlineJsString(str) {
-    return JSON.stringify(String(str ?? "")).replace(/"/g, "&quot;");
-}
+// escapeHtml and inlineJsString live in core.js. This file used to declare its
+// own byte-identical copies, which shadowed core's simply by loading later.
+// Prefer the `html` tagged template over calling escapeHtml by hand: it escapes
+// every interpolation, so a forgotten wrap stops being an XSS and `raw(...)` is
+// the one greppable way out.
 
 function parseBullets(text) {
     if (!text) return [];
@@ -5302,16 +5324,16 @@ function renderMoveExplainer(section, data, coverageData = null) {
         macroPills.push({ label: `Vol ${volVsAvg.toFixed(1)}× avg`, pos: volVsAvg >= 1.5 });
     }
 
-    const driversHtml = drivers.map(d => `
+    const driversHtml = drivers.map(d => html`
         <div class="driver-item">
-            <i class="bi ${escapeHtml(d.icon)} driver-icon ${escapeHtml(d.magnitude)}"></i>
-            <span class="driver-text">${escapeHtml(d.description)}</span>
-        </div>`).join("");
+            <i class="bi ${d.icon} driver-icon ${d.magnitude}"></i>
+            <span class="driver-text">${d.description}</span>
+        </div>`);
 
     const macroPillsHtml = macroPills.length
-        ? `<div class="macro-pills">${macroPills.map(p =>
-            `<span class="macro-pill ${p.pos ? "positive" : "negative"}">${escapeHtml(p.label)}</span>`
-          ).join("")}</div>`
+        ? html`<div class="macro-pills">${macroPills.map(p =>
+            html`<span class="macro-pill ${p.pos ? "positive" : "negative"}">${p.label}</span>`
+          )}</div>`
         : "";
     const keyDriversHtml = renderKeyDriversSpecRows(coverageData?.key_drivers || []);
     const moveStatStripHtml = renderMoveStatStrip(data);
@@ -5332,7 +5354,12 @@ function renderMoveExplainer(section, data, coverageData = null) {
     const contextHtml  = _buildTodayInContextBlock(timing, data);
     const trendHtml    = _buildTrendContextBlock(timing);
 
-    section.innerHTML = `
+    // The six raw() values are blocks the sibling builders above already
+    // assembled as HTML — each returns "" or markup, never user text. They are
+    // the deliberate opt-outs here, and stay greppable as raw(...) until those
+    // builders are migrated onto `html` themselves, at which point the wrappers
+    // come off and nothing else changes.
+    section.innerHTML = html`
         <div class="intel-move">
             <div class="intel-label">
                 <i class="bi bi-lightning-charge-fill" style="color:var(--accent-yellow)"></i>
@@ -5344,21 +5371,36 @@ function renderMoveExplainer(section, data, coverageData = null) {
                     <span class="move-hero-sub">${formatSignedCurrency(data.day_change_dollar || 0)}/share</span>
                 </div>
             </div>
-            <p class="move-explanation-text">${escapeHtml(data.explanation_text || "")}</p>
-            ${driversHtml ? `<div class="move-drivers">${driversHtml}</div>` : ""}
+            <p class="move-explanation-text">${data.explanation_text || ""}</p>
+            ${driversHtml.length ? html`<div class="move-drivers">${driversHtml}</div>` : ""}
             ${macroPillsHtml}
-            ${keyDriversHtml}
-            ${moveStatStripHtml}
-            ${contributionHtml}
-            ${backdropHtml}
-            ${contextHtml}
-            ${trendHtml}
+            ${raw(keyDriversHtml)}
+            ${raw(moveStatStripHtml)}
+            ${raw(contributionHtml)}
+            ${raw(backdropHtml)}
+            ${raw(contextHtml)}
+            ${raw(trendHtml)}
         </div>`;
     const heroEl = section.querySelector(".move-hero-number");
     if (heroEl) animateMoveHeroNumber(heroEl, heroEl.textContent);
     const ctxCanvas = section.querySelector("canvas.move-context-sparkline");
     if (ctxCanvas && Array.isArray(timing.sparkline_30d)) _drawPctSparkline(ctxCanvas, timing.sparkline_30d);
 }
+
+// An explanation that already landed outranks the shimmer: a targeted retry
+// re-marks the row pending, and blanking a good explanation back to shimmer
+// would read as the panel losing data. ctx: see the notes by the caches.
+registerHoldingPanel({
+    sel: ".intel-move-section",
+    render(section, ticker, ctx) {
+        if (ctx?.pending && !cachedExplanations[ticker]) {
+            renderMoveExplainerShimmer(section);
+            return;
+        }
+        if (ctx?.idle) return;
+        renderMoveExplainer(section, cachedExplanations[ticker], cachedIntelligence[ticker]);
+    },
+});
 
 // ── Insider Activity (SEC Form 4) ────────────────────────────────────────────
 //
@@ -5434,6 +5476,18 @@ function renderInsiderActivity(section, data) {
     </div>`;
 }
 
+// Filings are keyless and public, so this panel loads in both engines. It has
+// no loading state of its own — an absent cache entry renders blank — so it
+// ignores ctx and paints the same way at all three sites.
+registerHoldingPanel({
+    sel: ".intel-insider-section",
+    cache: cachedInsider,
+    fetch: (ticker) => `/api/ai/insider-activity/${encodeURIComponent(ticker)}`,
+    render(section, ticker) {
+        renderInsiderActivity(section, cachedInsider[ticker]);
+    },
+});
+
 // ── Fundamentals over time (SEC XBRL) ────────────────────────────────────────
 //
 // Revenue, profit, and EPS from the numbers a company actually filed. Revenue
@@ -5483,6 +5537,17 @@ function renderFundamentals(section, data) {
     </div>`;
 }
 
+// Company facts are keyless and public, so this panel loads in both engines.
+// Like insider activity it has no loading state, so it ignores ctx.
+registerHoldingPanel({
+    sel: ".intel-fundamentals-section",
+    cache: cachedFundamentals,
+    fetch: (ticker) => `/api/ai/fundamentals/${encodeURIComponent(ticker)}`,
+    render(section, ticker) {
+        renderFundamentals(section, cachedFundamentals[ticker]);
+    },
+});
+
 // ── Holding Coverage ("What It Covers") ──────────────────────────────────────
 
 const COVERAGE_TYPE_HINTS = {
@@ -5499,13 +5564,13 @@ function coverageTypeHint(type = "") {
 }
 
 function renderCoverageDivider(icon, label) {
-    return `<div class="coverage-divider">
-        <span class="coverage-divider-label"><i class="bi ${icon}"></i>${escapeHtml(label)}</span>
+    return html`<div class="coverage-divider">
+        <span class="coverage-divider-label"><i class="bi ${icon}"></i>${label}</span>
     </div>`;
 }
 
 function renderCoverageSectionHint(text) {
-    return text ? `<p class="coverage-section-hint">${escapeHtml(text)}</p>` : "";
+    return text ? html`<p class="coverage-section-hint">${text}</p>` : "";
 }
 
 function formatFactWeight(value, decimals = 1) {
@@ -6234,7 +6299,7 @@ function _buildEquityValueBlock(data, rating, timing) {
 
 function renderHoldingCoverage(section, data) {
     if (!data) {
-        section.innerHTML = `<div class="intel-coverage"><span class="intel-na">Coverage data not available</span></div>`;
+        section.innerHTML = html`<div class="intel-coverage"><span class="intel-na">Coverage data not available</span></div>`;
         return;
     }
 
@@ -6252,45 +6317,45 @@ function renderHoldingCoverage(section, data) {
     const timing = verdict.timing || {};
     const aiMode = !isLocalIntelligenceMode();
 
-    const heroHtml = `
+    const heroHtml = html`
         <div class="coverage-hero">
             <div class="coverage-hero-head">
-                <span class="coverage-type-badge ${escapeHtml(coverageClass)}">${escapeHtml(typeLabel)}</span>
+                <span class="coverage-type-badge ${coverageClass}">${typeLabel}</span>
             </div>
-            <p class="coverage-hero-tagline">${escapeHtml(heroTagline)}</p>
-            ${heroSubhint ? `<p class="coverage-hero-subhint">${escapeHtml(heroSubhint)}</p>` : ""}
+            <p class="coverage-hero-tagline">${heroTagline}</p>
+            ${heroSubhint ? html`<p class="coverage-hero-subhint">${heroSubhint}</p>` : ""}
             ${strategyText && strategyText !== heroTagline && strategyText !== heroSubhint
-                ? `<p class="coverage-hero-summary">${escapeHtml(strategyText)}</p>`
+                ? html`<p class="coverage-hero-summary">${strategyText}</p>`
                 : ""}
         </div>`;
 
     const sectorBarsHtml = data.sectors && data.sectors.length
-        ? `<div class="coverage-section">
+        ? html`<div class="coverage-section">
             ${renderCoverageDivider("bi-diagram-3", "Industries")}
             ${renderCoverageSectionHint("Business types inside this holding — wider bars mean a bigger slice")}
             <div class="sector-bars">
-              ${data.sectors.slice(0, 5).map((s, i) => `
+              ${data.sectors.slice(0, 5).map((s, i) => html`
                 <div class="sector-bar-row">
                   <span class="sector-bar-swatch" style="--sector-color:${chartColor(i)}"></span>
-                  <div class="sector-bar-label" title="${escapeHtml(s.name)}">${escapeHtml(s.name)}</div>
+                  <div class="sector-bar-label" title="${s.name}">${s.name}</div>
                   <div class="sector-bar-track"><div class="sector-bar-fill" style="--sector-color:${chartColor(i)};width:${Math.min(s.weight, 100)}%"></div></div>
                   <div class="sector-bar-pct">${s.weight.toFixed(1)}%</div>
-                </div>`).join("")}
+                </div>`)}
             </div>
            </div>`
         : "";
 
     const countryChipsHtml = data.countries && data.countries.length
-        ? `<div class="coverage-section">
+        ? html`<div class="coverage-section">
             ${renderCoverageDivider("bi-globe2", "Geography")}
             ${renderCoverageSectionHint("Where your money is invested — percentages add up inside this holding")}
             <div class="country-chips">
               ${data.countries.slice(0, 6).map((c, i) =>
-                `<span class="country-chip${i === 0 ? " primary" : ""}" title="${escapeHtml(c.name)}: ${c.weight.toFixed(1)}%">
-                   <span class="country-chip-name">${escapeHtml(c.name)}</span>
+                html`<span class="country-chip${i === 0 ? " primary" : ""}" title="${c.name}: ${c.weight.toFixed(1)}%">
+                   <span class="country-chip-name">${c.name}</span>
                    <span class="country-chip-pct">${c.weight.toFixed(0)}%</span>
                  </span>`
-              ).join("")}
+              )}
             </div>
            </div>`
         : "";
@@ -6298,59 +6363,59 @@ function renderHoldingCoverage(section, data) {
     let insideHtml = "";
     if (data.top_holdings && data.top_holdings.length && coverageType !== "equity") {
         const maxBarWeight = Math.max(...data.top_holdings.map(h => h.weight), 1);
-        insideHtml = `
+        insideHtml = html`
             <div class="coverage-section">
                 ${renderCoverageDivider("bi-list-task", "Biggest positions inside")}
                 ${renderCoverageSectionHint("Largest companies this fund owns — not your whole portfolio")}
                 <div class="top-holdings-list">
-                  ${data.top_holdings.slice(0, 5).map(h => `
+                  ${data.top_holdings.slice(0, 5).map(h => html`
                     <div class="holding-mini-row">
-                      <span class="holding-mini-ticker">${escapeHtml(h.ticker)}</span>
-                      <span class="holding-mini-name">${escapeHtml(h.name)}</span>
+                      <span class="holding-mini-ticker">${h.ticker}</span>
+                      <span class="holding-mini-name">${h.name}</span>
                       <div class="holding-mini-weight">
                         <div class="holding-mini-bar-track">
                           <div class="holding-mini-bar-fill" style="width:${(h.weight / maxBarWeight * 100).toFixed(0)}%"></div>
                         </div>
                         <span class="holding-mini-pct">${h.weight.toFixed(1)}%</span>
                       </div>
-                    </div>`).join("")}
+                    </div>`)}
                 </div>
             </div>`;
     } else if (coverageType === "equity" && data.peer_tickers && data.peer_tickers.length) {
-        insideHtml = `
+        insideHtml = html`
             <div class="coverage-section">
                 ${renderCoverageDivider("bi-people", "Similar companies")}
                 ${renderCoverageSectionHint("Peers in the same industry — useful for comparing moves")}
                 <div class="peer-chips">
-                  ${data.peer_tickers.slice(0, 6).map(p => `<span class="peer-chip">${escapeHtml(p)}</span>`).join("")}
+                  ${data.peer_tickers.slice(0, 6).map(p => html`<span class="peer-chip">${p}</span>`)}
                 </div>
             </div>`;
     }
 
     const etfProfileHtml = quality && coverageType.startsWith("etf")
-        ? `<div class="coverage-section">
+        ? html`<div class="coverage-section">
             ${renderCoverageDivider("bi-sliders", "Fund quality")}
             ${renderCoverageSectionHint("Quick health check — fees, spread, and how diversified the fund is")}
             <div class="coverage-quality-grid">
               <div class="coverage-quality-card">
                 <span class="coverage-quality-label">Overall</span>
-                <strong class="spec-pill">${escapeHtml(quality.qualityLabel || "Unknown")}</strong>
+                <strong class="spec-pill">${quality.qualityLabel || "Unknown"}</strong>
               </div>
               <div class="coverage-quality-card">
                 <span class="coverage-quality-label">Fees</span>
-                <strong class="spec-pill">${escapeHtml(quality.costLabel || "Unknown")}</strong>
+                <strong class="spec-pill">${quality.costLabel || "Unknown"}</strong>
               </div>
               <div class="coverage-quality-card">
                 <span class="coverage-quality-label">Easy to trade</span>
-                <strong>${escapeHtml(quality.liquidityLabel || "Unknown")}</strong>
+                <strong>${quality.liquidityLabel || "Unknown"}</strong>
               </div>
               <div class="coverage-quality-card">
                 <span class="coverage-quality-label">Spread</span>
-                <strong>${escapeHtml(quality.diversificationLabel || "Unknown")}</strong>
+                <strong>${quality.diversificationLabel || "Unknown"}</strong>
               </div>
               <div class="coverage-quality-card coverage-quality-card--wide">
                 <span class="coverage-quality-label">Typical risk</span>
-                <strong class="spec-pill risk">${escapeHtml(quality.categoryRiskLabel || "Unknown")}</strong>
+                <strong class="spec-pill risk">${quality.categoryRiskLabel || "Unknown"}</strong>
               </div>
             </div>
            </div>`
@@ -6361,17 +6426,20 @@ function renderHoldingCoverage(section, data) {
     const fact = buildHoldingFact(data);
     const missingPulse = data.load_status?.market_pulse?.missing || [];
     const pulseStatusHtml = !marketPulseLoaded(data) && intelligenceExhaustedTickers.has(data.ticker)
-        ? `<span class="fact-tag intel-refresh-note"><i class="bi bi-arrow-repeat"></i>Some live metrics are still loading — tap Holding Intel again for the full picture.</span>`
+        ? html`<span class="fact-tag intel-refresh-note"><i class="bi bi-arrow-repeat"></i>Some live metrics are still loading — tap Holding Intel again for the full picture.</span>`
         : missingPulse.length && intelligenceRetryingTickers.has(data.ticker)
-            ? `<span class="fact-tag intel-refresh-note"><i class="bi bi-arrow-repeat"></i>Refreshing ${escapeHtml(missingPulse.join(", "))}</span>`
+            ? html`<span class="fact-tag intel-refresh-note"><i class="bi bi-arrow-repeat"></i>Refreshing ${missingPulse.join(", ")}</span>`
             : "";
     const factTag = fact && !fundScaleHtml
-        ? `<span class="fact-tag"><i class="bi bi-stars"></i>${escapeHtml(fact)}</span>` : "";
+        ? html`<span class="fact-tag"><i class="bi bi-stars"></i>${fact}</span>` : "";
 
+    // The `||` guard still reads correctly: every branch above yields either a
+    // built template or the empty string, so an absent block stays falsy.
+    // raw() marks the blocks the sibling builders assembled — markup, not text.
     const extrasHtml = (fundScaleHtml || marketPulseHtml || factTag || pulseStatusHtml)
-        ? `<div class="coverage-extras">
-            ${fundScaleHtml}
-            ${marketPulseHtml}
+        ? html`<div class="coverage-extras">
+            ${raw(fundScaleHtml)}
+            ${raw(marketPulseHtml)}
             <div class="intel-meta-row">${factTag}${pulseStatusHtml}</div>
            </div>`
         : "";
@@ -6380,7 +6448,7 @@ function renderHoldingCoverage(section, data) {
         ? (_buildEquityFundamentals(data, rating, aiMode) + _buildEquityValueBlock(data, rating, timing))
         : "";
 
-    section.innerHTML = `
+    section.innerHTML = html`
         <div class="intel-coverage">
             <div class="intel-label"><i class="bi bi-layers"></i> What It Covers</div>
             ${heroHtml}
@@ -6389,12 +6457,25 @@ function renderHoldingCoverage(section, data) {
             ${insideHtml}
             ${etfProfileHtml}
             ${extrasHtml}
-            ${equityDeepDiveHtml}
+            ${raw(equityDeepDiveHtml)}
         </div>`;
     if (data.ticker && _isCoverageRowOpen(section)) {
         _syncDeepIntelSection(section, data.ticker);
     }
 }
+
+// Registered after renderMoveExplainer's descriptor, so it paints second — which
+// is fine, since every panel writes only inside its own section. DOM order (and
+// so the grid layout) comes from the expand-row template in injectSummaryRows,
+// not from registration order. ctx: see the notes by the caches.
+registerHoldingPanel({
+    sel: ".intel-coverage-section",
+    render(section, ticker, ctx) {
+        if (ctx?.pending) { renderCoverageShimmer(section); return; }
+        if (ctx?.idle) return;
+        renderHoldingCoverage(section, cachedIntelligence[ticker]);
+    },
+});
 
 function injectSummaryRows(tbody) {
     Array.from(tbody.querySelectorAll("tr[data-ticker]")).forEach(mainRow => {
@@ -6434,47 +6515,17 @@ function injectSummaryRows(tbody) {
             intelGrid.classList.toggle("is-intel-loading", !!(intelligenceLoading && !intelligenceLoaded));
         }
 
-        const body          = expandRow.querySelector(".summary-body");
-        const coverageSection = expandRow.querySelector(".intel-coverage-section");
-        const moveSection   = expandRow.querySelector(".intel-move-section");
-        const verdictSection  = expandRow.querySelector(".intel-verdict-section");
-
-        if (!coverageSection || !moveSection) return;
-
-        const tickerRetrying = intelligenceRetryingTickers.has(ticker);
+        // The only paint that can land mid-flight, so the only one that passes a
+        // ctx. Every panel renders on every branch — a panel with nothing to show
+        // yet stays blank rather than being skipped, which is what keeps a row
+        // from holding one panel's stale markup next to another's fresh markup.
         const hasCoverage = !!cachedIntelligence[ticker];
-        const isCoveragePending = tickerRetrying || (intelligenceLoading && !hasCoverage);
-
-        if (isCoveragePending) {
-            renderCoverageShimmer(coverageSection);
-            if (cachedExplanations[ticker]) {
-                renderMoveExplainer(moveSection, cachedExplanations[ticker], cachedIntelligence[ticker]);
-            } else {
-                renderMoveExplainerShimmer(moveSection);
-            }
-        } else if (intelligenceLoaded) {
-            renderHoldingCoverage(coverageSection, cachedIntelligence[ticker]);
-            renderMoveExplainer(moveSection, cachedExplanations[ticker], cachedIntelligence[ticker]);
-        } else if (hasCoverage) {
-            renderHoldingCoverage(coverageSection, cachedIntelligence[ticker]);
-            renderMoveExplainer(moveSection, cachedExplanations[ticker], cachedIntelligence[ticker]);
-        }
-
-        // Insider section renders on every branch; absent data is shown as a
-        // quiet loading state until the lazy fetch lands.
-        const insiderSectionA = expandRow.querySelector(".intel-insider-section");
-        if (insiderSectionA) renderInsiderActivity(insiderSectionA, cachedInsider[ticker]);
-        const fundamentalsSectionA = expandRow.querySelector(".intel-fundamentals-section");
-        if (fundamentalsSectionA) renderFundamentals(fundamentalsSectionA, cachedFundamentals[ticker]);
-
-        // Verdict section: render shimmer while intel is loading; render card when data arrives
-        if (verdictSection) {
-            if (intelligenceLoading && !cachedVerdicts[ticker]) {
-                renderAiVerdictShimmer(verdictSection, ticker);
-            } else {
-                renderAiVerdict(verdictSection, cachedVerdicts[ticker], ticker);
-            }
-        }
+        const pending = intelligenceRetryingTickers.has(ticker) || (intelligenceLoading && !hasCoverage);
+        renderHoldingPanels(expandRow, ticker, {
+            pending,
+            idle: !pending && !intelligenceLoaded && !hasCoverage,
+            loading: intelligenceLoading,
+        });
 
         if (holdingIntelSettled(ticker)) {
             mainRow.classList.add("has-intel-ready");
@@ -6490,16 +6541,9 @@ function renderExpandedTicker(ticker) {
 
     const expandRow = mainRow.nextElementSibling;
     if (!expandRow?.classList.contains("summary-expand-row")) return;
-    const coverageSection = expandRow.querySelector(".intel-coverage-section");
-    const moveSection = expandRow.querySelector(".intel-move-section");
-    const verdictSection = expandRow.querySelector(".intel-verdict-section");
-    if (coverageSection) renderHoldingCoverage(coverageSection, cachedIntelligence[ticker]);
-    if (moveSection) renderMoveExplainer(moveSection, cachedExplanations[ticker], cachedIntelligence[ticker]);
-    const insiderSectionB = expandRow.querySelector(".intel-insider-section");
-    if (insiderSectionB) renderInsiderActivity(insiderSectionB, cachedInsider[ticker]);
-    const fundamentalsSectionB = expandRow.querySelector(".intel-fundamentals-section");
-    if (fundamentalsSectionB) renderFundamentals(fundamentalsSectionB, cachedFundamentals[ticker]);
-    if (verdictSection) renderAiVerdict(verdictSection, cachedVerdicts[ticker], ticker);
+    // No ctx: this runs once a ticker's data has landed, so every panel paints
+    // from cache rather than shimmering.
+    renderHoldingPanels(expandRow, ticker);
     if (holdingIntelSettled(ticker)) {
         mainRow.classList.add("has-intel-ready");
         const hint = expandRow.querySelector(".intel-slow-hint");
@@ -6598,24 +6642,24 @@ const REC_ICONS = {
 };
 
 function renderTargetKind(kind, icon, label) {
-    return `<div class="target-kind target-kind-${escapeHtml(kind)}">
-                <i class="bi ${escapeHtml(icon)}"></i>
-                <span>${escapeHtml(label)}</span>
+    return html`<div class="target-kind target-kind-${kind}">
+                <i class="bi ${icon}"></i>
+                <span>${label}</span>
             </div>`;
 }
 
 function renderTargetTrendLine(label, value) {
     if (!isFiniteNumber(value)) return "";
     const tone = signalTone(value);
-    return `<div class="target-trend-line ${tone}">
-                <span>${escapeHtml(label)}</span>
-                <strong>${escapeHtml(formatSignalPct(value))}</strong>
+    return html`<div class="target-trend-line ${tone}">
+                <span>${label}</span>
+                <strong>${formatSignalPct(value)}</strong>
             </div>`;
 }
 
 function renderTargetCell(rec) {
     if (!rec) {
-        return `<div class="shimmer-line" style="width:56px;height:12px;border-radius:4px;margin:0 auto .25rem"></div>
+        return html`<div class="shimmer-line" style="width:56px;height:12px;border-radius:4px;margin:0 auto .25rem"></div>
                 <div class="shimmer-line" style="width:38px;height:9px;border-radius:4px;margin:0 auto"></div>`;
     }
     // ETFs do not have useful analyst price targets. Show their price zone instead.
@@ -6626,16 +6670,19 @@ function renderTargetCell(rec) {
             const zoneClass = label.toLowerCase();
             const trend30 = firstFiniteValue(signal.vs30dChangePct, signal.vs30dPct);
             const trend200 = firstFiniteValue(signal.vs200dChangePct, signal.vs200dPct);
+            // Dropped rather than joined: each line is already-built markup, so
+            // the array goes into the tag intact. .length replaces the old
+            // truthiness test on the joined string — an empty array is truthy.
             const trendRows = [
                 renderTargetTrendLine("30D", trend30),
                 renderTargetTrendLine("200D", trend200),
-            ].join("");
-            const trendHtml = trendRows
-                ? `<div class="target-trend-list" aria-label="ETF price trend">${trendRows}</div>`
-                : `<div class="target-upside" style="color:var(--text-tertiary)">${escapeHtml(signal.basis || "Price zone")}</div>`;
-            return `<div class="target-signal-stack">
-                        <div class="target-price-value target-zone-value price-zone-${escapeHtml(zoneClass)}">
-                            <span>${escapeHtml(label)}</span>
+            ].filter(line => String(line));
+            const trendHtml = trendRows.length
+                ? html`<div class="target-trend-list" aria-label="ETF price trend">${trendRows}</div>`
+                : html`<div class="target-upside" style="color:var(--text-tertiary)">${signal.basis || "Price zone"}</div>`;
+            return html`<div class="target-signal-stack">
+                        <div class="target-price-value target-zone-value price-zone-${zoneClass}">
+                            <span>${label}</span>
                             <span>${formatPercentilePct(signal.percentile)}</span>
                         </div>
                         ${trendHtml}
@@ -6647,9 +6694,9 @@ function renderTargetCell(rec) {
     if (rec.target_price) {
         const upside = rec.target_upside_pct;
         const tone = signalTone(upside);
-        return `<div class="target-signal-stack target-stock-stack">
+        return html`<div class="target-signal-stack target-stock-stack">
                     <div class="target-price-value target-stock-value">${formatCurrency(rec.target_price)}</div>
-                    <div class="target-stock-upside ${tone}">${escapeHtml(formatSignalPct(upside))}</div>
+                    <div class="target-stock-upside ${tone}">${formatSignalPct(upside)}</div>
                     ${renderTargetKind("stock", "bi-bullseye", "Stock target")}
                 </div>`;
     }
@@ -6661,36 +6708,34 @@ function renderTargetCell(rec) {
                 ? "var(--text-secondary)"
                 : "var(--accent-red)";
         const sign = rec.fcf_yield >= 0 ? "+" : "";
-        return `<div class="target-price-value" style="color:${color}">${sign}${rec.fcf_yield.toFixed(1)}%</div>
+        return html`<div class="target-price-value" style="color:${color}">${sign}${rec.fcf_yield.toFixed(1)}%</div>
                 <div class="target-upside" style="color:var(--text-tertiary)">FCF Yield</div>
                 ${renderTargetKind("fallback", "bi-cash-coin", "Fallback")}`;
     }
-    return `<span style="color:var(--text-tertiary);font-size:.72rem">—</span>`;
+    return html`<span style="color:var(--text-tertiary);font-size:.72rem">—</span>`;
 }
 
 function renderAnalystRecCell(rec) {
     if (!rec) {
-        return `<div class="analyst-rec-wrap">
+        return html`<div class="analyst-rec-wrap">
             <div class="shimmer-line" style="width:52px;height:14px;border-radius:4px;margin:0 auto .25rem"></div>
             <div class="shimmer-line" style="width:64px;height:9px;border-radius:4px;margin:0 auto"></div>
         </div>`;
     }
     const action = rec.action || "unavailable";
     const icon = REC_ICONS[action] || "bi-question-circle";
-    return `<div class="analyst-rec-wrap">
-        <div class="analyst-rec-main analyst-rec-${escapeHtml(action)}">
-            <i class="bi ${escapeHtml(icon)} analyst-rec-icon"></i>
-            <span class="analyst-rec-label">${escapeHtml(rec.label || "Unavailable")}</span>
+    return html`<div class="analyst-rec-wrap">
+        <div class="analyst-rec-main analyst-rec-${action}">
+            <i class="bi ${icon} analyst-rec-icon"></i>
+            <span class="analyst-rec-label">${rec.label || "Unavailable"}</span>
         </div>
-        <div class="analyst-rec-subtext">${escapeHtml(rec.subtext || "")}</div>
+        <div class="analyst-rec-subtext">${rec.subtext || ""}</div>
     </div>`;
 }
 
 async function loadAnalystRecommendations() {
     try {
-        const res = await fetch("/api/ai/analyst-recommendations/all");
-        if (!res.ok) return;
-        const data = await res.json();
+        const data = await apiGet("/api/ai/analyst-recommendations/all");
         Object.entries(data.recommendations || {}).forEach(([ticker, rec]) => {
             cachedRecommendations[ticker] = rec;
             const cell = document.getElementById(`rec-cell-${ticker}`);
@@ -7946,9 +7991,7 @@ function _renderBookExposureStrip(ticker) {
 async function loadDeepIntelligence(ticker) {
     if (cachedDeepIntel[ticker]) return cachedDeepIntel[ticker];
     try {
-        const res = await fetch(`/api/ai/intelligence/${encodeURIComponent(ticker)}/deep`);
-        if (!res.ok) return null;
-        const data = await res.json();
+        const data = await apiGet(`/api/ai/intelligence/${encodeURIComponent(ticker)}/deep`);
         cachedDeepIntel[ticker] = data;
         return data;
     } catch (_) {
@@ -8706,15 +8749,31 @@ function renderBriefingVerdict(section, verdict, ticker, options = {}, variant =
 
 function renderAiVerdict(section, verdict, ticker, options = {}) {
     if (!verdict) {
-        section.innerHTML = `
-            <div class="intel-label"><i class="bi ${_verdictIntelIcon()}"></i> <span class="verdict-kicker-label">${escapeHtml(_verdictKickerLabel())}</span></div>
-            <span class="intel-na">${escapeHtml(FOLIO_SENSE_VERDICT_COPY.unavailable)}</span>`;
+        section.innerHTML = html`
+            <div class="intel-label"><i class="bi ${_verdictIntelIcon()}"></i> <span class="verdict-kicker-label">${_verdictKickerLabel()}</span></div>
+            <span class="intel-na">${FOLIO_SENSE_VERDICT_COPY.unavailable}</span>`;
         return;
     }
 
     verdict = _sanitizeVerdict(verdict) || verdict;
     renderBriefingVerdict(section, verdict, ticker, options, _briefingVariant());
 }
+
+// The one panel that keys its shimmer off the portfolio-wide scan rather than
+// the row's own pending flag: verdicts arrive on their own endpoint, so a row
+// can already hold coverage and still be waiting for its signal. With no ctx —
+// the two post-load repaints — it always paints, which is what makes a targeted
+// refresh show the card it just fetched instead of falling back to a shimmer.
+registerHoldingPanel({
+    sel: ".intel-verdict-section",
+    render(section, ticker, ctx) {
+        if (ctx?.loading && !cachedVerdicts[ticker]) {
+            renderAiVerdictShimmer(section, ticker);
+            return;
+        }
+        renderAiVerdict(section, cachedVerdicts[ticker], ticker);
+    },
+});
 
 let _lastAiCostUsd = null;
 let _brandIntroTimer = null;
@@ -9308,9 +9367,7 @@ async function loadAiCostStats() {
     if (!valueEl || !metaEl) return;
 
     try {
-        const res = await fetch("/api/ai/cache/stats");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        const data = await apiGet("/api/ai/cache/stats");
         const billingActive = data.billing_active !== false;
         const totalTokens = toNumber(data.estimated_total_tokens);
         const claudeCachedCount = toNumber(data.claude_cached_summaries, toNumber(data.cached_summaries));
@@ -9807,9 +9864,7 @@ async function loadClaudeHeartbeat() {
     updateClaudeHeartbeatUi(_lastClaudeHeartbeat, true);
 
     try {
-        const res = await fetch("/api/ai/heartbeat");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        _lastClaudeHeartbeat = await res.json();
+        _lastClaudeHeartbeat = await apiGet("/api/ai/heartbeat");
     } catch (err) {
         console.warn("Claude heartbeat failed:", err);
         _lastClaudeHeartbeat = {
@@ -10268,9 +10323,7 @@ async function loadPortfolioBriefing(mode, forceRefresh = false) {
     try {
         const params = new URLSearchParams({ mode, range: rangeKey });
         if (forceRefresh) params.set("force_refresh", "true");
-        const res = await fetch(`/api/ai/portfolio-summary?${params}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        const data = await apiGet(`/api/ai/portfolio-summary?${params}`);
 
         _cachedBriefing[cacheKey] = data;
         if (isCurrent()) {
@@ -10452,9 +10505,7 @@ async function loadActionPlan(forceRefresh = false) {
         if (isLocalIntelligenceMode() || _isClaudeApiLive === false) {
             params.set("force_local", "true");
         }
-        const res = await fetch(`/api/ai/action-plan?${params}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        const data = await apiGet(`/api/ai/action-plan?${params}`);
 
         _cachedActionPlan = data;
         _actionPlanShowSkeleton(false);
@@ -10820,12 +10871,10 @@ let _cachedWorldMarketsForAnalytics = [];
 
 async function loadWorldMarkets() {
     try {
-        const res = await fetch("/api/stocks/world-markets");
-        // Throw (don't silently return) so a non-OK status hits the catch below and
-        // replaces the shimmer skeletons with the "unavailable" fallback instead of
-        // spinning forever.
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const { markets } = await res.json();
+        // apiGet throws (rather than silently returning) on a non-OK status, so it
+        // hits the catch below and replaces the shimmer skeletons with the
+        // "unavailable" fallback instead of spinning forever.
+        const { markets } = await apiGet("/api/stocks/world-markets");
         _cachedWorldMarketsForAnalytics = markets || [];
         const strip = document.getElementById("world-markets-strip");
         if (!strip) return;
@@ -10959,9 +11008,7 @@ async function fetchSingleIntelligenceWithRetry(ticker, options = {}) {
         if (options.aiHoldingsFallback && !isLocalIntelligenceMode()) {
             params.set("ai_holdings_fallback", "true");
         }
-        const res = await fetch(`/api/ai/intelligence/${encodeURIComponent(ticker)}?${params}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const intel = await res.json();
+        const intel = await apiGet(`/api/ai/intelligence/${encodeURIComponent(ticker)}?${params}`);
         cachedIntelligence[ticker] = intel;
         if (marketPulseLoaded(intel)) {
             intelligenceExhaustedTickers.delete(ticker);
@@ -11033,16 +11080,8 @@ function _renderAllExpandedIntelRows(tbody) {
         const ticker = mainRow.dataset.ticker;
         const expandRow = mainRow.nextElementSibling;
         if (!expandRow || !expandRow.classList.contains("summary-expand-row")) return;
-        const coverageSection = expandRow.querySelector(".intel-coverage-section");
-        const moveSection     = expandRow.querySelector(".intel-move-section");
-        const verdictSection  = expandRow.querySelector(".intel-verdict-section");
-        if (coverageSection) renderHoldingCoverage(coverageSection, cachedIntelligence[ticker]);
-        if (moveSection)     renderMoveExplainer(moveSection, cachedExplanations[ticker], cachedIntelligence[ticker]);
-        const insiderSectionC = expandRow.querySelector(".intel-insider-section");
-        if (insiderSectionC) renderInsiderActivity(insiderSectionC, cachedInsider[ticker]);
-        const fundamentalsSectionC = expandRow.querySelector(".intel-fundamentals-section");
-        if (fundamentalsSectionC) renderFundamentals(fundamentalsSectionC, cachedFundamentals[ticker]);
-        if (verdictSection)  renderAiVerdict(verdictSection, cachedVerdicts[ticker], ticker);
+        // No ctx: the scan has finished, so every panel paints from cache.
+        renderHoldingPanels(expandRow, ticker);
     });
 }
 
@@ -11068,20 +11107,25 @@ async function loadTargetedHoldingIntelligence(ticker) {
 
     try {
         const holdingsFallback = isLocalIntelligenceMode() ? "" : "&ai_holdings_fallback=true";
-        const intelP = fetch(`/api/ai/intelligence/${encodeURIComponent(normalized)}?retry=${Date.now()}${holdingsFallback}`);
-        const moveP = fetch("/api/ai/move-explanations/all");
+        const intelP = apiGet(`/api/ai/intelligence/${encodeURIComponent(normalized)}?retry=${Date.now()}${holdingsFallback}`);
+        const moveP = apiGet("/api/ai/move-explanations/all");
         const verdictSuffix = isLocalIntelligenceMode() ? "?force_local=true" : "";
-        const verdictP = fetch(`/api/ai/investment-signal/${encodeURIComponent(normalized)}${verdictSuffix}`);
-        // Insider filings and financials are keyless/public — loaded in both engines.
-        const insiderP = fetch(`/api/ai/insider-activity/${encodeURIComponent(normalized)}`);
-        const fundamentalsP = fetch(`/api/ai/fundamentals/${encodeURIComponent(normalized)}`);
+        const verdictP = apiGet(`/api/ai/investment-signal/${encodeURIComponent(normalized)}${verdictSuffix}`);
+        // Panels that carry their own endpoint fetch it here, in the same batch,
+        // so a registered panel needs no edit in this function to get its data.
+        const lazyPanels = HOLDING_PANELS.filter(panel => panel.fetch && panel.cache);
+        const lazyP = lazyPanels.map(panel => apiGet(panel.fetch(normalized)));
 
-        const [intelRes, moveRes, verdictRes, insiderRes, fundamentalsRes] = await Promise.allSettled([
-            intelP, moveP, verdictP, insiderP, fundamentalsP,
+        // allSettled over apiGet: a fulfilled entry carries the parsed payload,
+        // and a rejected one is any failure at all — unreachable server, or a
+        // status the endpoint refused on. One check per slot instead of two, and
+        // each slot still lands independently of the others.
+        const [intelRes, moveRes, verdictRes, ...lazyRes] = await Promise.allSettled([
+            intelP, moveP, verdictP, ...lazyP,
         ]);
 
-        if (intelRes.status === "fulfilled" && intelRes.value.ok) {
-            cachedIntelligence[normalized] = await intelRes.value.json();
+        if (intelRes.status === "fulfilled") {
+            cachedIntelligence[normalized] = intelRes.value;
             if (marketPulseLoaded(cachedIntelligence[normalized])) {
                 intelligenceExhaustedTickers.delete(normalized);
             }
@@ -11090,23 +11134,19 @@ async function loadTargetedHoldingIntelligence(ticker) {
             intelligenceExhaustedTickers.add(normalized);
         }
 
-        if (moveRes.status === "fulfilled" && moveRes.value.ok) {
-            const moveData = await moveRes.value.json();
-            if (moveData.explanations?.[normalized]) {
-                cachedExplanations[normalized] = moveData.explanations[normalized];
+        if (moveRes.status === "fulfilled" && moveRes.value.explanations?.[normalized]) {
+            cachedExplanations[normalized] = moveRes.value.explanations[normalized];
+        }
+
+        if (verdictRes?.status === "fulfilled") {
+            cachedVerdicts[normalized] = verdictRes.value;
+        }
+
+        for (let i = 0; i < lazyPanels.length; i++) {
+            const panelRes = lazyRes[i];
+            if (panelRes?.status === "fulfilled") {
+                lazyPanels[i].cache[normalized] = panelRes.value;
             }
-        }
-
-        if (verdictRes?.status === "fulfilled" && verdictRes.value.ok) {
-            cachedVerdicts[normalized] = await verdictRes.value.json();
-        }
-
-        if (insiderRes?.status === "fulfilled" && insiderRes.value.ok) {
-            cachedInsider[normalized] = await insiderRes.value.json();
-        }
-
-        if (fundamentalsRes?.status === "fulfilled" && fundamentalsRes.value.ok) {
-            cachedFundamentals[normalized] = await fundamentalsRes.value.json();
         }
     } catch (err) {
         console.warn(`Unable to refresh intelligence for ${normalized}:`, err);
@@ -11267,9 +11307,7 @@ let _portfolios = [];
 
 async function loadPortfolios() {
     try {
-        const res = await fetch("/api/portfolio/");
-        if (!res.ok) return;
-        _portfolios = await res.json();
+        _portfolios = await apiGet("/api/portfolio/");
     } catch (_) { return; }
     if (_portfolios.length && !_portfolios.some(p => p.id === activePortfolioId)) {
         // The saved portfolio no longer exists (deleted in another session). The
@@ -11575,9 +11613,7 @@ async function loadManageHoldings({ preserveExisting = false } = {}) {
     }
 
     try {
-        const res = await fetch("/api/portfolio/holdings");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        const data = await apiGet("/api/portfolio/holdings");
         if (requestId !== manageHoldingsRequestId) return;
 
         manageHoldingsCache = data.holdings || [];
@@ -11775,9 +11811,7 @@ async function refreshAiVerdicts(options = {}) {
         return;
     }
     try {
-        const res = await fetch(intelligenceSignalsUrl({ claude: useClaude }));
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        const data = await apiGet(intelligenceSignalsUrl({ claude: useClaude }));
         Object.entries(data.signals || {}).forEach(([ticker, sig]) => {
             cachedVerdicts[ticker] = sig;
         });
@@ -12419,9 +12453,8 @@ async function updateDcaBadge() {
     const badge = document.getElementById("dca-badge");
     if (!badge) return;
     try {
-        const res = await fetch("/api/dca/contributions?portfolio_id=1&status=pending");
-        if (!res.ok) return;
-        const count = (await res.json()).contributions.length;
+        const pending = await apiGet("/api/dca/contributions?portfolio_id=1&status=pending");
+        const count = pending.contributions.length;
         badge.textContent = count > 99 ? "99+" : String(count);
         badge.hidden = count === 0;
     } catch { /* badge is cosmetic — stay quiet offline */ }
@@ -12560,9 +12593,8 @@ async function loadDcaHistory() {
     const listEl = document.getElementById("dca-history-list");
     if (!listEl) return;
     try {
-        const res = await fetch("/api/dca/contributions?portfolio_id=1&status=all");
-        if (!res.ok) return;
-        const rows = (await res.json()).contributions.filter(c => c.status !== "pending");
+        const all = await apiGet("/api/dca/contributions?portfolio_id=1&status=all");
+        const rows = all.contributions.filter(c => c.status !== "pending");
         if (!rows.length) {
             listEl.innerHTML = `<div class="dca-history-empty">No applied or skipped buys yet.</div>`;
             return;
@@ -12757,11 +12789,8 @@ async function handleDcaCreate() {
     if (startDate < today) {
         let held = null;
         try {
-            const res = await fetch("/api/portfolio/holdings?portfolio_id=1");
-            if (res.ok) {
-                held = ((await res.json()).holdings || [])
-                    .find(h => h.ticker === ticker && h.shares > 0);
-            }
+            const owned = await apiGet("/api/portfolio/holdings?portfolio_id=1");
+            held = (owned.holdings || []).find(h => h.ticker === ticker && h.shares > 0);
         } catch { /* offline — fall through and just create */ }
         if (held) {
             const confirmBox = document.getElementById("dca-backfill-confirm");
@@ -13287,20 +13316,21 @@ function _newsClearAiSection() {
  */
 function _newsArticleCardHtml(item) {
     const thumb = item.thumbnail_url
-        ? `<img class="news-article-thumb" src="${escapeHtml(item.thumbnail_url)}"
+        ? html`<img class="news-article-thumb" src="${item.thumbnail_url}"
                 alt="" loading="lazy" onerror="this.style.display='none'">`
         : "";
     const timeStr = item.published_at ? timeAgo(item.published_at) : "";
-    const meta    = [escapeHtml(item.source), timeStr].filter(Boolean).join(" · ");
-    const href    = item.url ? escapeHtml(item.url) : "#";
-    const target  = item.url ? 'target="_blank" rel="noopener noreferrer"' : "";
+    const meta    = [item.source, timeStr].filter(Boolean).join(" · ");
+    // raw(): a fixed pair of attributes, not data — escaping it would print the
+    // quotes instead of applying them.
+    const target  = item.url ? raw('target="_blank" rel="noopener noreferrer"') : "";
 
-    return `<article class="news-article-card">
+    return html`<article class="news-article-card">
         ${thumb}
         <div class="news-article-body">
-            <a class="news-article-title" href="${href}" ${target}>${escapeHtml(item.title)}</a>
+            <a class="news-article-title" href="${item.url || "#"}" ${target}>${item.title}</a>
             <div class="news-article-meta">${meta}</div>
-            ${item.summary ? `<p class="news-article-summary">${escapeHtml(item.summary)}</p>` : ""}
+            ${item.summary ? html`<p class="news-article-summary">${item.summary}</p>` : ""}
         </div>
     </article>`;
 }
@@ -13311,26 +13341,29 @@ function _newsArticleCardHtml(item) {
  */
 function _newsGroupHtml(holding) {
     const watchBadge = holding.is_watchlist
-        ? `<span class="news-watchlist-badge">Research</span>`
+        ? html`<span class="news-watchlist-badge">Research</span>`
         : "";
+    // Left as an array, not joined: `html` joins arrays itself and passes each
+    // built card through untouched. Joining here first would hand the tag a
+    // plain string, which it would escape into visible markup.
     const articles = holding.items.length
-        ? holding.items.map(_newsArticleCardHtml).join("")
-        : `<p class="news-no-articles">No recent news for this holding.</p>`;
+        ? holding.items.map(item => _newsArticleCardHtml(item))
+        : html`<p class="news-no-articles">No recent news for this holding.</p>`;
 
     const sector = holding.sector
-        ? `<span class="news-group-sector">${escapeHtml(holding.sector)}</span>`
+        ? html`<span class="news-group-sector">${holding.sector}</span>`
         : "";
 
     const count = holding.items.length;
-    const countBadge = `<span class="news-group-count" aria-label="${count} article${count !== 1 ? "s" : ""}">${count}</span>`;
+    const countBadge = html`<span class="news-group-count" aria-label="${count} article${count !== 1 ? "s" : ""}">${count}</span>`;
 
     // First holding with news is open by default; the rest are collapsed.
-    const openAttr = (holding._isFirst && count > 0) ? " open" : "";
+    const openAttr = (holding._isFirst && count > 0) ? raw(" open") : "";
 
-    return `<details class="news-group"${openAttr}>
+    return html`<details class="news-group"${openAttr}>
         <summary class="news-group-header">
-            <span class="news-group-chip">${escapeHtml(holding.ticker)}</span>
-            <span class="news-group-name">${escapeHtml(holding.company_name)}</span>
+            <span class="news-group-chip">${holding.ticker}</span>
+            <span class="news-group-name">${holding.company_name}</span>
             ${watchBadge}
             ${sector}
             <span class="news-group-right">
@@ -13443,9 +13476,7 @@ function _newsRenderFilings(filingsData) {
 /** Fetch the filings timeline. Local-safe: never gated on Claude. */
 async function _newsLoadFilings() {
     try {
-        const res = await fetch("/api/news/filings");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        _newsRenderFilings(await res.json());
+        _newsRenderFilings(await apiGet("/api/news/filings"));
     } catch (err) {
         // A missing timeline is a quiet absence, not a broken news zone.
         console.warn("Filings fetch failed:", err);
@@ -13473,13 +13504,15 @@ function _newsRenderThemes(themesData) {
     }
 
     row.innerHTML = themes.map(theme => {
+        // Kept as an array so `html` can join it; the wrapper asks .length
+        // rather than truthiness, because an empty array is truthy.
         const chips = (theme.tickers || []).map(t =>
-            `<span class="news-theme-chip">${escapeHtml(t)}</span>`
-        ).join("");
-        return `<div class="news-theme-card">
-            <div class="news-theme-title">${escapeHtml(theme.title)}</div>
-            <p class="news-theme-summary">${escapeHtml(theme.summary)}</p>
-            ${chips ? `<div class="news-theme-chips">${chips}</div>` : ""}
+            html`<span class="news-theme-chip">${t}</span>`
+        );
+        return html`<div class="news-theme-card">
+            <div class="news-theme-title">${theme.title}</div>
+            <p class="news-theme-summary">${theme.summary}</p>
+            ${chips.length ? html`<div class="news-theme-chips">${chips}</div>` : ""}
         </div>`;
     }).join("");
 }
@@ -13521,9 +13554,7 @@ async function loadNewsZone() {
     _newsShowEmpty(false);
 
     try {
-        const res = await fetch("/api/news/feed");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        _newsFeedData = await res.json();
+        _newsFeedData = await apiGet("/api/news/feed");
         _newsRenderFeed(_newsFeedData);
     } catch (err) {
         console.warn("News feed fetch failed:", err);

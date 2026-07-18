@@ -8,15 +8,13 @@ overlap.
 """
 from __future__ import annotations
 
-import logging
 import math
-import time
 from itertools import combinations
 from typing import Any
 
+from app.services import market_data
 from app.services.security_type import SecurityType, classify_security
-
-logger = logging.getLogger(__name__)
+from app.services.ttl_cache import ttl_cache
 
 TOP_N = 10
 
@@ -28,47 +26,25 @@ CAVEAT = (
     "this as a floor on real overlap, not the full picture."
 )
 
-# funds_data is a separate Yahoo scrape from the shared .info cache, so it gets
-# its own small TTL cache — a dashboard refresh must not re-scrape every ETF.
+# Fund holdings are a separate Yahoo scrape from the shared .info cache, so they
+# get their own small TTL cache — a dashboard refresh must not re-scrape every ETF.
 _HOLDINGS_TTL_SEC = 900
-_holdings_cache: dict[str, tuple[float, list[dict]]] = {}
 
 
+@ttl_cache(
+    ttl=_HOLDINGS_TTL_SEC,
+    key=lambda ticker: ticker.strip().upper(),
+    # Only a real answer is remembered; a failed or empty fetch stays retryable.
+    cache_when=bool,
+)
 def _fetch_top_holdings(ticker: str) -> list[dict]:
     """The module's only network edge: a fund's top-10 rows, or [] when unavailable.
 
     Returns dicts of {symbol, name, weight} with weight in percentage points.
+    Caching is all this adds — the seam already answers in that shape and
+    already reads an unreachable Yahoo as "nothing published".
     """
-    symbol = ticker.strip().upper()
-    now = time.monotonic()
-    cached = _holdings_cache.get(symbol)
-    if cached and cached[0] > now:
-        return cached[1]
-
-    rows: list[dict] = []
-    try:
-        import yfinance as yf  # noqa: PLC0415 — matches market_regime._fetch_closes
-        frame = yf.Ticker(symbol).funds_data.top_holdings
-        if frame is None or frame.empty:
-            return []
-        for holding_symbol, row in frame.iterrows():
-            rows.append({
-                "symbol": str(holding_symbol),
-                "name": str(row.get("Name") or holding_symbol),
-                # Yahoo publishes fractions (0.072); the app speaks percentage points.
-                "weight": float(row.get("Holding Percent") or 0.0) * 100,
-            })
-    except Exception as exc:  # pylint: disable=broad-except
-        logger.debug(
-            "Top-holdings fetch failed for %s; exception_type=%s",
-            symbol, type(exc).__name__,
-        )
-        return []
-
-    # Only a real answer is cached; a failed/empty fetch stays retryable.
-    if rows:
-        _holdings_cache[symbol] = (now + _HOLDINGS_TTL_SEC, rows)
-    return rows
+    return market_data.get_fund_holdings(ticker)
 
 
 def _held_etfs(holdings_with_data: list[dict]) -> list[str]:

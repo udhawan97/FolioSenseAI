@@ -29,11 +29,21 @@ into responses. The modules read/write SQLite, call Yahoo Finance for market dat
 public filings and rates from SEC EDGAR and the US Treasury, and optionally call Anthropic
 Claude when narration is requested and a key is configured.
 
-Each outside source sits behind exactly one module — `stock_service` for Yahoo,
+Each outside source sits behind exactly one module — `market_data` for Yahoo,
 `edgar_service` for the SEC, `treasury_yield_curve` for the curve — so a provider can be
 swapped, throttled, or degraded in one place instead of at every call site. `edgar_service`
 owns the SEC's two hard rules: a declared contact address, and a ceiling of ten requests a
 second.
+
+`market_data` is the only module that names `yfinance`. It exposes nine ticker-keyed
+accessors (`get_info`, `get_fast_info`, `get_history`, `get_closes`, `get_news`,
+`get_earnings_estimates`, `get_earnings_calendar`, `get_fund_holdings`, `search`) under two
+contracts: no accessor raises — a vendor error, a missing package, and an unknown symbol all
+read as the empty value of the return type — and nothing vendor-shaped escapes, so DataFrames,
+`FastInfo` bags, and NaN never reach a caller. `set_adapter()` swaps the whole vendor surface,
+which is how the test suite runs without a socket. It deliberately does no caching: TTL policy
+belongs to each caller, expressed with the `ttl_cache` decorator, so a memoised fetcher's
+lifetime is declared at the fetcher instead of hand-rolled beside it.
 
 ## Portfolio integrity modules
 
@@ -62,6 +72,23 @@ The service layer's core is a modular Intelligence Engine split into two halves:
   `generate_news_themes()`, backed by a 24-hour SQLite cache and live token cost tracking. It
   uses Claude Haiku 4.5 for fast narration and Claude Sonnet 4.5 for action plans.
 
+Reading the book and narrating it are separate modules, so the AI router stays an HTTP
+adapter rather than the place the engine lives:
+
+| Module | Interface |
+| --- | --- |
+| `verdict_pipeline.py` | `scan_portfolio()`, `scan_ticker()`, `book_exposure()` — one scan of a Portfolio, returned as a `ScanResult` the narration stages read. |
+| `action_plan.py` | `cache_type()`, `build_snapshot()`, `build_plan()`, `build_fallback()` — turns a `ScanResult` into a Sonnet prompt and back, with a deterministic plan when Claude is unavailable. |
+| `portfolio_briefing.py` | `cache_type()`, `build_snapshot()`, `build_local()`, `build_briefing()`, `build_fallback()` — the same shape for the daily briefing. |
+| `ai_narrative.py` | `narrative()`, `valuation_is_complete()` — the cache-then-generate-then-fall-back sequence every narrated endpoint repeated. |
+| `api_key_store.py` | `save()`, `clear()`, `InvalidKeyError`, `KeyStorageError` — validates a Claude key against the live API before it is persisted. |
+
+Two supporting modules keep repeated mechanics in one place: `holdings_repository.py`
+(`active()`, `active_by_ticker()`, `active_tickers()`, `active_tickers_or_default()`,
+`meta_map()`) is the only place an active-holdings query is spelled out, and `ttl_cache.py`
+(`ttl_cache()`, `clear_all()`) replaces the hand-rolled `(expiry, value)` dictionaries that
+each fetcher used to carry.
+
 The browser view is identical whether you open `localhost:8000` yourself or launch the desktop
 app — the desktop build (PyInstaller + pywebview) runs the same FastAPI server in-process behind
 a native window, and can update itself in place.
@@ -86,6 +113,8 @@ templates/
 
 static/
 ├── css/style.css           Dashboard design system
+├── js/core.js              Escaping, fetch + endpoint cache, holding-panel registry
 ├── js/dashboard.js         Main dashboard behavior
-└── js/analytics-charts.js  Chart.js analytics widgets
+├── js/analytics-charts.js  Chart.js analytics widgets
+└── js/updates.js           In-app update check and download
 ```

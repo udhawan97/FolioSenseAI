@@ -6,7 +6,7 @@ Provides structured per-holding intelligence:
   - Relevant benchmarks for move comparison
   - Key drivers specific to each security type
 
-Data priority: static metadata → yfinance enrichment → graceful "not available".
+Data priority: static metadata → live Yahoo enrichment → graceful "not available".
 """
 from __future__ import annotations
 
@@ -467,13 +467,13 @@ _STATIC: dict[str, dict] = {
 }
 
 
-# ── Live enrichment via yfinance ──────────────────────────────────────────────
+# ── Live enrichment from the shared `.info` record ────────────────────────────
 
 def _try_yfinance_enrichment(  # pylint: disable=too-many-branches
     ticker: str,
 ) -> tuple[list, list, list]:
     """
-    Attempt to fetch sector weights, country weights, and top holdings from yfinance.
+    Attempt to read sector weights, country weights, and top holdings off `.info`.
     Returns (sectors, countries, top_holdings) — any element may be empty.
     """
     sectors: list[SectorWeight] = []
@@ -490,7 +490,7 @@ def _try_yfinance_enrichment(  # pylint: disable=too-many-branches
                     sectors.append(SectorWeight(name=label, weight=round(float(weight) * 100, 1)))
         if sectors:
             sectors.sort(key=lambda x: x.weight, reverse=True)
-            # yfinance fractional weights can have floating-point drift after ×100.
+            # Yahoo's fractional weights can have floating-point drift after ×100.
             # Normalise so the sector list always sums to exactly 100 %.
             sec_total = sum(s.weight for s in sectors)
             if sec_total > 0 and abs(sec_total - 100.0) > 0.15:
@@ -525,7 +525,7 @@ def _try_yfinance_enrichment(  # pylint: disable=too-many-branches
                     top_holdings.append(TopHolding(ticker=sym, name=name, weight=pct))
     except Exception as exc:
         logger.debug(
-            "yfinance enrichment failed; exception_type=%s",
+            "Live enrichment failed; exception_type=%s",
             type(exc).__name__,
         )
     return sectors, countries, top_holdings
@@ -544,7 +544,7 @@ def get_holding_intelligence(
 ) -> HoldingIntelligence:
     """
     Return structured intelligence for any holding.
-    Uses static metadata for the 10 default holdings; derives from yfinance for others.
+    Uses static metadata for the 10 default holdings; derives from live data for others.
     """
     ticker = ticker.upper()
     static = _STATIC.get(ticker)

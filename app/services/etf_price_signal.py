@@ -1,8 +1,8 @@
 """
-ETF price-zone signal from current price and historical yfinance data.
+ETF price-zone signal from current price and historical closes.
 
 Intentionally price-history based rather than analyst-target based:
-ETFs rarely have useful target prices, but yfinance reliably exposes quote
+ETFs rarely have useful target prices, but Yahoo reliably exposes quote
 history and moving-average / range fields for most funds.
 """
 from __future__ import annotations
@@ -11,7 +11,7 @@ import logging
 import math
 from typing import Any, Iterable, Mapping
 
-import yfinance as yf
+from app.services import market_data
 
 logger = logging.getLogger(__name__)
 
@@ -40,26 +40,6 @@ def _clean_numbers(values: Iterable[Any]) -> list[float]:
         if math.isfinite(number) and number > 0:
             cleaned.append(number)
     return cleaned
-
-
-def history_closes(history: Any) -> list[float]:
-    """Extract valid close prices from a yfinance history DataFrame-like object."""
-    if history is None:
-        return []
-    try:
-        if bool(getattr(history, "empty", False)):
-            return []
-        close_series = history["Close"]
-        if hasattr(close_series, "dropna"):
-            close_series = close_series.dropna()
-        values = close_series.tolist() if hasattr(close_series, "tolist") else list(close_series)
-    except Exception as exc:
-        logger.debug(
-            "ETF history close extraction failed; exception_type=%s",
-            type(exc).__name__,
-        )
-        return []
-    return _clean_numbers(values)
 
 
 def _label_from_percentile(percentile: float | None) -> str:
@@ -214,21 +194,17 @@ def calculate_etf_price_signal(
 def fetch_etf_price_signal(
     ticker: str,
     info: Mapping[str, Any],
-    stock: Any = None,
     closes: Iterable[Any] | None = None,
 ) -> dict[str, Any]:
-    """Fetch yfinance history defensively, then calculate the ETF price-zone signal."""
-    close_values = _clean_numbers(closes if closes is not None else [])
-    if closes is None:
-        try:
-            if stock is None:
-                stock = yf.Ticker(ticker)
-            history = stock.history(period="1y", auto_adjust=True)
-            close_values = history_closes(history)
-        except Exception as exc:
-            logger.debug(
-                "ETF price history fetch failed; exception_type=%s",
-                type(exc).__name__,
-            )
-            close_values = []
+    """Calculate the ETF price-zone signal, fetching a year of closes if none are given.
+
+    Callers that already hold the history — a verdict scan batches it — pass it
+    in; everyone else gets the seam's read, which is empty rather than raising
+    when Yahoo is unreachable.
+    """
+    close_values = (
+        _clean_numbers(closes)
+        if closes is not None
+        else market_data.get_closes(ticker, period="1y")
+    )
     return calculate_etf_price_signal({"ticker": ticker, **dict(info)}, close_values)

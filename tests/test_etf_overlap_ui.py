@@ -30,9 +30,17 @@ def _render_block() -> str:
 
 
 def _loader_block() -> str:
+    """loadEtfOverlap's body — the descriptor it hands to the shared loader."""
     js = _js()
     assert "async function loadEtfOverlap" in js
-    return js.split("async function loadEtfOverlap")[1][:1400]
+    return js.split("async function loadEtfOverlap")[1].split("\n}")[0]
+
+
+def _load_card_block() -> str:
+    """loadCard's body — the load/show/hide rule every Analytics card shares."""
+    js = _js()
+    assert "async function loadCard" in js
+    return js.split("async function loadCard")[1].split("\n}")[0]
 
 
 # ── Wiring ──────────────────────────────────────────────────────────────────
@@ -132,9 +140,13 @@ def test_a_single_etf_means_an_empty_state_not_a_blank_card():
 
 
 def test_overlap_fetch_failure_is_survivable():
-    loader = _loader_block()
-    assert "catch" in loader
-    assert "etf-overlap-card" in loader or "etf-overlap-empty" in loader
+    # The loader names the card it owns; what happens to that card on a failed
+    # read lives in loadCard, so it is asserted there once rather than copied
+    # into every card's own loader.
+    assert '"etf-overlap-card"' in _loader_block()
+    helper = _load_card_block()
+    assert "catch" in helper
+    assert "_toggleAnalyticsCard(card, false)" in helper
 
 
 def test_overlap_is_reloaded_when_the_holdings_change():
@@ -147,6 +159,7 @@ def test_overlap_is_reloaded_when_the_holdings_change():
 
 
 def test_a_card_hidden_by_a_failed_fetch_comes_back_on_a_later_success():
-    loader = _loader_block()
-    assert '_toggleAnalyticsCard("etf-overlap-card", true)' in loader
-    assert '_toggleAnalyticsCard("etf-overlap-card", false)' in loader
+    assert '"etf-overlap-card"' in _loader_block()
+    helper = _load_card_block()
+    assert "_toggleAnalyticsCard(card, true)" in helper
+    assert "_toggleAnalyticsCard(card, false)" in helper

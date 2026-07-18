@@ -91,13 +91,14 @@ def test_batched_history_is_concurrent_deduped_and_cached(monkeypatch):
 
 
 def test_stale_day_cache_entries_are_pruned_on_next_call(monkeypatch):
-    """_HISTORY_CACHE keys on today's date; a prior day's entry is dead weight
-    (the lookup always uses today's date) and must not accumulate forever on a
-    long-running process."""
+    """History keys on today's date, so a prior day's entry is dead weight (the
+    lookup always uses today's date) and must not accumulate forever on a
+    long-running process. Its expiry has passed, so the next store evicts it."""
     timing_signal.clear_history_cache()
-    timing_signal._HISTORY_CACHE[("OLD", "1y", "2020-01-01")] = [1.0, 2.0]
+    store = timing_signal.get_cached_history_closes.cache
+    store[("OLD", "1y", "2020-01-01")] = (0.0, [1.0, 2.0])
     monkeypatch.setattr(timing_signal, "_fetch_history_closes", lambda *_a: [100.0, 101.0])
 
     timing_signal.get_batched_history_closes(["AAPL"])
 
-    assert ("OLD", "1y", "2020-01-01") not in timing_signal._HISTORY_CACHE
+    assert ("OLD", "1y", "2020-01-01") not in store

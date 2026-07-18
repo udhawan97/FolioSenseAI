@@ -38,9 +38,17 @@ def _code_only(block: str) -> str:
 
 
 def _loader_block() -> str:
+    """loadFeeDrag's body — the descriptor it hands to the shared card loader."""
     js = _js()
     assert "async function loadFeeDrag" in js
-    return js.split("async function loadFeeDrag")[1][:1400]
+    return js.split("async function loadFeeDrag")[1].split("\n}")[0]
+
+
+def _load_card_block() -> str:
+    """loadCard's body — the load/show/hide rule every Analytics card shares."""
+    js = _js()
+    assert "async function loadCard" in js
+    return js.split("async function loadCard")[1].split("\n}")[0]
 
 
 # ── Wiring ──────────────────────────────────────────────────────────────────
@@ -172,10 +180,14 @@ def test_no_funds_means_an_empty_state_not_a_blank_card():
 
 
 def test_fee_drag_fetch_failure_is_survivable():
-    loader = _loader_block()
-    assert "catch" in loader
-    # A dead fetch hides the card; it must not break the Analytics zone.
-    assert "fee-drag-card" in loader or "fee-drag-empty" in loader
+    # A dead fetch hides the card; it must not break the Analytics zone. The
+    # loader names the card it owns, and the rule for what happens to that card
+    # on a failed read lives in loadCard — so it is asserted there, once, rather
+    # than copied into every card's own loader.
+    assert '"fee-drag-card"' in _loader_block()
+    helper = _load_card_block()
+    assert "catch" in helper
+    assert "_toggleAnalyticsCard(card, false)" in helper
 
 
 def test_fee_drag_render_escapes_untrusted_text():
@@ -195,6 +207,7 @@ def test_fee_drag_is_reloaded_when_the_holdings_change():
 
 def test_a_card_hidden_by_a_failed_fetch_comes_back_on_a_later_success():
     # A blip must not retire the card until the next full page load.
-    loader = _loader_block()
-    assert '_toggleAnalyticsCard("fee-drag-card", true)' in loader
-    assert '_toggleAnalyticsCard("fee-drag-card", false)' in loader
+    assert '"fee-drag-card"' in _loader_block()
+    helper = _load_card_block()
+    assert "_toggleAnalyticsCard(card, true)" in helper
+    assert "_toggleAnalyticsCard(card, false)" in helper

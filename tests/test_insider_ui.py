@@ -15,6 +15,30 @@ def _render() -> str:
     return js.split("function renderInsiderActivity")[1][:3500]
 
 
+def _panel_descriptor(sel: str) -> str:
+    """The registerHoldingPanel({...}) block registered for `sel`.
+
+    Registration is how a panel reaches a holding's expand-row, so this block is
+    the panel's whole wiring — the selector it paints, the cache it reads, and
+    the endpoint that fills that cache.
+    """
+    js = _js()
+    marker = f'sel: "{sel}"'
+    assert marker in js, f"no holding panel registered for {sel}"
+    start = js.rindex("registerHoldingPanel({", 0, js.index(marker))
+    return js[start : js.index("});", start)]
+
+
+def _function_body(name: str) -> str:
+    js = _js()
+    start = js.index(f"function {name}(")
+    return js[start : js.index("\n}\n", start)]
+
+
+# The three places that repaint a holding's expand-row.
+ROW_RENDER_SITES = ("injectSummaryRows", "renderExpandedTicker", "_renderAllExpandedIntelRows")
+
+
 def test_expand_row_has_an_insider_section():
     assert "intel-insider-section" in _js()
 
@@ -25,11 +49,23 @@ def test_insider_data_is_fetched_from_the_lazy_endpoint():
     assert "cachedInsider" in js
 
 
-def test_insider_is_wired_into_every_render_site():
-    # Coverage/move/verdict render at three sites; insider must ride along at
-    # each or it renders stale or not at all.
-    js = _js()
-    assert js.count("renderInsiderActivity(") >= 3
+def test_insider_is_registered_as_a_holding_panel():
+    # One descriptor is the whole wiring — there is no per-site render call to
+    # forget. Lose any of these three and the panel goes blank, stops loading,
+    # or paints into nothing.
+    descriptor = _panel_descriptor(".intel-insider-section")
+    assert "renderInsiderActivity(" in descriptor
+    assert "cachedInsider" in descriptor
+    assert "/api/ai/insider-activity/" in descriptor
+
+
+def test_insider_reaches_every_site_that_repaints_a_row():
+    # Insider used to be rendered by hand at each of these three, so shipping a
+    # panel meant remembering all three. They go through renderHoldingPanels()
+    # now, which paints every registered panel; drop the call from one site and
+    # that site silently stops updating every panel at once.
+    for site in ROW_RENDER_SITES:
+        assert "renderHoldingPanels(" in _function_body(site), site
 
 
 def test_headline_is_open_market_conviction():

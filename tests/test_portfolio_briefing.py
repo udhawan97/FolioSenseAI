@@ -14,6 +14,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.models import Base, Holding, Portfolio
 from app.routers import ai as ai_router
+from app.services import portfolio_briefing
 
 
 # ── In-memory DB helpers ───────────────────────────────────────────────────────
@@ -126,7 +127,7 @@ def _patch_partial_portfolio_compute(monkeypatch):
 
 def _patch_market_regime(monkeypatch):
     monkeypatch.setattr(
-        ai_router,
+        portfolio_briefing,
         "get_market_regime",
         lambda: {"label": "Risk-on", "mood": "warm"},
     )
@@ -134,7 +135,7 @@ def _patch_market_regime(monkeypatch):
 
 def _patch_quotes(monkeypatch):
     monkeypatch.setattr(
-        ai_router,
+        portfolio_briefing,
         "get_all_quotes",
         lambda _tickers: _FAKE_QUOTES,
     )
@@ -156,8 +157,10 @@ def _patch_explain_move(monkeypatch):
         confidence="Medium",
         explanation_text="AAPL moved +2.00% tracking the broad market.",
     )
-    monkeypatch.setattr(ai_router, "explain_move", lambda sd, **kw: fake_summary)
-    monkeypatch.setattr(ai_router, "get_benchmark_data", lambda: {"SPY": 1.0, "QQQ": 0.8})
+    monkeypatch.setattr(portfolio_briefing, "explain_move", lambda sd, **kw: fake_summary)
+    monkeypatch.setattr(
+        portfolio_briefing, "get_benchmark_data", lambda: {"SPY": 1.0, "QQQ": 0.8}
+    )
 
 
 def _patch_briefing_ai(monkeypatch):

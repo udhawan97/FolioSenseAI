@@ -3,8 +3,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 import pytz
-import yfinance as yf
 from fastapi import APIRouter, HTTPException, Query
+from app.services import market_data
 from app.services.stock_service import (
     DEFAULT_HOLDINGS,
     QUOTE_FETCH_ERROR,
@@ -38,9 +38,9 @@ _WORLD_MARKETS_TTL = 300  # seconds
 def _fetch_world_market(market: dict) -> dict:
     """Fetch a single world-market index quote (runs in thread pool)."""
     try:
-        fi = yf.Ticker(market["ticker"]).fast_info
-        price = float(getattr(fi, "last_price", None) or 0)
-        prev = float(getattr(fi, "previous_close", None) or 0)
+        fast = market_data.get_fast_info(market["ticker"]) or {}
+        price = float(fast.get("last_price") or 0)
+        prev = float(fast.get("previous_close") or 0)
         if price > 0 and prev > 0:
             chg = price - prev
             chg_pct = chg / prev * 100
