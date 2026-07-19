@@ -11514,10 +11514,55 @@ function closePortfolioManager() {
 // cache leaking the previous portfolio's data.
 let _portfolios = [];
 
+// Stale-while-revalidate for the switcher, mirroring the portfolio-value cache
+// above. Switching reloads the page, so without this the list is gone on every
+// switch and the trigger falls back to the word "Portfolio" until the fetch
+// lands — which is exactly the beat that makes switching feel broken.
+//
+// Not keyed per portfolio: this *is* the list of them.
+const PORTFOLIO_LIST_KEY = "folioorb-portfolios-v1";
+
+function persistPortfolioList(list) {
+    try {
+        localStorage.setItem(
+            PORTFOLIO_LIST_KEY,
+            JSON.stringify(list.map(p => ({ id: p.id, name: p.name })))
+        );
+    } catch (_) { /* quota or private mode — caching is best-effort */ }
+}
+
+function readPortfolioList() {
+    try {
+        const parsed = JSON.parse(localStorage.getItem(PORTFOLIO_LIST_KEY));
+        if (!Array.isArray(parsed)) return [];
+        // Shape-check every row: a half-written or older entry must not reach the
+        // renderer, which would paint "undefined" into the trigger.
+        return parsed.every(p => p && Number.isFinite(p.id) && typeof p.name === "string")
+            ? parsed
+            : [];
+    } catch (_) {
+        return [];
+    }
+}
+
+// Paint the switcher from the last known list. Runs before the fetch, so the
+// correct name is on screen in the first frame after a reload; the fetch then
+// reconciles. A cached entry for a portfolio deleted elsewhere is safe: picking
+// it reloads, and the fetch below re-scopes to a live one.
+function hydratePortfolioSwitcherFromCache() {
+    const cached = readPortfolioList();
+    if (!cached.length) return false;
+    _portfolios = cached;
+    renderPortfolioSwitcher();
+    updateExportAnchor();
+    return true;
+}
+
 async function loadPortfolios() {
     try {
         _portfolios = await apiGet("/api/portfolio/");
     } catch (_) { return; }
+    persistPortfolioList(_portfolios);
     if (_portfolios.length && !_portfolios.some(p => p.id === activePortfolioId)) {
         // The saved portfolio no longer exists (deleted in another session). The
         // early data loads already fired against the dead id — fall back to the
@@ -11683,6 +11728,9 @@ async function createNewPortfolio() {
         });
         if (!res.ok) { showToast("Couldn't create portfolio", "danger"); return; }
         const data = await res.json();
+        // Seed the cache before the reload, or the new portfolio is the one name
+        // the switcher can't paint on the first frame.
+        persistPortfolioList([..._portfolios, { id: data.id, name: data.name }]);
         switchPortfolio(data.id);
     } catch (_) { showToast("Couldn't create portfolio", "danger"); }
 }
@@ -11754,6 +11802,7 @@ function initPortfolioSwitcher() {
         const wrap = document.getElementById("portfolio-switcher");
         if (!menu.hidden && wrap && !wrap.contains(e.target)) closeSwitcherMenu();
     });
+    hydratePortfolioSwitcherFromCache();
     loadPortfolios();
 }
 
