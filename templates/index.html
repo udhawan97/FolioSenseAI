@@ -2265,6 +2265,41 @@
 
     </div><!-- /container -->
 
+    <!-- ── Portfolio action dialogs ─────────────────────────────────────── -->
+    <div class="portfolio-action-dialog-overlay" id="portfolio-name-dialog"
+         role="dialog" aria-modal="true" aria-labelledby="portfolio-name-title"
+         aria-hidden="true" hidden>
+        <form class="portfolio-action-dialog" id="portfolio-name-form" novalidate>
+            <h2 class="portfolio-action-dialog-title" id="portfolio-name-title">Portfolio name</h2>
+            <p class="portfolio-action-dialog-copy" id="portfolio-name-copy">Give this portfolio a clear name.</p>
+            <label class="portfolio-action-dialog-field" for="portfolio-name-input">
+                <span>Name</span>
+                <input id="portfolio-name-input" type="text" maxlength="100" autocomplete="off" required>
+            </label>
+            <p class="portfolio-action-dialog-error" id="portfolio-name-error" role="alert" hidden>
+                Enter a portfolio name.
+            </p>
+            <div class="portfolio-action-dialog-actions">
+                <button class="btn btn-sm portfolio-action-dialog-cancel" id="portfolio-name-cancel" type="button">Cancel</button>
+                <button class="btn btn-sm btn-primary portfolio-action-dialog-submit" id="portfolio-name-submit" type="submit">Save</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="portfolio-action-dialog-overlay" id="portfolio-delete-dialog"
+         role="dialog" aria-modal="true" aria-labelledby="portfolio-delete-title"
+         aria-hidden="true" hidden>
+        <form class="portfolio-action-dialog" id="portfolio-delete-form">
+            <h2 class="portfolio-action-dialog-title" id="portfolio-delete-title">Delete portfolio?</h2>
+            <p class="portfolio-action-dialog-copy" id="portfolio-delete-copy"></p>
+            <p class="portfolio-action-dialog-warning">This removes its holdings, trades, and DCA plans. This cannot be undone.</p>
+            <div class="portfolio-action-dialog-actions">
+                <button class="btn btn-sm portfolio-action-dialog-cancel" id="portfolio-delete-cancel" type="button">Keep portfolio</button>
+                <button class="btn btn-sm btn-danger portfolio-action-dialog-submit" id="portfolio-delete-confirm" type="submit">Delete portfolio</button>
+            </div>
+        </form>
+    </div>
+
     <!-- ── Software Update sheet ──────────────────────────────────────────── -->
     <div class="fs-update-backdrop" id="update-backdrop" hidden></div>
     <div class="fs-update-sheet" id="update-sheet" role="dialog" aria-modal="true"

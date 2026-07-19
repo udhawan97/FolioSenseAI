@@ -9790,11 +9790,24 @@ function initBrandIntro() {
 
 document.addEventListener("DOMContentLoaded", () => { initDashboard(); HoldingsBg.init(); });
 
+async function loadPortfolioValueAfterMutation() {
+    // A normal dashboard refresh may already be in flight when a mutation lands.
+    // That request started before the DELETE/POST/PATCH and can legally return the
+    // old holdings set. Wait it out, then issue one request that is guaranteed to
+    // have started after the mutation committed.
+    const inFlight = _portfolioValuePromise;
+    if (inFlight) {
+        try { await inFlight; } catch (_) { /* the guaranteed request below is authoritative */ }
+    }
+    return loadPortfolioValue();
+}
+
 function refreshDashboardData({
     includeManageHoldings = false,
     includeMarketStatus = true,
     includeRecommendations = false,
     animateButton = false,
+    forcePortfolioValue = false,
 } = {}) {
     const refreshButton = document.querySelector(".btn-refresh-data");
     if (animateButton) refreshButton?.classList.remove("is-refreshing");
@@ -9804,7 +9817,7 @@ function refreshDashboardData({
     }
 
     const jobs = [
-        loadPortfolioValue(),
+        forcePortfolioValue ? loadPortfolioValueAfterMutation() : loadPortfolioValue(),
         loadPnl(),
         refreshRangePerformanceIfActive(),
         loadEarningsRadar(),
@@ -9901,6 +9914,7 @@ function refreshPortfolioMutationInBackground(options = {}) {
         .then(() => refreshDashboardData({
             includeManageHoldings: true,
             includeRecommendations: true,
+            forcePortfolioValue: true,
             ...options,
         }))
         .catch(err => console.warn("Background portfolio refresh failed:", err));
@@ -11019,6 +11033,7 @@ async function initDashboard() {
     initPerformanceTabs();
     initProjectionControls();
     initPortfolioManager();
+    initPortfolioActionDialogs();
     initPortfolioSwitcher();
     initPortfolioBriefing();
     initDesktopLinkHandler();
@@ -11546,9 +11561,119 @@ function switchPortfolio(id) {
     location.reload();
 }
 
+let _portfolioNameDialogState = null;
+let _portfolioDeleteDialogState = null;
+
+function closePortfolioNameDialog(result = null) {
+    const dialog = document.getElementById("portfolio-name-dialog");
+    const state = _portfolioNameDialogState;
+    if (!dialog || !state) return;
+    _portfolioNameDialogState = null;
+    dialog.hidden = true;
+    dialog.setAttribute("aria-hidden", "true");
+    state.resolve(result);
+    if (state.previousFocus?.focus) {
+        try { state.previousFocus.focus(); } catch (_) { /* ignore */ }
+    }
+}
+
+function openPortfolioNameDialog({ title, copy, value, submitLabel }) {
+    const dialog = document.getElementById("portfolio-name-dialog");
+    const input = document.getElementById("portfolio-name-input");
+    if (!dialog || !input || _portfolioNameDialogState) return Promise.resolve(null);
+    document.getElementById("portfolio-name-title").textContent = title;
+    document.getElementById("portfolio-name-copy").textContent = copy;
+    document.getElementById("portfolio-name-submit").textContent = submitLabel;
+    document.getElementById("portfolio-name-error").hidden = true;
+    input.value = value;
+    input.classList.remove("is-invalid");
+    input.removeAttribute("aria-invalid");
+    dialog.hidden = false;
+    dialog.setAttribute("aria-hidden", "false");
+    return new Promise((resolve) => {
+        _portfolioNameDialogState = { resolve, previousFocus: document.activeElement };
+        requestAnimationFrame(() => { input.focus(); input.select(); });
+    });
+}
+
+function closePortfolioDeleteDialog(confirmed = false) {
+    const dialog = document.getElementById("portfolio-delete-dialog");
+    const state = _portfolioDeleteDialogState;
+    if (!dialog || !state) return;
+    _portfolioDeleteDialogState = null;
+    dialog.hidden = true;
+    dialog.setAttribute("aria-hidden", "true");
+    state.resolve(confirmed);
+    if (state.previousFocus?.focus) {
+        try { state.previousFocus.focus(); } catch (_) { /* ignore */ }
+    }
+}
+
+function openPortfolioDeleteDialog(portfolio) {
+    const dialog = document.getElementById("portfolio-delete-dialog");
+    if (!dialog || _portfolioDeleteDialogState) return Promise.resolve(false);
+    document.getElementById("portfolio-delete-copy").textContent = `Delete “${portfolio.name}”?`;
+    dialog.hidden = false;
+    dialog.setAttribute("aria-hidden", "false");
+    return new Promise((resolve) => {
+        _portfolioDeleteDialogState = { resolve, previousFocus: document.activeElement };
+        requestAnimationFrame(() => document.getElementById("portfolio-delete-cancel")?.focus());
+    });
+}
+
+function initPortfolioActionDialogs() {
+    const nameDialog = document.getElementById("portfolio-name-dialog");
+    const nameForm = document.getElementById("portfolio-name-form");
+    const nameInput = document.getElementById("portfolio-name-input");
+    const nameError = document.getElementById("portfolio-name-error");
+    nameForm?.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const name = nameInput?.value.trim() || "";
+        if (!name) {
+            nameInput?.classList.add("is-invalid");
+            nameInput?.setAttribute("aria-invalid", "true");
+            if (nameError) nameError.hidden = false;
+            nameInput?.focus();
+            return;
+        }
+        closePortfolioNameDialog(name);
+    });
+    document.getElementById("portfolio-name-cancel")?.addEventListener("click", () => closePortfolioNameDialog());
+    nameDialog?.addEventListener("mousedown", (event) => {
+        if (event.target === nameDialog) closePortfolioNameDialog();
+    });
+
+    const deleteDialog = document.getElementById("portfolio-delete-dialog");
+    document.getElementById("portfolio-delete-form")?.addEventListener("submit", (event) => {
+        event.preventDefault();
+        closePortfolioDeleteDialog(true);
+    });
+    document.getElementById("portfolio-delete-cancel")?.addEventListener("click", () => closePortfolioDeleteDialog());
+    deleteDialog?.addEventListener("mousedown", (event) => {
+        if (event.target === deleteDialog) closePortfolioDeleteDialog();
+    });
+
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+            if (_portfolioNameDialogState) {
+                event.stopPropagation();
+                closePortfolioNameDialog();
+            } else if (_portfolioDeleteDialogState) {
+                event.stopPropagation();
+                closePortfolioDeleteDialog();
+            }
+        }
+    }, true);
+}
+
 async function createNewPortfolio() {
     closeSwitcherMenu();
-    const name = window.prompt("Name your new portfolio:", "New Portfolio");
+    const name = await openPortfolioNameDialog({
+        title: "New portfolio",
+        copy: "Create a separate portfolio with its own holdings, trades, and plans.",
+        value: "New Portfolio",
+        submitLabel: "Create portfolio",
+    });
     if (name === null) return;
     try {
         const res = await fetch("/api/portfolio/create", {
@@ -11564,8 +11689,14 @@ async function createNewPortfolio() {
 
 async function renamePortfolioPrompt(id) {
     const current = (_portfolios.find(p => p.id === id) || {}).name || "";
-    const name = window.prompt("Rename portfolio:", current);
-    if (name === null || !name.trim()) return;
+    closeSwitcherMenu();
+    const name = await openPortfolioNameDialog({
+        title: "Rename portfolio",
+        copy: "Use a name that makes this portfolio easy to recognize.",
+        value: current,
+        submitLabel: "Save name",
+    });
+    if (name === null) return;
     try {
         const res = await fetch(`/api/portfolio/${id}`, {
             method: "PATCH",
@@ -11581,7 +11712,8 @@ async function renamePortfolioPrompt(id) {
 async function deletePortfolioConfirm(id) {
     const p = _portfolios.find(x => x.id === id);
     if (!p) return;
-    if (!window.confirm(`Delete portfolio "${p.name}" and all its holdings, trades, and DCA plans? This can't be undone.`)) return;
+    closeSwitcherMenu();
+    if (!await openPortfolioDeleteDialog(p)) return;
     try {
         const res = await fetch(`/api/portfolio/${id}`, { method: "DELETE" });
         const data = await res.json().catch(() => ({}));
@@ -12139,6 +12271,14 @@ async function removeHolding(holdingId, ticker, isWatchlist = false) {
         method: "DELETE"
     });
     if (res.ok) {
+        // Remove the deleted holding from the shared client state immediately.
+        // The authoritative post-mutation fetch below then recalculates totals and
+        // refreshes every rendered Analytics pane from the committed database.
+        latestHoldings = latestHoldings.filter(h => h.id !== holdingId);
+        delete latestTrendData[ticker];
+        try { localStorage.removeItem(_portfolioValueCacheKey()); } catch (_) { /* best effort */ }
+        updateHoldingsFilterCounts();
+        renderHoldings();
         document.getElementById(`manage-row-${holdingId}`)?.remove();
         manageHoldingsCache = manageHoldingsCache.filter(h => h.id !== holdingId);
         updateManageStatsPill(manageHoldingsCache);

@@ -4294,6 +4294,95 @@ body > .sale-dialog-overlay {
     .sale-dialog-fields { grid-template-columns: 1fr; }
 }
 
+/* ── Portfolio create / rename / delete dialogs ─────────────────────── */
+body > .portfolio-action-dialog-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 13000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: color-mix(in srgb, #000 55%, transparent);
+    backdrop-filter: blur(2px);
+}
+
+body > .portfolio-action-dialog-overlay[hidden] { display: none; }
+
+.portfolio-action-dialog {
+    width: min(28rem, 100%);
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 16px;
+    padding: 1.25rem 1.35rem;
+    box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.5);
+}
+
+.portfolio-action-dialog-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.portfolio-action-dialog-copy,
+.portfolio-action-dialog-warning {
+    margin: 0.5rem 0 0.9rem;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.portfolio-action-dialog-warning {
+    padding: 0.65rem 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--accent-red) 35%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--accent-red) 9%, transparent);
+    color: var(--text-primary);
+}
+
+.portfolio-action-dialog-field { display: flex; flex-direction: column; gap: 0.35rem; }
+.portfolio-action-dialog-field span {
+    font-size: 0.72rem;
+    font-weight: 650;
+    color: var(--text-secondary);
+}
+.portfolio-action-dialog-field input {
+    width: 100%;
+    padding: 0.58rem 0.7rem;
+    border-radius: 10px;
+    border: 1px solid var(--hairline);
+    background: var(--surface);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+.portfolio-action-dialog-field input:focus {
+    border-color: var(--accent-blue);
+    outline: 2px solid color-mix(in srgb, var(--accent-blue) 24%, transparent);
+    outline-offset: 1px;
+}
+.portfolio-action-dialog-field input.is-invalid { border-color: var(--accent-red); }
+.portfolio-action-dialog-error {
+    margin: 0.4rem 0 0;
+    font-size: 0.74rem;
+    color: var(--accent-red);
+}
+.portfolio-action-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 1.1rem;
+    flex-wrap: wrap;
+}
+.portfolio-action-dialog-cancel {
+    border: 1px solid var(--hairline);
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: 980px;
+    font-weight: 600;
+}
+.portfolio-action-dialog-submit { border-radius: 980px; font-weight: 650; }
+
 @media (max-width: 640px) {
     .dca-field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .dca-buy-row { grid-template-columns: auto 1fr; }
