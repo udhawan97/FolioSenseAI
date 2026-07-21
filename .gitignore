@@ -57,3 +57,6 @@ logs/
 
 # === Session memory (local only, not versioned) ===
 .remember/
+
+# graphify knowledge graph (build artifact, regenerate with: graphify update .)
+graphify-out/
