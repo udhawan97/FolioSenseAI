@@ -205,7 +205,7 @@ class TestBuildFallback:
         assert "AAPL is your largest position at 55%" in plan["best_return_note"]
         assert plan["disclaimer"] == VERDICT_DISCLAIMER
 
-    def test_a_watchlist_position_flagged_trim_or_needs_data_exits(self):
+    def test_research_ideas_never_become_portfolio_actions(self):
         scan = _scan(signals={
             "AAPL": _signal("trim", ticker="AAPL"),
             "MSFT": _signal("needs-data", ticker="MSFT"),
@@ -216,15 +216,38 @@ class TestBuildFallback:
 
         plan = action_plan.build_fallback(scan)
 
-        assert [i["ticker"] for i in plan["buckets"]["exit"]] == ["AAPL", "MSFT"]
+        assert not plan["buckets"]["exit"]
         assert [i["ticker"] for i in plan["buckets"]["trim"]] == ["GOOG"]
+        assert "AAPL" not in str(plan["buckets"])
+        assert "MSFT" not in str(plan["buckets"])
+
+    def test_a_research_only_book_is_not_described_as_invested(self):
+        scan = _scan()
+        for position in scan.positions.values():
+            position["is_watchlist"] = True
+
+        plan = action_plan.build_fallback(scan)
+
+        assert plan["buckets"] == {"hold": [], "add": [], "trim": [], "exit": []}
+        assert not plan["priority_moves"]
+        assert "No invested positions yet" in plan["headline"]
+        assert "does not affect P&L" in plan["thesis"]
 
     def test_an_empty_book_still_produces_a_plan(self):
         plan = action_plan.build_fallback(_scan(signals={}, allocation={}, positions={}))
 
         assert plan["buckets"] == {"hold": [], "add": [], "trim": [], "exit": []}
         assert isinstance(plan["priority_moves"], list) and not plan["priority_moves"]
-        assert "Diversify concentration" in plan["best_return_note"]
+        assert "build an invested portfolio" in plan["best_return_note"]
+
+    def test_snapshot_excludes_research_ideas_from_claude(self, monkeypatch):
+        _valuation(monkeypatch)
+        scan = _scan()
+        scan.positions["AAPL"]["is_watchlist"] = True
+
+        snapshot = action_plan.build_snapshot(None, scan)
+
+        assert [holding["t"] for holding in snapshot["holdings"]] == ["MSFT"]
 
     def test_no_snapshot_and_a_complete_snapshot_read_identically(self):
         scan = _scan()

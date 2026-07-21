@@ -987,6 +987,17 @@ def get_portfolio_summary(
                 status_code=500, detail="Briefing temporarily unavailable."
             ) from exc
 
+    try:
+        snapshot = portfolio_briefing.build_snapshot(db, time_range, portfolio_id)
+    except Exception as exc:
+        logger.error("AI briefing snapshot failed; exception_type=%s", type(exc).__name__)
+        raise HTTPException(
+            status_code=500, detail="Briefing temporarily unavailable."
+        ) from exc
+
+    if not portfolio_briefing.has_invested_positions(snapshot):
+        return portfolio_briefing.empty_position_response(snapshot, mode="ai")
+
     def _fallback(snapshot: dict | None) -> dict:
         # Without a snapshot the card has nothing honest to show, so it errors
         # rather than narrating a book it could not read.
@@ -1000,9 +1011,7 @@ def get_portfolio_summary(
         db,
         _portfolio_cache_ticker(portfolio_id),
         portfolio_briefing.cache_type(time_range),
-        build_snapshot=lambda: portfolio_briefing.build_snapshot(
-            db, time_range, portfolio_id
-        ),
+        build_snapshot=lambda: snapshot,
         generate=lambda snapshot: portfolio_briefing.build_briefing(
             generate_portfolio_briefing(snapshot)
         ),
@@ -1155,6 +1164,9 @@ def get_action_plan(
     # Verdicts as raw material: the plan reads them, it does not serve them, so
     # it skips narration (quips, cache traffic, scan history, Claude).
     scan = verdict_pipeline.scan_portfolio(db, portfolio_id, narrate=False)
+
+    if not action_plan.has_invested_positions(scan):
+        return action_plan.build_fallback(scan)
 
     # Local-only path: skip Claude entirely — return deterministic buckets instantly
     if force_local:

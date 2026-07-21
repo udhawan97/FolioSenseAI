@@ -51,6 +51,21 @@ def cache_type(scan: ScanResult) -> str:
     return f"{_CACHE_TYPE}:{scan.state['summary_type']}"
 
 
+def invested_tickers(scan: ScanResult) -> list[str]:
+    """Tickers that represent owned positions, never research-only ideas."""
+    return [
+        ticker
+        for ticker in scan.tickers
+        if not scan.positions.get(ticker, {}).get("is_watchlist")
+        and float(scan.positions.get(ticker, {}).get("shares") or 0) > 0
+    ]
+
+
+def has_invested_positions(scan: ScanResult) -> bool:
+    """Whether this scan contains at least one owned position."""
+    return bool(invested_tickers(scan))
+
+
 def build_snapshot(
     db: Session, scan: ScanResult, portfolio_id: int = 1
 ) -> dict:  # pylint: disable=too-many-locals
@@ -68,15 +83,16 @@ def build_snapshot(
 
     signals = scan.signals
     alloc_map = scan.allocation_pct
-    holding_meta = scan.positions
     portfolio_exposure = scan.exposure
     regime = scan.regime
-    active_tickers = scan.tickers
+    active_tickers = invested_tickers(scan)
 
     # Portfolio value + per-holding total_return_pct from the valuation module.
     try:
         valuation = portfolio_valuation.evaluate(db, portfolio_id)
-        holdings_rows = valuation.holdings
+        holdings_rows = [
+            row for row in valuation.holdings if row.get("ticker") in active_tickers
+        ]
         total_value = valuation.total_value
         valuation_quality = {
             "data_quality": valuation.data_quality,
@@ -107,7 +123,6 @@ def build_snapshot(
     for ticker in active_tickers:
         sig = {k: v for k, v in (signals.get(ticker) or {}).items()
                if not k.startswith("_")}
-        meta = holding_meta.get(ticker, {})
         entry: dict = {
             "t": ticker,
             "action": sig.get("action", "needs-data"),
@@ -118,7 +133,6 @@ def build_snapshot(
             "risk": (sig.get("risks") or [""])[0][:60],
             "flip": sig.get("flip_triggers"),
             "hold_class": sig.get("hold_class", "auto"),
-            "watchlist": meta.get("is_watchlist", False),
             "timing": timing_bucket(sig.get("timing")),
             "events": bool(sig.get("events")),
         }
@@ -219,21 +233,16 @@ def _local_plan(scan: ScanResult) -> dict:
     """
     signals = scan.signals
     alloc_map = scan.allocation_pct
-    holding_meta = scan.positions
-    active_tickers = scan.tickers
+    active_tickers = invested_tickers(scan)
     regime = scan.regime
 
     buckets: dict[str, list[dict]] = {"hold": [], "add": [], "trim": [], "exit": []}
     for ticker in active_tickers:
         sig = signals.get(ticker) or {}
         action = str(sig.get("action") or "hold").lower()
-        meta = holding_meta.get(ticker, {})
         reason = (sig.get("reasons") or [""])[0][:80]
 
-        # Map verdict actions: watchlist "trim" or needs-data → exit bucket
-        if meta.get("is_watchlist") and action in ("trim", "needs-data"):
-            bucket_key = "exit"
-        elif action in ("hold", "add", "trim"):
+        if action in ("hold", "add", "trim"):
             bucket_key = action
         else:
             bucket_key = "hold"
@@ -247,8 +256,10 @@ def _local_plan(scan: ScanResult) -> dict:
     mood = (regime.get("mood") or "neutral").title()
     regime_label = regime.get("label") or mood
 
-    # Build a plain-language headline from the dominant signal
-    if n_trim or n_exit:
+    # Build a plain-language headline from the dominant signal.
+    if not active_tickers:
+        headline = "No invested positions yet — research ideas stay out of portfolio actions"
+    elif n_trim or n_exit:
         headline = (
             f"{n_trim + n_exit} position{'s' if n_trim + n_exit != 1 else ''} flagged for "
             f"trim/exit — {n_hold} anchors steady"
@@ -265,10 +276,15 @@ def _local_plan(scan: ScanResult) -> dict:
         )
 
     thesis = (
-        f"FolioOrb local signals: {n_hold} hold · {n_add} add · "
-        f"{n_trim} trim · {n_exit} exit. "
-        f"Market: {regime_label}. "
-        "Enable Claude AI in Settings for a cross-holding, risk-adjusted plan."
+        "Add shares to a research idea when it becomes a position. Until then, "
+        "it does not affect P&L, allocation, or portfolio actions."
+        if not active_tickers else
+        (
+            f"FolioOrb local signals: {n_hold} hold · {n_add} add · "
+            f"{n_trim} trim · {n_exit} exit. "
+            f"Market: {regime_label}. "
+            "Enable Claude AI in Settings for a cross-holding, risk-adjusted plan."
+        )
     )
 
     alloc_sorted = sorted(
@@ -306,7 +322,7 @@ def _local_plan(scan: ScanResult) -> dict:
             f"{largest_ticker} is your largest position at {largest_alloc:.0f}% — "
             "right-sizing concentration is the highest-impact lever."
             if largest_ticker else
-            "Diversify concentration to close the gap to the optimal mix."
+            "Add shares to build an invested portfolio before reading concentration."
         ),
         "regime": regime,
         "disclaimer": VERDICT_DISCLAIMER,

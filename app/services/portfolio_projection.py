@@ -208,20 +208,27 @@ def compute_portfolio_projection(
     ]
     port_mu, port_sigma = _annualize_stats(_portfolio_daily_returns(weighted_rows))
 
-    base_value = total_value if total_value > 0 else 100_000.0
     has_holdings = total_value > 0 and bool(active)
+    base_value = total_value if has_holdings else 100.0
 
     horizons_out: dict[str, Any] = {}
     for key, cfg in HORIZONS.items():
-        port_paths = {
-            sc: _growth_path(base_value, port_mu, port_sigma, cfg["days"], cfg["step_days"], sc)
-            for sc in ("avg", "best", "worst")
-        }
+        port_paths = (
+            {
+                sc: _growth_path(
+                    base_value, port_mu, port_sigma, cfg["days"], cfg["step_days"], sc
+                )
+                for sc in ("avg", "best", "worst")
+            }
+            if has_holdings else
+            {"avg": [], "best": [], "worst": []}
+        )
         spy_paths = {
             sc: _growth_path(base_value, spy_mu, spy_sigma, cfg["days"], cfg["step_days"], sc)
             for sc in ("avg", "best", "worst")
         }
-        labels = [p["date"] for p in port_paths["avg"]] if port_paths["avg"] else []
+        label_path = port_paths["avg"] if has_holdings else spy_paths["avg"]
+        labels = [p["date"] for p in label_path]
 
         horizons_out[key] = {
             "label": cfg["label"],
@@ -230,7 +237,7 @@ def compute_portfolio_projection(
             "portfolio": {
                 "values": port_paths,
                 "indexed": _index_paths(port_paths),
-                "end": _end_summary(port_paths),
+                "end": _end_summary(port_paths) if has_holdings else {},
             },
             "sp500": {
                 "values": spy_paths,

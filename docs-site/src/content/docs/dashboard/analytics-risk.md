@@ -16,6 +16,10 @@ The Analytics tab covers the questions Overview doesn't have room for:
 Charts are rendered with Chart.js and loaded lazily, so the Analytics tab doesn't cost
 anything until you actually open it.
 
+Research-only tickers stay outside invested-position analytics. With no owned positions, the
+growth card hides its personalized dollar scenarios and shows only the S&P 500 as an indexed
+reference (`100 = start`) — never a fabricated $100,000 portfolio.
+
 ## Reading the confidence spectrum
 
 Verdicts aren't binary. A "Hold" with high confidence and a "Hold" with low confidence

@@ -306,7 +306,7 @@ function animateToggle(toggle) {
 }
 
 function initThemeToggle() {
-    applyTheme("dark", false);
+    applyTheme(currentTheme(), false);
 
     const toggle = document.getElementById("theme-toggle");
     if (!toggle) return;
@@ -1363,8 +1363,11 @@ function renderPortfolioValueData(data) {
             worstEl.textContent = "--";
         }
         const largestEl = document.getElementById("largest-holding");
-        if (data.holdings.length) {
-            const largest = data.holdings.reduce((a, b) =>
+        const investedHoldings = data.holdings.filter(h =>
+            !h.is_watchlist && toNumber(h.shares) > 0
+        );
+        if (investedHoldings.length) {
+            const largest = investedHoldings.reduce((a, b) =>
                 a.current_value > b.current_value ? a : b);
             largestEl.dataset.ticker = largest.ticker;
             largestEl.innerHTML = html`${largest.ticker} <span style="font-size:.85em;opacity:.8">${formatCompact(largest.current_value)}</span>`;
@@ -3244,6 +3247,10 @@ function initDashboardZones() {
     const track = document.getElementById("dashboard-zone-tabs");
     if (!track) return;
     let initial = "overview";
+    try {
+        const saved = localStorage.getItem(DASHBOARD_ZONE_KEY);
+        if (DASHBOARD_ZONES.includes(saved)) initial = saved;
+    } catch (_) { /* storage disabled — use Overview */ }
     setDashboardZone(initial, { persist: false });
     requestAnimationFrame(syncDztIndicator);
     window.addEventListener("resize", rafThrottle(syncDztIndicator), { passive: true });
@@ -3822,6 +3829,14 @@ async function loadProjection() {
 
         const callout = document.getElementById("projection-empty-callout");
         if (callout) callout.style.display = latestProjectionData.has_holdings ? "none" : "";
+        const summary = document.getElementById("projection-summary-row");
+        if (summary) summary.hidden = !latestProjectionData.has_holdings;
+        const legend = document.getElementById("projection-legend");
+        if (legend) {
+            legend.innerHTML = latestProjectionData.has_holdings
+                ? '<span class="projection-legend-item"><i class="projection-legend-swatch projection-legend-swatch--band"></i>Range</span><span class="projection-legend-item"><i class="projection-legend-swatch projection-legend-swatch--avg"></i>Portfolio avg</span><span class="projection-legend-item"><i class="projection-legend-swatch projection-legend-swatch--spy"></i>S&amp;P 500</span>'
+                : '<span class="projection-legend-item"><i class="projection-legend-swatch projection-legend-swatch--spy"></i>S&amp;P 500 index (100 = start)</span>';
+        }
 
         const disclaimer = document.getElementById("projection-disclaimer");
         if (disclaimer) disclaimer.textContent = latestProjectionData.disclaimer || "";
@@ -4256,6 +4271,7 @@ function _projectionHorizonData(data) {
 }
 
 function updateProjectionSummary(data) {
+    if (!data?.has_holdings) return;
     const hz = _projectionHorizonData(data);
     if (!hz) return;
     const start = toNumber(data.current_value) || toNumber(hz.portfolio?.values?.avg?.[0]?.value);
@@ -4365,6 +4381,7 @@ function renderProjectionChart(data) {
     const avg = portIdx.avg || [];
     const portVals = hz.portfolio?.values || {};
     const spyVals = hz.sp500?.values?.avg || [];
+    const hasHoldings = Boolean(data.has_holdings);
 
     const theme = chartTheme();
     const scale = uiScale();
@@ -4433,10 +4450,14 @@ function renderProjectionChart(data) {
             const pt = pts?.[idx];
             if (pt?.value != null) lines.push(`${label}: ${formatCompact(pt.value)}`);
         };
-        pushVal("Portfolio avg", portVals.avg);
-        pushVal("Best case", portVals.best);
-        pushVal("Worst case", portVals.worst);
-        pushVal("S&P 500", spyVals);
+        if (hasHoldings) {
+            pushVal("Portfolio avg", portVals.avg);
+            pushVal("Best case", portVals.best);
+            pushVal("Worst case", portVals.worst);
+            pushVal("S&P 500", spyVals);
+        } else if (spyIdx[idx] != null) {
+            lines.push(`S&P 500 index: ${spyIdx[idx].toFixed(1)}`);
+        }
         return lines;
     };
 
@@ -10135,6 +10156,7 @@ function startClaudeHeartbeat() {
 
 function initHudPopover() {
     const pill = document.getElementById("hud-status-pill");
+    const mobileTrigger = document.getElementById("nav-live-feed");
     const popover = document.getElementById("hud-popover");
     if (!pill || !popover) return;
 
@@ -10150,7 +10172,8 @@ function initHudPopover() {
     }
 
     function positionPopover() {
-        const pillRect = pill.getBoundingClientRect();
+        const anchor = window.innerWidth <= 575 && mobileTrigger ? mobileTrigger : pill;
+        const pillRect = anchor.getBoundingClientRect();
         const popW = popover.offsetWidth || 224;
         let left = pillRect.left + pillRect.width / 2 - popW / 2;
         left = Math.max(8, Math.min(left, window.innerWidth - popW - 8));
@@ -10165,6 +10188,7 @@ function initHudPopover() {
         popover.classList.add("is-visible");
         popover.setAttribute("aria-hidden", "false");
         pill.setAttribute("aria-expanded", "true");
+        mobileTrigger?.setAttribute("aria-expanded", "true");
         clockInterval = setInterval(() => {
             const popClock = document.getElementById("hud-pop-clock");
             if (popClock) popClock.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -10175,11 +10199,22 @@ function initHudPopover() {
         popover.classList.remove("is-visible");
         popover.setAttribute("aria-hidden", "true");
         pill.setAttribute("aria-expanded", "false");
+        mobileTrigger?.setAttribute("aria-expanded", "false");
         if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
     }
 
     pill.addEventListener("click", (e) => {
         e.stopPropagation();
+        popover.classList.contains("is-visible") ? hidePopover() : showPopover();
+    });
+
+    mobileTrigger?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const menu = document.getElementById("nav-overflow-menu");
+        const navTrigger = document.getElementById("nav-overflow-trigger");
+        menu?.classList.remove("is-visible");
+        menu?.setAttribute("aria-hidden", "true");
+        navTrigger?.setAttribute("aria-expanded", "false");
         popover.classList.contains("is-visible") ? hidePopover() : showPopover();
     });
 
@@ -11680,6 +11715,9 @@ function manageLucide(name, className = "manage-lucide") {
     return `<svg class="${className}" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 }
 
+let _portfolioManagerPreviousFocus = null;
+const _portfolioManagerBackgroundState = new Map();
+
 function portfolioManagerTriggers() {
     return Array.from(document.querySelectorAll("[aria-controls='portfolioModal'], button[onclick*='openPortfolioManager']"));
 }
@@ -11694,6 +11732,48 @@ function setPortfolioManagerTriggerState(open) {
     });
 }
 
+function portfolioManagerFocusableElements() {
+    const popover = document.getElementById("portfolioModal");
+    if (!popover) return [];
+    return Array.from(popover.querySelectorAll(
+        "a[href], button:not([disabled]), input:not([disabled]), " +
+        "select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
+    )).filter(element => element.getClientRects().length > 0);
+}
+
+function handlePortfolioManagerKeydown(event) {
+    const popover = document.getElementById("portfolioModal");
+    if (!popover?.classList.contains("is-visible")) return;
+    if (document.querySelector("body > .sale-dialog-overlay")) return;
+
+    if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        closePortfolioManager();
+        return;
+    }
+    if (event.key !== "Tab") return;
+
+    const focusable = portfolioManagerFocusableElements();
+    if (!focusable.length) {
+        event.preventDefault();
+        popover.focus();
+        return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+    } else if (!popover.contains(document.activeElement)) {
+        event.preventDefault();
+        first.focus();
+    }
+}
+
 function openPortfolioManager() {
     const popover = document.getElementById("portfolioModal");
     if (!popover) return;
@@ -11701,10 +11781,19 @@ function openPortfolioManager() {
     popover.classList.add("is-visible");
     popover.setAttribute("aria-hidden", "false");
     if (!wasOpen) {
+        _portfolioManagerPreviousFocus = document.activeElement;
+        document.body.classList.add("portfolio-manager-open");
+        document.querySelectorAll("body > *").forEach(element => {
+            if (element === popover || element.tagName === "SCRIPT") return;
+            _portfolioManagerBackgroundState.set(element, element.inert);
+            element.inert = true;
+        });
+        document.addEventListener("keydown", handlePortfolioManagerKeydown, true);
         const body = popover.querySelector(".portfolio-manager-body");
         if (body) body.scrollTop = 0;
         const search = document.getElementById("manage-holdings-search");
         if (search) search.value = "";
+        requestAnimationFrame(() => popover.querySelector(".manage-close-btn")?.focus());
     }
     setPortfolioManagerTriggerState(true);
     loadManageHoldings({ preserveExisting: true });
@@ -11715,7 +11804,16 @@ function closePortfolioManager() {
     if (!popover || !popover.classList.contains("is-visible")) return false;
     popover.classList.remove("is-visible");
     popover.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("portfolio-manager-open");
+    document.removeEventListener("keydown", handlePortfolioManagerKeydown, true);
+    _portfolioManagerBackgroundState.forEach((wasInert, element) => {
+        element.inert = wasInert;
+    });
+    _portfolioManagerBackgroundState.clear();
     setPortfolioManagerTriggerState(false);
+    const previousFocus = _portfolioManagerPreviousFocus;
+    _portfolioManagerPreviousFocus = null;
+    if (previousFocus?.focus) requestAnimationFrame(() => previousFocus.focus());
     return true;
 }
 

@@ -76,7 +76,8 @@ FolioOrb closes that gap: holdings, live prices, risk math, market regime, news,
 
 | Do this | Get this |
 | --- | --- |
-| 📊 Add holdings and watchlist tickers | Live value, cost basis, daily change, unrealized gain, and allocation |
+| 📊 Add invested holdings | Live value, cost basis, daily change, unrealized gain, and allocation |
+| 🔬 Track research ideas | Keep watchlist tickers in Holdings and News without letting them enter P&L, allocation, briefings, action plans, or projections until you add shares |
 | ✂️ Record a sale | Reduce a holding and it logs the realized gain/loss — at the *actual* sale price and date you choose, not just today's |
 | 🗂️ Keep separate portfolios | Give your taxable, IRA, and fun-money accounts their own scoreboards — the whole dashboard re-scopes to the one you pick |
 | 🧭 Open a ticker | A Hold / Add / Trim / Exit verdict with confidence, horizon, and scenario context |
@@ -184,7 +185,6 @@ FolioOrb already earns a place on your machine — but this is very much the ope
 | --- | --- | --- | --- |
 | ⚖️ | **Target weights & drift** | Set the mix you're aiming for, then see at a glance how far today's prices have nudged you off plan. | Next up in the lab |
 | 🧾 | **Tax-season trade export** | Hand your accountant a tidy CSV of every closed trade — the detail behind the year-end recap. | Next up in the lab |
-| 💸 | **Income & dividends view** | See what your portfolio pays *you* back for the privilege of holding it. | Being explored |
 | 🔮 | **A what-if simulator** | Preview a buy or a trim *before* you touch anything real. Regret-free rehearsals. | Being explored |
 
 > **The fine print, minus the lawyers:** This roadmap is less of a blood oath and more of a friendly sneak peek. FolioOrb is built part-time, so priorities may shift and exact dates are deliberately missing in action — but the direction is clear: more useful, more polished, more delightful, one release at a time.

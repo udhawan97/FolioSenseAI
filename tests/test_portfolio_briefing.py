@@ -124,6 +124,35 @@ def _patch_partial_portfolio_compute(monkeypatch):
     )
 
 
+def _patch_research_only_portfolio_compute(monkeypatch):
+    """Return one priced research idea and no invested positions."""
+    research = {
+        **_FAKE_HOLDINGS[0],
+        "shares": 0.0,
+        "current_value": 0.0,
+        "daily_value_change": 0.0,
+        "allocation_pct": 0.0,
+        "is_watchlist": True,
+    }
+    monkeypatch.setattr(
+        "app.services.portfolio_valuation.evaluate",
+        lambda _db, _portfolio_id: SimpleNamespace(
+            holdings=[research],
+            total_value=0.0,
+            total_daily_change=0.0,
+            total_cost_basis=0.0,
+            total_unrealized_gain=0.0,
+            realized_gain=0.0,
+            total_return=0.0,
+            total_return_pct=0.0,
+            data_quality="complete",
+            missing_tickers=(),
+            priced_position_count=0,
+            expected_position_count=0,
+        ),
+    )
+
+
 def _patch_market_regime(monkeypatch):
     monkeypatch.setattr(
         portfolio_briefing,
@@ -173,6 +202,18 @@ def _patch_briefing_ai(monkeypatch):
 # ── Tests — local mode ─────────────────────────────────────────────────────────
 
 class TestLocalBriefing:
+    def test_research_only_book_has_no_invested_movers(self, monkeypatch):
+        db = _make_db()
+        _patch_research_only_portfolio_compute(monkeypatch)
+        _patch_market_regime(monkeypatch)
+
+        result = ai_router.get_portfolio_summary(mode="local", db=db)
+
+        assert result["source"] == "no-invested-positions"
+        assert "No invested positions yet" in result["lead"]
+        assert "1 research idea remains" in result["lead"]
+        assert result["movers"] == []
+
     def test_returns_mode_local(self, monkeypatch):
         db = _make_db()
         _patch_portfolio_compute(monkeypatch)
@@ -229,6 +270,23 @@ class TestLocalBriefing:
 # ── Tests — AI mode ────────────────────────────────────────────────────────────
 
 class TestAiBriefing:
+    def test_research_only_book_skips_claude(self, monkeypatch):
+        db = _make_db()
+        _patch_research_only_portfolio_compute(monkeypatch)
+        _patch_market_regime(monkeypatch)
+        claude_calls = []
+        monkeypatch.setattr(
+            ai_router,
+            "generate_portfolio_briefing",
+            lambda snapshot: claude_calls.append(snapshot) or _BRIEFING_AI_RESPONSE.copy(),
+        )
+
+        result = ai_router.get_portfolio_summary(mode="ai", db=db)
+
+        assert not claude_calls
+        assert result["source"] == "no-invested-positions"
+        assert "No invested positions yet" in result["health"]
+
     def test_returns_four_keys(self, monkeypatch):
         db = _make_db()
         _patch_portfolio_compute(monkeypatch)

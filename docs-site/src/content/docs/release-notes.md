@@ -7,6 +7,25 @@ The full changelog lives in
 [`RELEASE_NOTES.md`](https://github.com/udhawan97/FolioOrb/blob/main/RELEASE_NOTES.md)
 in the repository. Highlights of the current release below.
 
+## v5.8.0 — The Workspace Remembers
+
+- **Theme and place persist.** Light/dark mode and the last dashboard zone restore across
+  refreshes, relaunches, and portfolio switches; the saved theme is applied before first paint.
+- **Research means research.** Research-only tickers never fill the largest-holding tile,
+  portfolio briefing, action-plan buckets, or invested-position projections. An all-research
+  portfolio says it has no invested positions instead of narrating imaginary P&L.
+- **No invented $100K projection.** With no positions, personalized scenario cards stay hidden
+  and the chart shows only the S&P 500 as an index labeled `100 = start`.
+- **A proper keyboard modal.** Manage Portfolio takes focus, traps Tab, makes the background
+  inert, closes with Escape, and returns focus to the opener.
+- **320 px without page-wide overflow.** The app bar, zone tabs, menus, cards, and internally
+  scrollable holdings table stay inside the viewport.
+- **Faster, truthful startup.** Frontend libraries are vendored, portfolio/market cache paints
+  immediately, duplicate cache misses collapse, and cold starts use a progress-linked
+  compounding splash only when there is genuinely nothing ready to show.
+- Installing over v5.7.0 keeps the database, holdings, trades, DCA history, thesis notes,
+  settings, and API key. No schema migration is required.
+
 ## v5.7.0 — Reasons and Seasons
 
 - **Your thesis, on every holding.** Each expanded holding gets a box for the reason you own

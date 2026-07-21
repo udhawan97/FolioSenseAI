@@ -11,9 +11,11 @@
                 // Read the FolioOrb key, falling back to the pre-rename FolioSenseAI
                 // key so an existing user's saved text size still applies on the very
                 // first paint (before dashboard.js runs its full key migration).
+                const savedTheme = localStorage.getItem("folioorb-theme")
+                    || localStorage.getItem("foliosense-theme");
                 const savedTextSize = localStorage.getItem("folioorb-text-size")
                     || localStorage.getItem("foliosense-text-size");
-                document.documentElement.dataset.bsTheme = "dark";
+                document.documentElement.dataset.bsTheme = savedTheme === "light" ? "light" : "dark";
                 const textSizes = ["compact", "standard", "comfortable"];
                 document.documentElement.dataset.textSize = textSizes.includes(savedTextSize) ? savedTextSize : "standard";
                 // Desktop app (pywebview / WKWebView / WebView2) runs a lighter
@@ -38,9 +40,8 @@
          filename, so these need no ?v= bump. -->
     <link href="/static/vendor/bootstrap-5.3.2.min.css" rel="stylesheet">
     <link href="/static/vendor/bootstrap-icons-1.11.1.css" rel="stylesheet">
-    <!-- v=107: this stylesheet now carries both the boot-splash rules and the
-         shimmer-keyframes fix that landed separately. -->
-    <link href="/static/css/style.css?v=107" rel="stylesheet">
+    <!-- v=108: persisted workspace state, modal focus, and narrow-screen containment. -->
+    <link href="/static/css/style.css?v=108" rel="stylesheet">
 </head>
 <body>
 
@@ -337,6 +338,12 @@
 
                         <div class="nav-menu-divider" aria-hidden="true"></div>
                         <div class="nav-menu-section">Dashboard</div>
+                        <button class="nav-menu-row nav-menu-row--btn" type="button"
+                                id="nav-live-feed" aria-expanded="false" aria-controls="hud-popover">
+                            <span class="nav-menu-icon" aria-hidden="true"><i class="bi bi-broadcast-pin"></i></span>
+                            <span class="nav-menu-label">Live feed</span>
+                            <span class="nav-menu-key" aria-hidden="true"><i class="bi bi-chevron-right"></i></span>
+                        </button>
                         <div class="nav-menu-row" role="menuitem">
                             <span class="nav-menu-icon" aria-hidden="true"><i class="bi bi-chat-heart"></i></span>
                             <span class="nav-menu-label">Senpai</span>
@@ -1027,7 +1034,7 @@
                             <i class="bi bi-pie-chart perf-callout-icon"></i>
                             <div class="perf-callout-text">
                                 <div class="perf-callout-title">Add holdings to project growth</div>
-                                <div class="perf-callout-body">Set share counts to see personalized scenarios. Showing S&amp;P 500 benchmark paths.</div>
+                                <div class="perf-callout-body">Set share counts to see personalized scenarios. Showing S&amp;P 500 as an index (100 = start), not a dollar portfolio.</div>
                             </div>
                             <button class="btn perf-callout-btn" type="button" onclick="openPortfolioManager()">
                                 Set up holdings
@@ -2433,7 +2440,7 @@
     <script defer src="/static/vendor/chartjs-chart-treemap-3.0.0.min.js"></script>
     <script defer src="/static/js/core.js?v=1"></script>
     <script defer src="/static/js/analytics-charts.js?v=15"></script>
-    <script defer src="/static/js/dashboard.js?v=101"></script>
+    <script defer src="/static/js/dashboard.js?v=102"></script>
     <script defer src="/static/js/updates.js?v=3"></script>
 
     <!-- Tip Popover (singleton) -->
@@ -2534,7 +2541,7 @@
 
     <!-- Portfolio Management Overlay -->
     <div class="portfolio-manager-popover" id="portfolioModal" role="dialog"
-         aria-modal="false" aria-labelledby="portfolio-manager-title" aria-hidden="true">
+         aria-modal="true" aria-labelledby="portfolio-manager-title" aria-hidden="true">
         <div class="portfolio-manager-panel bg-dark border-secondary">
             <div class="portfolio-manager-header border-secondary">
                 <div class="portfolio-manager-header-main">

@@ -1,3 +1,67 @@
+# FolioOrb v5.8.0 Release Notes
+
+**Release date:** July 21, 2026
+
+## Headline
+
+FolioOrb now comes back exactly where you left it, starts with less waiting, and keeps
+research ideas rigorously separate from money you actually own. The portfolio manager is
+also a real keyboard-accessible modal, and the complete workspace now fits a 320-pixel
+screen without a sideways page scroll.
+
+## What's New
+
+### 🧭 Your workspace remembers
+
+Light or dark mode and the last dashboard zone now survive a refresh, relaunch, or portfolio
+switch. The saved theme is applied before the first paint, so a light-mode workspace no
+longer flashes dark while the JavaScript catches up.
+
+### ⚡ A calmer cold start
+
+Bootstrap, icons, and chart libraries now ship inside the app instead of waiting on six CDN
+round trips. Portfolio names and the world-markets strip paint from local cache while fresh
+data arrives. If a cold start still has nothing truthful to show, a short compounding-curve
+splash names the real work in progress; warm loads go straight to the dashboard.
+
+### 🔬 Research means research
+
+A research-only ticker is an idea, not a position. It no longer becomes the Overview's
+largest holding, a mover in the portfolio briefing, or an Add / Trim / Exit action. If every
+ticker is research-only, FolioOrb says there are no invested positions and explains how to
+turn an idea into one by adding shares.
+
+Growth projections follow the same contract. A research-only portfolio no longer invents a
+$100,000 starting balance: the personalized scenario cards stay hidden and the chart shows
+only the S&P 500 as an index, explicitly labeled **100 = start**.
+
+### ♿ Manage Portfolio behaves like a modal
+
+Opening the manager now moves focus into it, keeps Tab and Shift+Tab inside, marks the
+background inert, closes on Escape, prevents background scrolling, and returns focus to the
+exact control that opened it.
+
+### 📱 The whole workspace fits narrow screens
+
+At 320–375 pixels, the app bar keeps the portfolio switcher, Manage, and More controls usable
+without pushing the page sideways. Status and update affordances remain available inside the
+More menu, the API-key and portfolio menus are viewport-bound, zone tabs shrink cleanly, and
+wide holdings data keeps its own horizontal scroller instead of widening the document.
+
+## Under the hood
+
+Shared cache misses now collapse into one fetch, blocking routes run off the event loop, DCA
+pricing is skipped when no installment is due, and startup no longer repeats a one-time repair.
+Eight backend/frontend seams were deepened so lifecycle, valuation, narratives, settings, and
+shared market data each have one clearer owner.
+
+The research-only rules are now enforced in the shared action-plan, briefing, valuation, and
+projection services with router and rendered-UI regression coverage. Installing over v5.7.0
+keeps the existing database, holdings, trades, DCA history, thesis notes, settings, and API
+key. No schema migration is required.
+
+---
+
 # FolioOrb v5.7.0 Release Notes
 
 **Release date:** July 18, 2026

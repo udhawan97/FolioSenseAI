@@ -67,6 +67,24 @@ def test_compute_projection_returns_all_horizons(mock_hist):
 
 
 @patch.object(pp, "get_historical_prices")
+def test_research_only_projection_is_an_index_not_a_fake_100k_portfolio(mock_hist):
+    mock_hist.return_value = _synthetic_rows(400.0, 0.0003)
+    holdings = [
+        {"ticker": "VOO", "current_value": 0.0, "is_watchlist": True},
+    ]
+
+    result = pp.compute_portfolio_projection(holdings, 0.0)
+
+    assert result["has_holdings"] is False
+    horizon = result["horizons"]["1y"]
+    assert horizon["portfolio"]["values"] == {"avg": [], "best": [], "worst": []}
+    assert horizon["portfolio"]["end"] == {}
+    assert horizon["sp500"]["values"]["avg"][0]["value"] == 100.0
+    assert horizon["sp500"]["indexed"]["avg"][0] == 100.0
+    assert horizon["labels"]
+
+
+@patch.object(pp, "get_historical_prices")
 def test_projection_cache_reuses_payload(mock_hist):
     mock_hist.return_value = _synthetic_rows(400.0, 0.0003)
     holdings = [{"ticker": "VOO", "current_value": 5000.0, "is_watchlist": False}]

@@ -32,7 +32,7 @@ const winCmd = `irm ${RAW}/${REPO}/main/scripts/install-win.ps1 | iex`;
 const steps = [
   {
     n: 1, title: 'Add your holdings',
-    body: 'Type them in, import a CSV, or start a watchlist — no brokerage link, no sign-up. Turn on Claude and it maps almost any broker export onto the template for you.',
+    body: 'Type them in, import a CSV, or start a research list — no brokerage link, no sign-up. Research ideas stay outside portfolio math until you add shares. Turn on Claude and it maps almost any broker export onto the template for you.',
     senpai: 'Drop in VOO and AAPL, or hand me a messy broker CSV — no awkward data-hostage situation.',
   },
   {
@@ -88,12 +88,6 @@ const roadmap = [
     title: 'Tax-season trade export',
     body: 'Hand your accountant a tidy CSV of every closed trade — the detail behind the new year-end recap.',
     icon: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z"/><path d="M9 8h6M9 12h4"/>',
-  },
-  {
-    status: 'Being explored',
-    title: 'Income & dividends view',
-    body: 'A clear read on what your portfolio pays you back — the income side, not just the price side.',
-    icon: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v9M9.6 9.6c0-1 1-1.6 2.4-1.6s2.4.6 2.4 1.6c0 2.2-4.8 1-4.8 3.2 0 1 1 1.6 2.4 1.6s2.4-.6 2.4-1.6"/>',
   },
   {
     status: 'Being explored',
@@ -631,14 +625,14 @@ const roadmap = [
 								<span class="up-size">≈ 38 MB · relaunch</span>
 							</div>
 							<div class="up-versions">
-								<span class="up-ver up-ver--now"><small>Installed</small>v5.6.0</span>
+								<span class="up-ver up-ver--now"><small>Installed</small>v5.7.0</span>
 								<span class="up-track" aria-hidden="true"><span class="up-track-fill"></span></span>
-								<span class="up-ver up-ver--new"><small>Latest</small>v5.7.0</span>
+								<span class="up-ver up-ver--new"><small>Latest</small>v5.8.0</span>
 							</div>
 							<ul class="up-changes">
-								<li>Safer, backup-integrated updates</li>
-								<li>One-click restore of the previous version</li>
-								<li>Fixes &amp; quiet refinements</li>
+								<li>Your theme and dashboard zone persist</li>
+								<li>Research ideas stay out of portfolio math</li>
+								<li>Faster cold starts and narrow-screen fixes</li>
 							</ul>
 							<div class="up-reassure"><span class="up-shield" aria-hidden="true"></span>Your holdings and settings are backed up before anything installs.</div>
 							<div class="up-actions">

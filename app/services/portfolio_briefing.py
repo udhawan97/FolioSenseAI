@@ -93,7 +93,11 @@ def _day_snapshot(db: Session, portfolio_id: int = 1) -> tuple[dict, list[dict]]
     holdings_rows = valuation.holdings
     total_value = valuation.total_value
     total_daily_change = valuation.total_daily_change
-    non_watchlist = [h for h in holdings_rows if not h.get("is_watchlist")]
+    non_watchlist = [
+        holding
+        for holding in holdings_rows
+        if not holding.get("is_watchlist") and float(holding.get("shares") or 0) > 0
+    ]
 
     total_unrealized = valuation.total_unrealized_gain
     realized = valuation.realized_gain
@@ -125,6 +129,10 @@ def _day_snapshot(db: Session, portfolio_id: int = 1) -> tuple[dict, list[dict]]
 
     snapshot = {
         "as_of": today,
+        "invested_position_count": valuation.expected_position_count,
+        "research_idea_count": sum(
+            1 for holding in holdings_rows if holding.get("is_watchlist")
+        ),
         "valuation": {
             "data_quality": valuation.data_quality,
             "missing_tickers": list(valuation.missing_tickers),
@@ -230,6 +238,42 @@ def build_snapshot(db: Session, range_key: str | None = "day", portfolio_id: int
     return _period_snapshot(db, key, portfolio_id)[0]
 
 
+def has_invested_positions(snapshot: dict) -> bool:
+    """Whether a briefing snapshot contains owned positions."""
+    return int(snapshot.get("invested_position_count") or 0) > 0
+
+
+def empty_position_response(snapshot: dict, *, mode: str) -> dict:
+    """Research-only/empty portfolio copy shared by local and AI modes."""
+    research_count = int(snapshot.get("research_idea_count") or 0)
+    research = (
+        f"{research_count} research idea{'s' if research_count != 1 else ''} "
+        f"{'remains' if research_count == 1 else 'remain'} outside portfolio P&L."
+        if research_count else
+        "Research ideas remain outside portfolio P&L."
+    )
+    base = {
+        "mode": mode,
+        "source": "no-invested-positions",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if mode == "ai":
+        return {
+            **base,
+            "health": f"No invested positions yet — {research}",
+            "drivers": [],
+            "adjustments": [
+                "Add shares to an idea when it becomes an invested position."
+            ],
+            "quote": next_briefing_canned_quote(),
+        }
+    return {
+        **base,
+        "lead": f"No invested positions yet — {research}",
+        "movers": [],
+    }
+
+
 def _local_quality_response(
     snapshot: dict,
     *,
@@ -265,6 +309,10 @@ def _local_period(db: Session, range_key: str, portfolio_id: int = 1) -> dict:
     cfg = _RANGES[range_key]
     phrase = cfg["phrase"]
     snapshot, non_watchlist = _day_snapshot(db, portfolio_id)
+    if not has_invested_positions(snapshot):
+        response = empty_position_response(snapshot, mode="local")
+        response["period_label"] = phrase
+        return response
     quality = snapshot.get("valuation") or {}
     if quality.get("data_quality") != "complete":
         return _local_quality_response(snapshot, period_label=phrase)
@@ -320,6 +368,8 @@ def _local_period(db: Session, range_key: str, portfolio_id: int = 1) -> dict:
 def _local_day(db: Session, portfolio_id: int = 1) -> dict:
     """Compute local briefing using move_explainer. Never calls Claude."""
     snapshot, non_watchlist = _day_snapshot(db, portfolio_id)
+    if not has_invested_positions(snapshot):
+        return empty_position_response(snapshot, mode="local")
     if (snapshot.get("valuation") or {}).get("data_quality") != "complete":
         return _local_quality_response(snapshot)
     active_tickers = [h["ticker"] for h in non_watchlist]
@@ -417,6 +467,8 @@ def build_briefing(parsed: dict) -> dict:
 
 def build_fallback(snapshot: dict) -> dict:
     """Deterministic AI-mode response when Claude is unavailable."""
+    if not has_invested_positions(snapshot):
+        return empty_position_response(snapshot, mode="ai")
     quality = snapshot.get("valuation") or {}
     data_quality = quality.get("data_quality", "complete")
     missing = list(quality.get("missing_tickers") or [])

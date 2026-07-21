@@ -22729,3 +22729,111 @@ body.is-booting { overflow: hidden; }
     /* The animated mark is the only looping motion here; freeze it. */
     .boot-splash-mark { animation: none; }
 }
+
+/* ── Workspace continuity and narrow-screen containment ────────────────── */
+body.portfolio-manager-open { overflow: hidden; }
+
+@media (max-width: 575.98px) {
+    .toast-apple {
+        width: max-content;
+        max-width: calc(100vw - 1.5rem);
+        white-space: normal;
+        overflow-wrap: anywhere;
+        justify-content: center;
+        text-align: center;
+        border-radius: 18px;
+    }
+
+    .toast-apple > span { min-width: 0; }
+
+    .navbar .container-fluid {
+        flex-wrap: nowrap;
+        width: 100%;
+        min-width: 0;
+        gap: 0.45rem;
+        padding-inline: 0.75rem;
+    }
+
+    .brand-lockup-wrap {
+        flex: 0 0 auto;
+        min-width: 0;
+        gap: 0.35rem;
+    }
+
+    .api-key-panel {
+        position: fixed;
+        top: calc(58px + env(safe-area-inset-top));
+        left: 0.75rem;
+        right: 0.75rem;
+        width: auto;
+        max-width: none;
+    }
+
+    .navbar .container-fluid > .d-flex {
+        flex: 1 1 0;
+        min-width: 0;
+        justify-content: flex-end;
+        gap: 0.3rem !important;
+    }
+
+    .hud-status-pill,
+    .fs-update-pill {
+        display: none !important;
+    }
+
+    .hud-popover {
+        top: calc(58px + env(safe-area-inset-top)) !important;
+        right: 0.75rem;
+        left: auto !important;
+        width: min(224px, calc(100vw - 1.5rem));
+    }
+
+    .portfolio-switcher {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .portfolio-switcher-trigger {
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+        padding-inline: 0.55rem;
+    }
+
+    .portfolio-switcher-label {
+        min-width: 0;
+        max-width: none;
+    }
+
+    .portfolio-switcher-menu {
+        position: fixed;
+        top: calc(58px + env(safe-area-inset-top));
+        left: 0.75rem;
+        right: 0.75rem;
+        min-width: 0;
+        width: auto;
+    }
+
+    #portfolio-manager-trigger,
+    .nav-overflow {
+        flex: 0 0 auto;
+    }
+
+    #main-content,
+    .dashboard-zone-tabs-wrap,
+    .dashboard-zone-tabs,
+    .dashboard-zone-panes,
+    .dashboard-zone-pane {
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .dashboard-zone-tabs-wrap { overflow: hidden; }
+    .dashboard-zone-tabs { display: flex; }
+    .dzt-tab {
+        min-width: 0;
+        gap: 4px;
+        padding-inline: 5px;
+        font-size: 0.74rem;
+    }
+}
